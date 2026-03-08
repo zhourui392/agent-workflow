@@ -35,3 +35,14 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+
+# Database
+*.db
+*.sqlite3
