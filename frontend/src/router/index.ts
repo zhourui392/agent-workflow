@@ -34,6 +34,11 @@ const router = createRouter({
       component: () => import('@/views/LiveMonitor.vue'),
     },
     {
+      path: '/dashboard',
+      name: 'Dashboard',
+      component: () => import('@/views/Dashboard.vue'),
+    },
+    {
       path: '/settings',
       name: 'GlobalConfig',
       component: () => import('@/views/GlobalConfig.vue'),

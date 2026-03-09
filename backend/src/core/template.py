@@ -61,3 +61,43 @@ def render_template(template: str, context: dict) -> str:
 
     result = re.sub(r"\{\{(.+?)\}\}", replace_var, template)
     return result
+
+
+def evaluate_condition(expr: str, context: dict) -> bool:
+    """Evaluate a when-condition expression.
+
+    Supported expressions:
+    - "{{steps.step_name.output}}" — truthy check (non-empty output)
+    - "{{steps.step_name.output}} contains 'keyword'" — substring check
+    - "{{steps.step_name.output}} == 'value'" — equality check
+    - "{{steps.step_name.output}} != 'value'" — inequality check
+    - "true" / "false" — literal booleans
+    """
+    if not expr or not expr.strip():
+        return True
+
+    rendered = render_template(expr.strip(), context)
+
+    # Literal booleans
+    if rendered.lower() in ("true", "1", "yes"):
+        return True
+    if rendered.lower() in ("false", "0", "no"):
+        return False
+
+    # "X contains 'Y'"
+    contains_match = re.match(r"^(.+?)\s+contains\s+'(.+?)'$", rendered, re.IGNORECASE)
+    if contains_match:
+        return contains_match.group(2) in contains_match.group(1)
+
+    # "X == 'Y'"
+    eq_match = re.match(r"^(.+?)\s*==\s*'(.+?)'$", rendered)
+    if eq_match:
+        return eq_match.group(1).strip() == eq_match.group(2)
+
+    # "X != 'Y'"
+    neq_match = re.match(r"^(.+?)\s*!=\s*'(.+?)'$", rendered)
+    if neq_match:
+        return neq_match.group(1).strip() != neq_match.group(2)
+
+    # Fallback: truthy check (non-empty, not an unresolved template)
+    return bool(rendered) and not rendered.startswith("{{")

@@ -58,6 +58,10 @@
               </el-form-item>
             </el-col>
           </el-row>
+          <el-form-item label="执行条件">
+            <el-input v-model="step.when" placeholder="留空则始终执行，如: {{steps.prev_step.output}} contains '通过'" />
+            <div class="form-tip">支持: contains 'text'、== 'value'、!= 'value'、true/false</div>
+          </el-form-item>
           <el-divider v-if="index < form.steps.length - 1" />
         </div>
       </el-card>
@@ -102,6 +106,7 @@
               <el-select v-model="form.on_failure">
                 <el-option label="停止 (stop)" value="stop" />
                 <el-option label="跳过 (skip)" value="skip" />
+                <el-option label="重试 (retry)" value="retry" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -131,7 +136,7 @@ const form = reactive({
   description: '',
   enabled: true,
   schedule: '',
-  steps: [{ name: '', prompt: '', model: undefined as string | undefined, max_turns: 30 }] as any[],
+  steps: [{ name: '', prompt: '', model: undefined as string | undefined, max_turns: 30, when: '' }] as any[],
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',

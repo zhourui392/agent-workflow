@@ -2,10 +2,17 @@
   <div class="workflow-list">
     <div class="page-header">
       <h2>工作流列表</h2>
-      <el-button type="primary" @click="$router.push('/workflows/new')">
-        <el-icon><Plus /></el-icon>
-        新建工作流
-      </el-button>
+      <div>
+        <el-button @click="triggerImport">
+          <el-icon><Upload /></el-icon>
+          导入
+        </el-button>
+        <el-button type="primary" @click="$router.push('/workflows/new')">
+          <el-icon><Plus /></el-icon>
+          新建工作流
+        </el-button>
+        <input ref="fileInput" type="file" accept=".json" style="display: none" @change="handleImportFile" />
+      </div>
     </div>
 
     <el-table :data="store.workflows" v-loading="store.loading" stripe style="width: 100%">
@@ -32,10 +39,11 @@
       <el-table-column label="更新时间" width="180">
         <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="$router.push(`/workflows/${row.id}`)">编辑</el-button>
           <el-button size="small" type="success" @click="handleRun(row)" :loading="runningId === row.id">运行</el-button>
+          <el-button size="small" @click="handleExport(row)">导出</el-button>
           <el-popconfirm title="确定删除此工作流？" @confirm="handleDelete(row)">
             <template #reference>
               <el-button size="small" type="danger">删除</el-button>
@@ -51,12 +59,14 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
+import { exportWorkflow, importWorkflow } from '@/api/workflows'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Upload } from '@element-plus/icons-vue'
 
 const store = useWorkflowStore()
 const router = useRouter()
 const runningId = ref<string | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 onMounted(() => { store.fetchWorkflows() })
 
@@ -89,6 +99,40 @@ async function handleDelete(row: any) {
     ElMessage.success('已删除')
   } catch {
     ElMessage.error('删除失败')
+  }
+}
+
+async function handleExport(row: any) {
+  try {
+    const { data } = await exportWorkflow(row.id)
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${row.name}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch {
+    ElMessage.error('导出失败')
+  }
+}
+
+function triggerImport() { fileInput.value?.click() }
+
+async function handleImportFile(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  try {
+    const text = await file.text()
+    const data = JSON.parse(text)
+    await importWorkflow(data)
+    ElMessage.success('导入成功')
+    store.fetchWorkflows()
+  } catch (e: any) {
+    ElMessage.error('导入失败: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    if (fileInput.value) fileInput.value.value = ''
   }
 }
 

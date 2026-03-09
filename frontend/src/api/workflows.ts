@@ -13,6 +13,7 @@ export interface StepConfig {
   rules?: Record<string, any>
   model?: string
   max_turns?: number
+  when?: string
 }
 
 export interface WorkflowData {
@@ -59,4 +60,12 @@ export function toggleWorkflow(id: string) {
 
 export function runWorkflow(id: string) {
   return api.post<{ execution_id: string }>(`/workflows/${id}/run`)
+}
+
+export function exportWorkflow(id: string) {
+  return api.get<WorkflowData>(`/workflows/${id}/export`)
+}
+
+export function importWorkflow(data: Partial<WorkflowData>) {
+  return api.post<WorkflowData>('/workflows/import', data)
 }

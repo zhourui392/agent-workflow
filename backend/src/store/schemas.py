@@ -14,6 +14,7 @@ class StepConfig(BaseModel):
     rules: Optional[dict] = None
     model: Optional[str] = None
     max_turns: Optional[int] = None
+    when: Optional[str] = None
 
 
 # --- Workflow schemas ---

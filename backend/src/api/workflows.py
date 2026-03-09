@@ -1,7 +1,8 @@
 """Workflow CRUD API endpoints."""
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -156,3 +157,64 @@ async def run_workflow(workflow_id: str, session: AsyncSession = Depends(get_ses
     execution_id = await execute_workflow(workflow, trigger_type="manual")
 
     return {"execution_id": execution_id}
+
+
+@router.get("/{workflow_id}/export")
+async def export_workflow(workflow_id: str, session: AsyncSession = Depends(get_session)):
+    """Export a workflow as JSON (excludes id and timestamps)."""
+    workflow = await session.get(Workflow, workflow_id)
+    if not workflow:
+        raise HTTPException(404, "Workflow not found")
+
+    export_data = {
+        "name": workflow.name,
+        "description": workflow.description,
+        "enabled": workflow.enabled,
+        "schedule": workflow.schedule,
+        "inputs": workflow.inputs,
+        "steps": workflow.steps,
+        "rules": workflow.rules,
+        "mcp_servers": workflow.mcp_servers,
+        "skills": workflow.skills,
+        "limits": workflow.limits,
+        "output": workflow.output,
+        "on_failure": workflow.on_failure,
+    }
+    return JSONResponse(
+        content=export_data,
+        headers={"Content-Disposition": f'attachment; filename="{workflow.name}.json"'},
+    )
+
+
+@router.post("/import", response_model=WorkflowResponse, status_code=201)
+async def import_workflow(data: WorkflowCreate, session: AsyncSession = Depends(get_session)):
+    """Import a workflow from JSON. Auto-renames if name conflicts."""
+    # Auto-rename on conflict
+    base_name = data.name
+    name = base_name
+    suffix = 1
+    while True:
+        existing = await session.execute(select(Workflow).where(Workflow.name == name))
+        if not existing.scalar_one_or_none():
+            break
+        suffix += 1
+        name = f"{base_name} ({suffix})"
+
+    workflow = Workflow(
+        name=name,
+        description=data.description,
+        enabled=False,  # Imported workflows start disabled
+        schedule=data.schedule,
+        inputs=data.inputs,
+        steps=[s.model_dump() for s in data.steps] if data.steps else [],
+        rules=data.rules,
+        mcp_servers=data.mcp_servers,
+        skills=data.skills,
+        limits=data.limits,
+        output=data.output,
+        on_failure=data.on_failure,
+    )
+    session.add(workflow)
+    await session.commit()
+    await session.refresh(workflow)
+    return workflow

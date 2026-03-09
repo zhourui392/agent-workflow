@@ -24,6 +24,10 @@
           <el-icon><Monitor /></el-icon>
           <span>实时监控</span>
         </el-menu-item>
+        <el-menu-item index="/dashboard">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>执行统计</span>
+        </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
           <span>全局配置</span>
@@ -47,7 +51,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { List, Clock, Monitor, Setting } from '@element-plus/icons-vue'
+import { List, Clock, Monitor, Setting, DataAnalysis } from '@element-plus/icons-vue'
 
 const route = useRoute()
 

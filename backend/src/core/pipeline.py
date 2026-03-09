@@ -169,6 +169,43 @@ async def _run_pipeline(execution_id: str, workflow: Workflow, steps: list):
         step_id = generate_uuid()
         step_name = step.get("name", f"step_{i + 1}")
 
+        # Evaluate when condition
+        when_expr = step.get("when")
+        if when_expr:
+            from src.core.template import evaluate_condition
+
+            if not evaluate_condition(when_expr, context):
+                logger.info(
+                    "step_skipped_by_condition",
+                    execution_id=execution_id,
+                    step=i + 1,
+                    name=step_name,
+                    when=when_expr,
+                )
+                # Create skipped step record
+                async with async_session() as session:
+                    step_exec = StepExecution(
+                        id=step_id,
+                        execution_id=execution_id,
+                        step_index=i,
+                        step_name=step_name,
+                        status="skipped",
+                        started_at=datetime.utcnow(),
+                        finished_at=datetime.utcnow(),
+                        error_message=f"Condition not met: {when_expr}",
+                    )
+                    session.add(step_exec)
+                    await session.commit()
+
+                await broadcast(execution_id, {
+                    "type": "step_skipped",
+                    "step_index": i,
+                    "step_name": step_name,
+                    "reason": f"Condition not met: {when_expr}",
+                })
+                context[f"step_{step_name}"] = "[SKIPPED: condition not met]"
+                continue
+
         logger.info("step_starting", execution_id=execution_id, step=i + 1, name=step_name)
 
         await broadcast(execution_id, {

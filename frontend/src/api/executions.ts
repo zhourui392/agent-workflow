@@ -42,3 +42,26 @@ export function listExecutions(params?: { workflow_id?: string; status?: string;
 export function getExecution(id: string) {
   return api.get<ExecutionData>(`/executions/${id}`)
 }
+
+export interface DailyStats {
+  date: string
+  total: number
+  success: number
+  failed: number
+  total_tokens: number
+}
+
+export interface StatsResponse {
+  daily: DailyStats[]
+  summary: {
+    total_executions: number
+    success_count: number
+    failed_count: number
+    total_tokens: number
+    success_rate: number
+  }
+}
+
+export function getExecutionStats(params?: { days?: number }) {
+  return api.get<StatsResponse>('/executions/stats', { params })
+}
