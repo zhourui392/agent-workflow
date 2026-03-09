@@ -46,3 +46,10 @@ __pycache__/
 # Database
 *.db
 *.sqlite3
+
+# TypeScript build artifacts in source directories
+frontend/src/**/*.js
+frontend/src/**/*.d.ts
+frontend/*.js
+frontend/*.d.ts
+!frontend/src/**/*.config.js

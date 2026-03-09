@@ -63,11 +63,15 @@ app.add_middleware(
 )
 
 # Register routers
+from src.api.config import router as config_router
 from src.api.executions import router as executions_router
 from src.api.workflows import router as workflows_router
+from src.api.ws import router as ws_router
 
 app.include_router(workflows_router)
 app.include_router(executions_router)
+app.include_router(config_router)
+app.include_router(ws_router)
 
 
 @app.get("/api/health")

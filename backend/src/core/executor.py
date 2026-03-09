@@ -1,5 +1,6 @@
 """Single step executor - calls Claude Agent SDK."""
 import asyncio
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -56,7 +57,7 @@ async def execute_step(step_config: dict, context: dict, merged_config: dict) ->
         if mcp_servers:
             options_kwargs["mcp_servers"] = mcp_servers
 
-        model = step_config.get("model")
+        model = step_config.get("model") or os.getenv("ANTHROPIC_MODEL")
         if model:
             options_kwargs["model"] = model
 
