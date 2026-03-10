@@ -142,6 +142,7 @@ async def _run_pipeline(execution_id: str, workflow: Workflow, steps: list):
     """Internal: run all steps sequentially."""
     context = {"inputs": workflow.inputs or {}}
     total_tokens = 0
+    total_cost = 0.0
     final_status = "success"
     error_message = None
     start_time = datetime.utcnow()
@@ -258,6 +259,7 @@ async def _run_pipeline(execution_id: str, workflow: Workflow, steps: list):
                 step_exec.finished_at = datetime.utcnow()
                 step_exec.output_text = result.output
                 step_exec.tokens_used = result.tokens_used
+                step_exec.cost_usd = result.cost_usd
                 step_exec.model_used = result.model_used
                 step_exec.error_message = result.error
                 # Store rendered prompt
@@ -267,6 +269,7 @@ async def _run_pipeline(execution_id: str, workflow: Workflow, steps: list):
                 await session.commit()
 
         total_tokens += result.tokens_used
+        total_cost += result.cost_usd or 0.0
 
         await broadcast(execution_id, {
             "type": "step_complete",
@@ -308,6 +311,7 @@ async def _run_pipeline(execution_id: str, workflow: Workflow, steps: list):
             execution.status = final_status
             execution.finished_at = datetime.utcnow()
             execution.total_tokens = total_tokens
+            execution.total_cost_usd = total_cost if total_cost > 0 else None
             execution.error_message = error_message
             await session.commit()
 

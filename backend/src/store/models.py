@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -56,6 +56,7 @@ class Execution(Base):
     current_step: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_steps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     workflow: Mapped["Workflow"] = relationship(back_populates="executions")
@@ -79,6 +80,7 @@ class StepExecution(Base):
     prompt_rendered: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     output_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     model_used: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

@@ -9,7 +9,7 @@ dependencies = [
     "sqlalchemy[asyncio]",
     "aiosqlite",
     "apscheduler",
-    "claude-code-sdk",
+    "claude-agent-sdk>=0.1.0",
     "structlog",
     "pydantic",
     "python-multipart",

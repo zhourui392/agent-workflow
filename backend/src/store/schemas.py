@@ -80,6 +80,7 @@ class ExecutionResponse(BaseModel):
     current_step: Optional[int] = None
     total_steps: Optional[int] = None
     total_tokens: int = 0
+    total_cost_usd: Optional[float] = None
     error_message: Optional[str] = None
 
     model_config = {"from_attributes": True}
@@ -96,6 +97,7 @@ class StepExecutionResponse(BaseModel):
     prompt_rendered: Optional[str] = None
     output_text: Optional[str] = None
     tokens_used: int = 0
+    cost_usd: Optional[float] = None
     model_used: Optional[str] = None
     error_message: Optional[str] = None
 
