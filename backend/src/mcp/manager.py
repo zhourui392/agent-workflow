@@ -75,22 +75,20 @@ def merge_mcp_servers(
     return list(merged.values())
 
 
-def to_sdk_format(servers: list[McpServerConfig]) -> list[dict]:
-    """Convert MCP servers to Claude Agent SDK format."""
-    result = []
+def to_sdk_format(servers: list[McpServerConfig]) -> dict:
+    """Convert MCP servers to Claude Agent SDK format (dict keyed by name)."""
+    result = {}
     for s in servers:
-        config = {
-            "name": s.name,
-            "command": s.command,
-            "args": s.args,
-        }
+        config: dict = {"command": s.command}
+        if s.args:
+            config["args"] = s.args
         if s.env:
             config["env"] = s.env
-        result.append(config)
+        result[s.name] = config
     return result
 
 
-def get_merged_mcp_for_workflow(workflow_mcp: Optional[list]) -> list[dict]:
+def get_merged_mcp_for_workflow(workflow_mcp: Optional[list]) -> dict:
     """Get merged MCP servers for a workflow in SDK format."""
     global_servers = load_global_mcp_servers()
     workflow_servers = parse_workflow_mcp(workflow_mcp)

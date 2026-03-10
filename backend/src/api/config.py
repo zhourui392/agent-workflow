@@ -41,8 +41,10 @@ async def get_global_config():
     mcp_path = GLOBAL_CONFIG_DIR / "mcp" / "servers.yaml"
     if mcp_path.exists():
         content = yaml.safe_load(mcp_path.read_text(encoding="utf-8")) or {}
-        for name, config in content.get("servers", {}).items():
-            mcp_servers.append({"name": name, **config})
+        servers = content.get("servers", {})
+        if isinstance(servers, dict):
+            for name, config in servers.items():
+                mcp_servers.append({"name": name, **config})
 
     skills = []
     skills_dir = GLOBAL_CONFIG_DIR / "skills"

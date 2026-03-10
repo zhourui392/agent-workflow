@@ -1,7 +1,11 @@
 """Agent Workflow System - FastAPI application entry point."""
+import os
 from contextlib import asynccontextmanager
 
 import structlog
+
+# Remove CLAUDECODE env var early to prevent nested session conflicts with Claude Agent SDK
+os.environ.pop("CLAUDECODE", None)
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

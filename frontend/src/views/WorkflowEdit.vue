@@ -42,22 +42,9 @@
             <el-input v-model="step.prompt" type="textarea" :rows="4"
               placeholder="步骤提示词，支持 {{today}}, {{steps.prev_step.output}} 等模板变量" />
           </el-form-item>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="模型">
-                <el-select v-model="step.model" clearable placeholder="使用默认">
-                  <el-option label="claude-sonnet-4-20250514" value="claude-sonnet-4-20250514" />
-                  <el-option label="claude-opus-4-20250514" value="claude-opus-4-20250514" />
-                  <el-option label="claude-haiku-4-20250506" value="claude-haiku-4-20250506" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="最大轮次">
-                <el-input-number v-model="step.max_turns" :min="1" :max="100" />
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <el-form-item label="最大轮次">
+            <el-input-number v-model="step.max_turns" :min="1" :max="100" />
+          </el-form-item>
           <el-form-item label="执行条件">
             <el-input v-model="step.when" placeholder="留空则始终执行，如: {{steps.prev_step.output}} contains '通过'" />
             <div class="form-tip">支持: contains 'text'、== 'value'、!= 'value'、true/false</div>
@@ -136,7 +123,7 @@ const form = reactive({
   description: '',
   enabled: true,
   schedule: '',
-  steps: [{ name: '', prompt: '', model: undefined as string | undefined, max_turns: 30, when: '' }] as any[],
+  steps: [{ name: '', prompt: '', max_turns: 30, when: '' }] as any[],
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
@@ -155,7 +142,7 @@ const limitsMaxDuration = computed({
   set: (val: number) => { if (!form.limits) form.limits = {}; form.limits.max_duration = val || undefined }
 })
 
-function addStep() { form.steps.push({ name: '', prompt: '', model: undefined, max_turns: 30 }) }
+function addStep() { form.steps.push({ name: '', prompt: '', max_turns: 30 }) }
 function removeStep(index: number) { form.steps.splice(index, 1) }
 
 async function handleSave() {
@@ -185,7 +172,7 @@ onMounted(async () => {
       if (data) {
         form.id = data.id; form.name = data.name; form.description = data.description || ''
         form.enabled = data.enabled ?? true; form.schedule = data.schedule || ''
-        form.steps = data.steps?.length ? data.steps : [{ name: '', prompt: '', model: undefined, max_turns: 30 }]
+        form.steps = data.steps?.length ? data.steps : [{ name: '', prompt: '', max_turns: 30 }]
         form.rules = data.rules || null; form.limits = data.limits || null
         form.on_failure = data.on_failure || 'stop'
       }

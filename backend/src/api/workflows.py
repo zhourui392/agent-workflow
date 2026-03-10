@@ -1,5 +1,6 @@
 """Workflow CRUD API endpoints."""
 import asyncio
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -182,7 +183,7 @@ async def export_workflow(workflow_id: str, session: AsyncSession = Depends(get_
     }
     return JSONResponse(
         content=export_data,
-        headers={"Content-Disposition": f'attachment; filename="{workflow.name}.json"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(workflow.name)}.json"},
     )
 
 

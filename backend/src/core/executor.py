@@ -1,12 +1,15 @@
 """Single step executor - calls Claude Agent SDK."""
 import asyncio
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import structlog
 
 logger = structlog.get_logger()
+
+# Clean CLAUDECODE env var at module load to prevent nested session conflicts
+os.environ.pop("CLAUDECODE", None)
 
 
 @dataclass
@@ -27,7 +30,15 @@ async def execute_step(step_config: dict, context: dict, merged_config: dict) ->
         merged_config: Merged global + workflow config {system_prompt, allowed_tools, mcp_servers}
     """
     try:
-        from claude_code_sdk import ClaudeCodeOptions, Message, query
+        os.environ.pop("CLAUDECODE", None)
+
+        from claude_code_sdk import (
+            AssistantMessage,
+            ClaudeCodeOptions,
+            ResultMessage,
+            TextBlock,
+            query,
+        )
 
         # Render prompt with context
         from src.core.template import render_template
@@ -57,10 +68,6 @@ async def execute_step(step_config: dict, context: dict, merged_config: dict) ->
         if mcp_servers:
             options_kwargs["mcp_servers"] = mcp_servers
 
-        model = step_config.get("model") or os.getenv("ANTHROPIC_MODEL")
-        if model:
-            options_kwargs["model"] = model
-
         options = ClaudeCodeOptions(**options_kwargs)
 
         # Apply timeout if configured
@@ -74,37 +81,23 @@ async def execute_step(step_config: dict, context: dict, merged_config: dict) ->
         async def run_query():
             nonlocal total_tokens, model_used
             async for message in query(prompt=prompt, options=options):
-                if not hasattr(message, "type"):
-                    continue
+                # Handle AssistantMessage: extract text from content blocks
+                if isinstance(message, AssistantMessage):
+                    if hasattr(message, "model") and message.model:
+                        model_used = message.model
+                    if hasattr(message, "content") and isinstance(message.content, list):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                output_parts.append(block.text)
 
-                # Handle "assistant" type messages with content blocks
-                if message.type == "assistant":
-                    if hasattr(message, "content"):
-                        if isinstance(message.content, list):
-                            for block in message.content:
-                                if hasattr(block, "text"):
-                                    output_parts.append(block.text)
-                                elif isinstance(block, dict) and "text" in block:
-                                    output_parts.append(block["text"])
-                        elif isinstance(message.content, str):
-                            output_parts.append(message.content)
-
-                # Handle "result" type messages
-                elif message.type == "result":
-                    if hasattr(message, "content"):
-                        if isinstance(message.content, str):
-                            output_parts.append(message.content)
-
-                # Handle "text" type messages
-                elif message.type == "text":
-                    if hasattr(message, "content") and isinstance(message.content, str):
-                        output_parts.append(message.content)
-
-                # Try to extract token usage
-                if hasattr(message, "usage") and message.usage:
-                    total_tokens += getattr(message.usage, "total_tokens", 0)
-                if hasattr(message, "model") and message.model:
-                    model_used = message.model
+                # Handle ResultMessage: extract usage stats
+                elif isinstance(message, ResultMessage):
+                    if hasattr(message, "result") and message.result:
+                        output_parts.append(message.result)
+                    if hasattr(message, "usage") and message.usage:
+                        usage = message.usage
+                        if isinstance(usage, dict):
+                            total_tokens += usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
 
         if max_duration:
             await asyncio.wait_for(run_query(), timeout=max_duration)

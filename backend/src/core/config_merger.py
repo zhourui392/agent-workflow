@@ -19,11 +19,20 @@ def load_global_system_prompt() -> str:
 
 
 def load_global_mcp_servers() -> dict:
-    """Load global MCP servers from mcp/servers.yaml."""
+    """Load global MCP servers from mcp/servers.yaml.
+
+    Returns SDK-compatible format: {name: {command, args, env}, ...}
+    """
     path = GLOBAL_CONFIG_DIR / "mcp" / "servers.yaml"
     if path.exists():
         content = yaml.safe_load(path.read_text(encoding="utf-8"))
-        return content if isinstance(content, dict) else {}
+        if not isinstance(content, dict):
+            return {}
+        # Parse servers section: {servers: {name: {command, args, env}}}
+        servers = content.get("servers", {})
+        if isinstance(servers, dict):
+            return servers
+        return {}
     return {}
 
 
