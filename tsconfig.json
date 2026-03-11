@@ -16,7 +16,7 @@
     "paths": {
       "@main/*": ["src/main/*"],
       "@renderer/*": ["src/renderer/*"],
-      "@/*": ["src/*"]
+      "@/*": ["src/renderer/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.vue"],

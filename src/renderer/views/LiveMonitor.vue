@@ -47,6 +47,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { listExecutions, type ExecutionData } from '@/api/executions'
+import { subscribeExecutionProgress, type ExecutionProgressEvent } from '@/api/index'
 import LogViewer from '@/components/LogViewer.vue'
 
 interface LogEntry {
@@ -59,7 +60,7 @@ const runningExecutions = ref<ExecutionData[]>([])
 const selectedId = ref<string | null>(null)
 const selectedExec = ref<ExecutionData | null>(null)
 const logs = ref<LogEntry[]>([])
-let ws: WebSocket | null = null
+let unsubscribe: (() => void) | null = null
 let pollTimer: number | null = null
 
 async function fetchRunning() {
@@ -76,52 +77,46 @@ function selectExecution(exec: ExecutionData) {
   selectedId.value = exec.id
   selectedExec.value = exec
   logs.value = []
-  connectWebSocket(exec.id)
 }
 
-function connectWebSocket(executionId: string) {
-  if (ws) {
-    ws.close()
-    ws = null
-  }
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${protocol}//${window.location.host}/ws/executions/${executionId}`
-  ws = new WebSocket(wsUrl)
+function formatLogMessage(event: ExecutionProgressEvent): string {
+  const stepNum = event.stepIndex + 1
 
-  ws.onmessage = (event) => {
-    const data = JSON.parse(event.data)
-    const time = new Date().toLocaleTimeString()
-    let message = ''
-
-    if (data.type === 'step_start') {
-      message = `[步骤 ${data.step_index + 1}/${data.total_steps}] 开始: ${data.step_name}`
-    } else if (data.type === 'step_complete') {
-      message = `[步骤 ${data.step_index + 1}] 完成: ${data.step_name} (${data.status}, ${data.tokens_used} tokens)`
-    } else if (data.type === 'step_retry') {
-      message = `[重试] ${data.step_name} 第 ${data.attempt}/${data.max_retries} 次，等待 ${data.delay}s`
-    } else if (data.type === 'step_retry_success') {
-      message = `[重试成功] ${data.step_name} 在第 ${data.attempt} 次重试后成功`
-    } else if (data.type === 'execution_complete') {
-      message = `执行完成: ${data.status}, 总计 ${data.total_tokens} tokens`
-    } else {
-      message = JSON.stringify(data)
-    }
-
-    logs.value.push({ type: data.type, time, message })
+  if (event.status === 'running' && event.outputText) {
+    return `[步骤 ${stepNum}] 输出: ${event.outputText.substring(0, 200)}${event.outputText.length > 200 ? '...' : ''}`
   }
 
-  ws.onerror = () => {
-    logs.value.push({ type: 'error', time: new Date().toLocaleTimeString(), message: 'WebSocket 连接错误' })
+  if (event.status === 'success') {
+    const tokens = event.tokensUsed ? `, ${event.tokensUsed} tokens` : ''
+    return `[步骤 ${stepNum}] 完成 (成功${tokens})`
   }
+
+  if (event.status === 'failed') {
+    return `[步骤 ${stepNum}] 失败: ${event.errorMessage || '未知错误'}`
+  }
+
+  return `[步骤 ${stepNum}] 状态: ${event.status}`
+}
+
+function handleProgressEvent(event: ExecutionProgressEvent) {
+  if (event.executionId !== selectedId.value) {
+    return
+  }
+
+  const time = new Date().toLocaleTimeString()
+  const message = formatLogMessage(event)
+
+  logs.value.push({ type: event.status, time, message })
 }
 
 onMounted(() => {
   fetchRunning()
   pollTimer = window.setInterval(fetchRunning, 5000)
+  unsubscribe = subscribeExecutionProgress(handleProgressEvent)
 })
 
 onUnmounted(() => {
-  if (ws) ws.close()
+  if (unsubscribe) unsubscribe()
   if (pollTimer) clearInterval(pollTimer)
 })
 </script>

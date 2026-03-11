@@ -72,8 +72,8 @@ function workflowToData(workflow: Workflow): WorkflowData {
     rules: workflow.rules || null,
     mcp_servers: workflow.mcpServers,
     skills: workflow.skills,
-    limits: workflow.limits || null,
-    output: workflow.output,
+    limits: workflow.limits as Record<string, unknown> | null,
+    output: workflow.output as Record<string, unknown> | undefined,
     on_failure: workflow.onFailure,
     created_at: workflow.createdAt,
     updated_at: workflow.updatedAt

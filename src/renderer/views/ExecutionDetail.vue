@@ -1,7 +1,13 @@
 <template>
   <div class="execution-detail" v-loading="loading">
     <div class="page-header">
-      <h2>执行详情</h2>
+      <div class="header-left">
+        <h2>执行详情</h2>
+        <el-tag v-if="isRunning" type="primary" effect="dark" class="live-indicator">
+          <span class="live-dot"></span>
+          实时更新中
+        </el-tag>
+      </div>
       <el-button @click="$router.back()">返回</el-button>
     </div>
 
@@ -72,21 +78,95 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
+import { subscribeExecutionProgress, type ExecutionProgressEvent } from '@/api/index'
 import type { ExecutionData } from '@/api/executions'
 
 const route = useRoute()
 const store = useExecutionStore()
 const loading = ref(false)
 const execution = ref<ExecutionData | null>(null)
+let unsubscribe: (() => void) | null = null
+
+const isRunning = computed(() => execution.value?.status === 'running')
+
+async function fetchExecutionData() {
+  const id = route.params.id as string
+  execution.value = await store.fetchExecution(id) || null
+}
+
+function handleProgressEvent(event: ExecutionProgressEvent) {
+  if (!execution.value || event.executionId !== execution.value.id) {
+    return
+  }
+
+  updateStepFromEvent(event)
+  updateExecutionStatus(event)
+}
+
+function updateStepFromEvent(event: ExecutionProgressEvent) {
+  if (!execution.value?.step_executions) {
+    return
+  }
+
+  const stepIndex = event.stepIndex
+  const step = execution.value.step_executions[stepIndex]
+
+  if (!step) {
+    return
+  }
+
+  step.status = event.status
+
+  if (event.outputText) {
+    step.output_text = event.outputText
+  }
+
+  if (event.tokensUsed) {
+    step.tokens_used = event.tokensUsed
+  }
+
+  if (event.errorMessage) {
+    step.error_message = event.errorMessage
+  }
+
+  if (event.status === 'success' || event.status === 'failed') {
+    step.finished_at = new Date().toISOString()
+  }
+}
+
+function updateExecutionStatus(event: ExecutionProgressEvent) {
+  if (!execution.value) {
+    return
+  }
+
+  execution.value.current_step = event.stepIndex
+
+  if (event.status === 'success' || event.status === 'failed') {
+    const allStepsCompleted = execution.value.step_executions?.every(
+      s => s.status === 'success' || s.status === 'failed'
+    )
+
+    if (allStepsCompleted) {
+      fetchExecutionData()
+    }
+  }
+}
 
 onMounted(async () => {
   loading.value = true
   try {
-    execution.value = await store.fetchExecution(route.params.id as string) || null
-  } finally { loading.value = false }
+    await fetchExecutionData()
+    unsubscribe = subscribeExecutionProgress(handleProgressEvent)
+  } finally {
+    loading.value = false
+  }
+})
+
+onUnmounted(() => {
+  if (unsubscribe) unsubscribe()
 })
 
 function statusType(status: string) {
@@ -120,6 +200,19 @@ function formatDuration(start?: string, end?: string) {
 .execution-detail { padding: 20px; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h2 { margin: 0; }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.live-indicator { display: flex; align-items: center; gap: 6px; }
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 .summary-card { margin-bottom: 20px; }
 .steps-card { margin-bottom: 20px; }
 .step-title { display: flex; align-items: center; gap: 10px; }

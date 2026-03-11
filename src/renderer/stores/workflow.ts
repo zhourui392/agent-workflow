@@ -41,13 +41,13 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   async function removeWorkflow(id: string) {
     await deleteWorkflow(id)
-    workflows.value = workflows.value.filter(w => w.id !== id)
+    workflows.value = workflows.value.filter((w: WorkflowData) => w.id !== id)
   }
 
   async function toggle(id: string) {
     const { data } = await toggleWorkflow(id)
-    const idx = workflows.value.findIndex(w => w.id === id)
-    if (idx >= 0) workflows.value[idx] = data
+    const idx = workflows.value.findIndex((w: WorkflowData) => w.id === id)
+    if (idx >= 0 && data) workflows.value[idx] = data
     return data
   }
 
