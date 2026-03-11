@@ -7,9 +7,33 @@
  * @since 2026/03/11
  */
 
-import { query } from '@anthropic-ai/claude-code';
 import log from 'electron-log';
 import type { MergedConfig, StepResult } from '../store/models';
+
+type ClaudeCodeModule = typeof import('@anthropic-ai/claude-code');
+let claudeCodeModule: ClaudeCodeModule | null = null;
+
+/**
+ * 动态导入 ESM 模块（绕过 TypeScript CommonJS 转换）
+ *
+ * @param modulePath 模块路径
+ * @returns 导入的模块
+ */
+async function dynamicImport<T>(modulePath: string): Promise<T> {
+  return new Function('modulePath', 'return import(modulePath)')(modulePath) as Promise<T>;
+}
+
+/**
+ * 动态加载 Claude Code SDK（ESM 模块）
+ *
+ * @returns Claude Code 模块
+ */
+async function getClaudeCode(): Promise<ClaudeCodeModule> {
+  if (!claudeCodeModule) {
+    claudeCodeModule = await dynamicImport<ClaudeCodeModule>('@anthropic-ai/claude-code');
+  }
+  return claudeCodeModule;
+}
 
 /**
  * 从消息内容中提取文本
@@ -57,13 +81,14 @@ export async function executeStep(
   log.debug(`Executing step with prompt length: ${prompt.length}`);
 
   try {
+    const { query } = await getClaudeCode();
     const q = query({
       prompt,
       options: {
         model: config.model || 'claude-sonnet-4-20250514',
         customSystemPrompt: config.systemPrompt,
         allowedTools: config.allowedTools,
-        mcpServers: config.mcpServers as Record<string, import('@anthropic-ai/claude-code').McpServerConfig> | undefined,
+        mcpServers: config.mcpServers as Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined,
         maxTurns: config.maxTurns || 30,
         permissionMode: 'acceptEdits',
         cwd: process.cwd()
