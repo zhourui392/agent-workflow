@@ -78,6 +78,7 @@ export interface Workflow {
   skills?: Record<string, string>;
   limits?: WorkflowLimits;
   output?: WorkflowOutput;
+  workingDirectory?: string;
   onFailure: 'stop' | 'skip' | 'retry';
   createdAt: string;
   updatedAt: string;
@@ -148,6 +149,7 @@ export interface MergedConfig {
   skills?: Record<string, string>;
   maxTurns?: number;
   timeoutMs?: number;
+  workingDirectory?: string;
 }
 
 /**
@@ -196,6 +198,7 @@ export interface CreateWorkflowRequest {
   skills?: Record<string, string>;
   limits?: WorkflowLimits;
   output?: WorkflowOutput;
+  workingDirectory?: string;
   onFailure?: 'stop' | 'skip' | 'retry';
 }
 

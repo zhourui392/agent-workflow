@@ -32,6 +32,7 @@ function rowToWorkflow(row: Record<string, unknown>): Workflow {
     skills: row.skills ? JSON.parse(row.skills as string) : undefined,
     limits: row.limits ? JSON.parse(row.limits as string) : undefined,
     output: row.output ? JSON.parse(row.output as string) : undefined,
+    workingDirectory: row.working_directory as string | undefined,
     onFailure: (row.on_failure as 'stop' | 'skip' | 'retry') || 'stop',
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
@@ -88,8 +89,8 @@ export function create(data: CreateWorkflowRequest): Workflow {
   const stmt = db.prepare(`
     INSERT INTO workflows (
       id, name, enabled, schedule, inputs, steps, rules,
-      mcp_servers, skills, limits, output, on_failure, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      mcp_servers, skills, limits, output, working_directory, on_failure, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -104,6 +105,7 @@ export function create(data: CreateWorkflowRequest): Workflow {
     data.skills ? JSON.stringify(data.skills) : null,
     data.limits ? JSON.stringify(data.limits) : null,
     data.output ? JSON.stringify(data.output) : null,
+    data.workingDirectory || null,
     data.onFailure || 'stop',
     now,
     now
@@ -170,6 +172,10 @@ export function update(id: string, data: UpdateWorkflowRequest): Workflow | null
   if (data.output !== undefined) {
     fields.push('output = ?');
     values.push(data.output ? JSON.stringify(data.output) : null);
+  }
+  if (data.workingDirectory !== undefined) {
+    fields.push('working_directory = ?');
+    values.push(data.workingDirectory || null);
   }
   if (data.onFailure !== undefined) {
     fields.push('on_failure = ?');

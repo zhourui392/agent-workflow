@@ -18,6 +18,10 @@
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="2" placeholder="工作流描述" />
         </el-form-item>
+        <el-form-item label="工作目录">
+          <el-input v-model="form.working_directory" placeholder="如: /home/user/project" />
+          <div class="form-tip">Claude Agent 执行时的工作目录，留空则使用系统默认目录</div>
+        </el-form-item>
       </el-card>
 
       <!-- Steps -->
@@ -116,6 +120,7 @@ const form = reactive({
   id: undefined as string | undefined,
   name: '',
   description: '',
+  working_directory: '',
   enabled: true,
   schedule: '',
   steps: [{ name: '', prompt: '', max_turns: 30 }] as any[],
@@ -150,6 +155,7 @@ async function handleSave() {
       schedule: form.schedule || null,
       rules: form.rules?.system_prompt ? form.rules : null,
       limits: (form.limits?.max_tokens || form.limits?.max_duration) ? form.limits : null,
+      working_directory: form.working_directory || null,
     }
     await store.saveWorkflow(payload)
     ElMessage.success('保存成功')
@@ -166,6 +172,7 @@ onMounted(async () => {
       const data = await store.fetchWorkflow(route.params.id as string)
       if (data) {
         form.id = data.id; form.name = data.name; form.description = data.description || ''
+        form.working_directory = data.working_directory || ''
         form.enabled = data.enabled ?? true; form.schedule = data.schedule || ''
         form.steps = data.steps?.length ? data.steps : [{ name: '', prompt: '', max_turns: 30 }]
         form.rules = data.rules || null; form.limits = data.limits || null

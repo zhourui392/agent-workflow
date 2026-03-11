@@ -173,6 +173,8 @@ export function mergeConfig(globalConfig: GlobalConfig, workflow: Workflow): Mer
     merged.timeoutMs = workflow.limits.timeoutMs;
   }
 
+  merged.workingDirectory = workflow.workingDirectory;
+
   return merged;
 }
 

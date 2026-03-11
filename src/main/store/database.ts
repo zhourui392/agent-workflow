@@ -41,6 +41,7 @@ function initializeTables(database: Database.Database): void {
       skills TEXT,
       limits TEXT,
       output TEXT,
+      working_directory TEXT,
       on_failure TEXT DEFAULT 'stop',
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
@@ -79,7 +80,24 @@ function initializeTables(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_step_executions_execution_id ON step_executions(execution_id);
   `);
 
+  runMigrations(database);
+
   log.info('Database tables initialized');
+}
+
+/**
+ * 运行数据库迁移
+ *
+ * @param database 数据库实例
+ */
+function runMigrations(database: Database.Database): void {
+  const columns = database.prepare("PRAGMA table_info(workflows)").all() as { name: string }[];
+  const columnNames = columns.map(col => col.name);
+
+  if (!columnNames.includes('working_directory')) {
+    database.exec('ALTER TABLE workflows ADD COLUMN working_directory TEXT');
+    log.info('Migration: added working_directory column to workflows table');
+  }
 }
 
 /**

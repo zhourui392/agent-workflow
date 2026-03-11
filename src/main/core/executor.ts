@@ -170,7 +170,7 @@ export async function executeStep(
       mcpServers: validMcpServers,
       maxTurns: config.maxTurns || 30,
       permissionMode: 'acceptEdits',
-      cwd: process.cwd(),
+      cwd: config.workingDirectory || process.cwd(),
       env: { CLAUDECODE: '' }
     };
 
