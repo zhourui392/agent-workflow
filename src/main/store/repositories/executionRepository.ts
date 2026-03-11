@@ -25,11 +25,13 @@ function rowToExecution(row: Record<string, unknown>): Execution {
   return {
     id: row.id as string,
     workflowId: row.workflow_id as string,
+    workflowName: row.workflow_name as string | undefined,
     triggerType: row.trigger_type as TriggerType,
     status: row.status as ExecutionStatus,
     startedAt: row.started_at as string,
     finishedAt: row.finished_at as string | undefined,
     currentStep: row.current_step as number,
+    totalSteps: row.total_steps as number | undefined,
     totalTokens: row.total_tokens as number,
     errorMessage: row.error_message as string | undefined
   };
@@ -69,19 +71,21 @@ export function findAll(params?: ExecutionListParams): Execution[] {
   const values: unknown[] = [];
 
   if (params?.workflowId) {
-    conditions.push('workflow_id = ?');
+    conditions.push('e.workflow_id = ?');
     values.push(params.workflowId);
   }
   if (params?.status) {
-    conditions.push('status = ?');
+    conditions.push('e.status = ?');
     values.push(params.status);
   }
 
-  let sql = 'SELECT * FROM executions';
+  let sql = `SELECT e.*, w.name AS workflow_name,
+    json_array_length(w.steps) AS total_steps
+    FROM executions e LEFT JOIN workflows w ON e.workflow_id = w.id`;
   if (conditions.length > 0) {
     sql += ` WHERE ${conditions.join(' AND ')}`;
   }
-  sql += ' ORDER BY started_at DESC';
+  sql += ' ORDER BY e.started_at DESC';
 
   if (params?.limit) {
     sql += ' LIMIT ?';
@@ -104,7 +108,9 @@ export function findAll(params?: ExecutionListParams): Execution[] {
  */
 export function findById(id: string): Execution | null {
   const db = getDatabase();
-  const row = db.prepare('SELECT * FROM executions WHERE id = ?').get(id);
+  const row = db.prepare(`SELECT e.*, w.name AS workflow_name,
+    json_array_length(w.steps) AS total_steps
+    FROM executions e LEFT JOIN workflows w ON e.workflow_id = w.id WHERE e.id = ?`).get(id);
   return row ? rowToExecution(row as Record<string, unknown>) : null;
 }
 

@@ -185,13 +185,14 @@ export function mergeConfig(globalConfig: GlobalConfig, workflow: Workflow): Mer
  * @param stepModel 步骤指定的模型
  * @returns 步骤级别的合并配置
  */
-export function getStepConfig(mergedConfig: MergedConfig, stepModel?: string): MergedConfig {
-  if (!stepModel) {
+export function getStepConfig(mergedConfig: MergedConfig, stepModel?: string, stepMaxTurns?: number): MergedConfig {
+  if (!stepModel && !stepMaxTurns) {
     return mergedConfig;
   }
 
   return {
     ...mergedConfig,
-    model: stepModel
+    ...(stepModel && { model: stepModel }),
+    ...(stepMaxTurns && { maxTurns: stepMaxTurns })
   };
 }

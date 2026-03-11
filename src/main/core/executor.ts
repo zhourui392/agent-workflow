@@ -196,14 +196,20 @@ export async function executeStep(
       if (msg.type === 'assistant') {
         const text = extractText(msg.message?.content);
         if (text) {
+          if (outputText) {
+            outputText += '\n\n---\n\n';
+          }
           outputText += text;
-          onProgress?.(text);
+          onProgress?.(outputText);
         }
       }
 
       if (msg.type === 'result') {
-        const usage = (msg as { usage?: { total_tokens?: number } }).usage;
-        tokensUsed = usage?.total_tokens || 0;
+        const resultMsg = msg as any;
+        const usage = resultMsg.usage;
+        if (usage) {
+          tokensUsed = (usage.input_tokens || 0) + (usage.output_tokens || 0);
+        }
         log.debug(`Step completed with ${tokensUsed} tokens`);
       }
     }

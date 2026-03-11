@@ -67,6 +67,7 @@ function workflowToData(workflow: Workflow): WorkflowData {
       name: step.name,
       prompt: step.prompt,
       model: step.model,
+      max_turns: step.maxTurns,
       onFailure: step.onFailure,
       retryConfig: step.retryConfig
     })),
@@ -87,6 +88,7 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     name: step.name,
     prompt: step.prompt,
     model: step.model,
+    maxTurns: step.max_turns,
     onFailure: step.onFailure,
     retryConfig: step.retryConfig
   }));

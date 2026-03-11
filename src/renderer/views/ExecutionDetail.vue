@@ -23,7 +23,7 @@
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(execution.status)" size="small">{{ statusLabel(execution.status) }}</el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="进度">{{ execution.current_step || 0 }}/{{ execution.total_steps || 0 }}</el-descriptions-item>
+          <el-descriptions-item label="进度">{{ execution.status === 'success' ? execution.total_steps : (execution.total_steps ? ((execution.current_step ?? 0) + 1) : 0) }}/{{ execution.total_steps || 0 }}</el-descriptions-item>
           <el-descriptions-item label="开始时间">{{ formatDate(execution.started_at) }}</el-descriptions-item>
           <el-descriptions-item label="结束时间">{{ formatDate(execution.finished_at) }}</el-descriptions-item>
           <el-descriptions-item label="耗时">{{ formatDuration(execution.started_at, execution.finished_at) }}</el-descriptions-item>
@@ -89,6 +89,8 @@ const store = useExecutionStore()
 const loading = ref(false)
 const execution = ref<ExecutionData | null>(null)
 let unsubscribe: (() => void) | null = null
+const now = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
 
 const isRunning = computed(() => execution.value?.status === 'running')
 
@@ -160,6 +162,7 @@ onMounted(async () => {
   try {
     await fetchExecutionData()
     unsubscribe = subscribeExecutionProgress(handleProgressEvent)
+    tickTimer = setInterval(() => { now.value = Date.now() }, 1000)
   } finally {
     loading.value = false
   }
@@ -167,6 +170,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (unsubscribe) unsubscribe()
+  if (tickTimer) clearInterval(tickTimer)
 })
 
 function statusType(status: string) {
@@ -188,7 +192,7 @@ function formatDate(dateStr?: string) {
 function formatDuration(start?: string, end?: string) {
   if (!start) return '-'
   const s = new Date(start).getTime()
-  const e = end ? new Date(end).getTime() : Date.now()
+  const e = end ? new Date(end).getTime() : now.value
   const sec = Math.round((e - s) / 1000)
   if (sec < 60) return `${sec}s`
   if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`

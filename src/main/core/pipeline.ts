@@ -152,7 +152,7 @@ async function runPipelineAsync(
         status: 'running'
       });
 
-      const stepConfig = getStepConfig(mergedConfig, step.model);
+      const stepConfig = getStepConfig(mergedConfig, step.model, step.maxTurns);
 
       let result: StepResult;
       const onFailure = step.onFailure || workflow.onFailure;

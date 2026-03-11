@@ -65,13 +65,13 @@ function executionToData(execution: Execution): ExecutionData {
   return {
     id: execution.id,
     workflow_id: execution.workflowId,
-    workflow_name: '',
+    workflow_name: execution.workflowName || '',
     trigger_type: execution.triggerType,
     status: execution.status,
     started_at: execution.startedAt,
     finished_at: execution.finishedAt,
     current_step: execution.currentStep,
-    total_steps: execution.stepExecutions?.length,
+    total_steps: execution.totalSteps ?? execution.stepExecutions?.length ?? 0,
     total_tokens: execution.totalTokens,
     error_message: execution.errorMessage,
     step_executions: execution.stepExecutions?.map((step, idx) =>

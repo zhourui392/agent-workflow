@@ -12,6 +12,7 @@ export interface WorkflowStep {
   name: string;
   prompt: string;
   model?: string;
+  maxTurns?: number;
   onFailure?: 'stop' | 'skip' | 'retry';
   retryConfig?: {
     maxAttempts?: number;
@@ -100,11 +101,13 @@ export type TriggerType = 'manual' | 'scheduled';
 export interface Execution {
   id: string;
   workflowId: string;
+  workflowName?: string;
   triggerType: TriggerType;
   status: ExecutionStatus;
   startedAt: string;
   finishedAt?: string;
   currentStep: number;
+  totalSteps?: number;
   totalTokens: number;
   errorMessage?: string;
   stepExecutions?: StepExecution[];

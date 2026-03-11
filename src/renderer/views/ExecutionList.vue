@@ -24,7 +24,7 @@
         </template>
       </el-table-column>
       <el-table-column label="进度" width="100" align="center">
-        <template #default="{ row }">{{ row.current_step || 0 }}/{{ row.total_steps || 0 }}</template>
+        <template #default="{ row }">{{ row.status === 'success' ? row.total_steps : (row.total_steps ? (row.current_step + 1) : 0) }}/{{ row.total_steps || 0 }}</template>
       </el-table-column>
       <el-table-column label="开始时间" width="180">
         <template #default="{ row }">{{ formatDate(row.started_at) }}</template>
