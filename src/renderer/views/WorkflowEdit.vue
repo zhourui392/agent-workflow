@@ -42,28 +42,9 @@
             <el-input v-model="step.prompt" type="textarea" :rows="4"
               placeholder="步骤提示词，支持 {{today}}, {{steps.prev_step.output}} 等模板变量" />
           </el-form-item>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="模型">
-                <el-select v-model="step.model" clearable placeholder="使用全局默认">
-                  <el-option-group label="Claude 4">
-                    <el-option label="claude-sonnet-4-20250514" value="claude-sonnet-4-20250514" />
-                    <el-option label="claude-opus-4-20250514" value="claude-opus-4-20250514" />
-                    <el-option label="claude-haiku-4-20250506" value="claude-haiku-4-20250506" />
-                  </el-option-group>
-                  <el-option-group label="Claude 3.5">
-                    <el-option label="claude-3-5-sonnet-20241022" value="claude-3-5-sonnet-20241022" />
-                    <el-option label="claude-3-5-haiku-20241022" value="claude-3-5-haiku-20241022" />
-                  </el-option-group>
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="最大轮次">
-                <el-input-number v-model="step.max_turns" :min="1" :max="100" />
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <el-form-item label="最大轮次">
+            <el-input-number v-model="step.max_turns" :min="1" :max="100" />
+          </el-form-item>
           <el-divider v-if="index < form.steps.length - 1" />
         </div>
       </el-card>
@@ -137,7 +118,7 @@ const form = reactive({
   description: '',
   enabled: true,
   schedule: '',
-  steps: [{ name: '', prompt: '', model: undefined as string | undefined, max_turns: 30 }] as any[],
+  steps: [{ name: '', prompt: '', max_turns: 30 }] as any[],
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
@@ -156,7 +137,7 @@ const limitsMaxDuration = computed({
   set: (val: number) => { if (!form.limits) form.limits = {}; form.limits.max_duration = val || undefined }
 })
 
-function addStep() { form.steps.push({ name: '', prompt: '', model: undefined, max_turns: 30 }) }
+function addStep() { form.steps.push({ name: '', prompt: '', max_turns: 30 }) }
 function removeStep(index: number) { form.steps.splice(index, 1) }
 
 async function handleSave() {
@@ -186,7 +167,7 @@ onMounted(async () => {
       if (data) {
         form.id = data.id; form.name = data.name; form.description = data.description || ''
         form.enabled = data.enabled ?? true; form.schedule = data.schedule || ''
-        form.steps = data.steps?.length ? data.steps : [{ name: '', prompt: '', model: undefined, max_turns: 30 }]
+        form.steps = data.steps?.length ? data.steps : [{ name: '', prompt: '', max_turns: 30 }]
         form.rules = data.rules || null; form.limits = data.limits || null
         form.on_failure = data.on_failure || 'stop'
       }
