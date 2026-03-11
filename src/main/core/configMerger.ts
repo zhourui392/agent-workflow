@@ -152,15 +152,21 @@ export function mergeConfig(globalConfig: GlobalConfig, workflow: Workflow): Mer
     merged.allowedTools = globalConfig.allowedTools;
   }
 
-  merged.mcpServers = {
+  const mergedMcpServers = {
     ...globalConfig.mcpServers,
     ...workflow.mcpServers
   };
+  if (Object.keys(mergedMcpServers).length > 0) {
+    merged.mcpServers = mergedMcpServers;
+  }
 
-  merged.skills = {
+  const mergedSkills = {
     ...globalConfig.skills,
     ...workflow.skills
   };
+  if (Object.keys(mergedSkills).length > 0) {
+    merged.skills = mergedSkills;
+  }
 
   if (workflow.limits) {
     merged.maxTurns = workflow.limits.maxTurns;

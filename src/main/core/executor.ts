@@ -7,8 +7,11 @@
  * @since 2026/03/11
  */
 
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
 import log from 'electron-log';
-import type { MergedConfig, StepResult } from '../store/models';
+import type { MergedConfig, StepResult, McpServerConfig } from '../store/models';
 
 type ClaudeCodeModule = typeof import('@anthropic-ai/claude-code');
 let claudeCodeModule: ClaudeCodeModule | null = null;
@@ -21,6 +24,80 @@ let claudeCodeModule: ClaudeCodeModule | null = null;
  */
 async function dynamicImport<T>(modulePath: string): Promise<T> {
   return new Function('modulePath', 'return import(modulePath)')(modulePath) as Promise<T>;
+}
+
+/**
+ * 查找 Claude CLI 可执行文件路径
+ *
+ * Electron 从桌面启动时 PATH 不包含 ~/.local/bin，SDK 找不到 claude 命令。
+ * 按优先级搜索已知安装路径，支持通过环境变量 CLAUDE_CODE_PATH 手动覆盖。
+ *
+ * @returns Claude CLI 路径，未找到则返回 undefined
+ */
+function findClaudeExecutable(): string | undefined {
+  const envPath = process.env.CLAUDE_CODE_PATH;
+  if (envPath && fs.existsSync(envPath)) {
+    log.debug(`Using Claude CLI from CLAUDE_CODE_PATH: ${envPath}`);
+    return envPath;
+  }
+
+  const homeDir = os.homedir();
+  const isWindows = process.platform === 'win32';
+
+  const candidates: string[] = isWindows
+    ? [
+        path.join(homeDir, '.local', 'bin', 'claude.exe'),
+        path.join(process.env.LOCALAPPDATA || '', 'Programs', 'claude-code', 'claude.exe')
+      ]
+    : [
+        path.join(homeDir, '.local', 'bin', 'claude'),
+        '/usr/local/bin/claude'
+      ];
+
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      log.debug(`Found Claude CLI at: ${candidate}`);
+      return candidate;
+    }
+  }
+
+  log.debug('Claude CLI not found in known paths, relying on PATH');
+  return undefined;
+}
+
+/**
+ * 过滤无效的 MCP server 配置
+ *
+ * 数据库中存的 {"servers":[]} 等无效格式会导致 SDK schema 校验失败。
+ * 只保留包含 command 字段的合法配置。
+ *
+ * @param mcpServers 原始 MCP 配置
+ * @returns 过滤后的有效配置，全部无效时返回 undefined
+ */
+function getValidMcpServers(
+  mcpServers?: Record<string, McpServerConfig>
+): Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined {
+  if (!mcpServers) {
+    return undefined;
+  }
+
+  const validServers: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> = {};
+
+  for (const [name, config] of Object.entries(mcpServers)) {
+    if (config && typeof config === 'object' && 'command' in config && config.command) {
+      validServers[name] = {
+        command: config.command,
+        args: config.args,
+        env: config.env
+      };
+    }
+  }
+
+  if (Object.keys(validServers).length === 0) {
+    return undefined;
+  }
+
+  return validServers;
 }
 
 /**
@@ -77,22 +154,42 @@ export async function executeStep(
 ): Promise<StepResult> {
   let outputText = '';
   let tokensUsed = 0;
+  const stderrChunks: string[] = [];
 
   log.debug(`Executing step with prompt length: ${prompt.length}`);
 
   try {
     const { query } = await getClaudeCode();
+
+    const claudePath = findClaudeExecutable();
+    const validMcpServers = getValidMcpServers(config.mcpServers);
+
+    const queryOptions: Parameters<typeof query>[0]['options'] = {
+      customSystemPrompt: config.systemPrompt,
+      allowedTools: config.allowedTools,
+      mcpServers: validMcpServers,
+      maxTurns: config.maxTurns || 30,
+      permissionMode: 'acceptEdits',
+      cwd: process.cwd(),
+      env: { CLAUDECODE: '' }
+    };
+
+    if (config.model) {
+      queryOptions.model = config.model;
+    }
+
+    if (claudePath) {
+      queryOptions.pathToClaudeCodeExecutable = claudePath;
+    }
+
+    queryOptions.stderr = (chunk: string) => {
+      stderrChunks.push(chunk);
+      log.debug(`Claude CLI stderr: ${chunk}`);
+    };
+
     const q = query({
       prompt,
-      options: {
-        model: config.model || 'claude-sonnet-4-20250514',
-        customSystemPrompt: config.systemPrompt,
-        allowedTools: config.allowedTools,
-        mcpServers: config.mcpServers as Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined,
-        maxTurns: config.maxTurns || 30,
-        permissionMode: 'acceptEdits',
-        cwd: process.cwd()
-      }
+      options: queryOptions
     });
 
     for await (const msg of q) {
@@ -117,7 +214,15 @@ export async function executeStep(
       tokensUsed
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    let errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (stderrChunks.length > 0) {
+      const stderrOutput = stderrChunks.join('').trim();
+      if (stderrOutput) {
+        errorMessage = `${errorMessage}\n\nCLI stderr:\n${stderrOutput}`;
+      }
+    }
+
     log.error('Step execution failed:', errorMessage);
 
     return {
