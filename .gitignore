@@ -3,15 +3,10 @@ node_modules/
 
 # Build output
 dist/
-build/
-out/
-.next/
-.nuxt/
-.output/
+release/
 
 # Cache
 .cache/
-.parcel-cache/
 .vite/
 
 # Environment
@@ -22,9 +17,6 @@ out/
 # Logs
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
 # OS files
 .DS_Store
@@ -36,27 +28,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-*.egg
-
 # Database
 *.db
 *.sqlite3
-
-# TypeScript build artifacts in source directories
-frontend/src/**/*.js
-frontend/src/**/*.d.ts
-frontend/*.js
-frontend/*.d.ts
-!frontend/src/**/*.config.js
-
-# Electron app
-electron-app/node_modules/
-electron-app/dist/
-electron-app/release/
-electron-app/data/
-electron-app/*.db
+data/
