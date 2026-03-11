@@ -35,6 +35,7 @@ export interface StepConfig {
     maxAttempts?: number;
     delayMs?: number;
   };
+  validation_prompt?: string;
 }
 
 export interface WorkflowData {
@@ -69,7 +70,8 @@ function workflowToData(workflow: Workflow): WorkflowData {
       model: step.model,
       max_turns: step.maxTurns,
       onFailure: step.onFailure,
-      retryConfig: step.retryConfig
+      retryConfig: step.retryConfig,
+      validation_prompt: step.validation?.prompt || ''
     })),
     rules: workflow.rules || null,
     mcp_servers: workflow.mcpServers,
@@ -90,7 +92,10 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     model: step.model,
     maxTurns: step.max_turns,
     onFailure: step.onFailure,
-    retryConfig: step.retryConfig
+    retryConfig: step.retryConfig,
+    validation: step.validation_prompt
+      ? { prompt: step.validation_prompt }
+      : undefined
   }));
 
   return {

@@ -54,6 +54,8 @@ function rowToStepExecution(row: Record<string, unknown>): StepExecution {
     tokensUsed: row.tokens_used as number,
     modelUsed: row.model_used as string | undefined,
     errorMessage: row.error_message as string | undefined,
+    validationStatus: row.validation_status as 'passed' | 'failed' | undefined,
+    validationOutput: row.validation_output as string | undefined,
     startedAt: row.started_at as string,
     finishedAt: row.finished_at as string | undefined
   };
@@ -250,6 +252,8 @@ export function updateStepExecution(
     tokensUsed?: number;
     modelUsed?: string;
     errorMessage?: string;
+    validationStatus?: 'passed' | 'failed';
+    validationOutput?: string;
   }
 ): void {
   const db = getDatabase();
@@ -280,6 +284,14 @@ export function updateStepExecution(
   if (data.errorMessage !== undefined) {
     fields.push('error_message = ?');
     values.push(data.errorMessage);
+  }
+  if (data.validationStatus !== undefined) {
+    fields.push('validation_status = ?');
+    values.push(data.validationStatus);
+  }
+  if (data.validationOutput !== undefined) {
+    fields.push('validation_output = ?');
+    values.push(data.validationOutput);
   }
 
   if (fields.length === 0) {

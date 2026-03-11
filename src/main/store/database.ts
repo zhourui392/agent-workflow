@@ -98,6 +98,18 @@ function runMigrations(database: Database.Database): void {
     database.exec('ALTER TABLE workflows ADD COLUMN working_directory TEXT');
     log.info('Migration: added working_directory column to workflows table');
   }
+
+  const stepColumns = database.prepare("PRAGMA table_info(step_executions)").all() as { name: string }[];
+  const stepColumnNames = stepColumns.map(col => col.name);
+
+  if (!stepColumnNames.includes('validation_status')) {
+    database.exec('ALTER TABLE step_executions ADD COLUMN validation_status TEXT');
+    log.info('Migration: added validation_status column to step_executions table');
+  }
+  if (!stepColumnNames.includes('validation_output')) {
+    database.exec('ALTER TABLE step_executions ADD COLUMN validation_output TEXT');
+    log.info('Migration: added validation_output column to step_executions table');
+  }
 }
 
 /**

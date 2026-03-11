@@ -17,7 +17,7 @@ import type {
   TriggerType
 } from '../store/models';
 import { renderTemplate, type TemplateContext } from './template';
-import { executeStep, executeStepWithTimeout } from './executor';
+import { executeStep, executeStepWithTimeout, validateStepOutput } from './executor';
 import { loadGlobalConfig, mergeConfig, getStepConfig } from './configMerger';
 import { handleOutput } from './outputHandler';
 
@@ -185,16 +185,51 @@ async function runPipelineAsync(
         });
       }
 
+      executionRepository.addTokens(executionId, result.tokensUsed);
+      totalTokens += result.tokensUsed;
+
+      // 步骤执行成功且配置了验证时，执行输出验证
+      let validationStatus: 'passed' | 'failed' | undefined;
+      let validationOutput: string | undefined;
+
+      if (result.success && step.validation?.prompt) {
+        log.info(`Validating step ${step.name} output`);
+
+        broadcastProgress({
+          executionId,
+          stepIndex: i,
+          status: 'running',
+          outputText: result.outputText
+        });
+
+        const validation = await validateStepOutput(
+          result.outputText,
+          step.validation.prompt,
+          stepConfig
+        );
+
+        validationStatus = validation.passed ? 'passed' : 'failed';
+        validationOutput = validation.output;
+
+        executionRepository.addTokens(executionId, validation.tokensUsed);
+        totalTokens += validation.tokensUsed;
+
+        if (!validation.passed) {
+          result.success = false;
+          result.errorMessage = `验证失败: ${validation.output}`;
+          log.warn(`Step ${step.name} validation failed`);
+        }
+      }
+
       executionRepository.updateStepExecution(stepExecution.id, {
         status: result.success ? 'success' : 'failed',
         outputText: result.outputText,
         tokensUsed: result.tokensUsed,
         modelUsed: stepConfig.model,
-        errorMessage: result.errorMessage
+        errorMessage: result.errorMessage,
+        validationStatus,
+        validationOutput
       });
-
-      executionRepository.addTokens(executionId, result.tokensUsed);
-      totalTokens += result.tokensUsed;
 
       context.steps![step.name] = { output: result.outputText };
 

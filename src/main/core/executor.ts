@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
-import type { MergedConfig, StepResult, McpServerConfig } from '../store/models';
+import type { MergedConfig, StepResult, ValidationResult, McpServerConfig } from '../store/models';
 
 type ClaudeCodeModule = typeof import('@anthropic-ai/claude-code');
 let claudeCodeModule: ClaudeCodeModule | null = null;
@@ -274,4 +274,46 @@ export async function executeStepWithTimeout(
       errorMessage
     };
   }
+}
+
+/**
+ * 验证步骤输出
+ *
+ * 将步骤输出和验证提示词交给 Claude Agent SDK，判断输出是否符合预期。
+ * LLM 需回答 PASS 或 FAIL 开头，后续行为理由说明。
+ *
+ * @param outputText 步骤输出文本
+ * @param validationPrompt 验证提示词
+ * @param config 合并后的配置
+ * @returns 验证结果
+ */
+export async function validateStepOutput(
+  outputText: string,
+  validationPrompt: string,
+  config: MergedConfig
+): Promise<ValidationResult> {
+  const prompt = `请验证以下输出是否符合要求。
+
+## 验证规则
+${validationPrompt}
+
+## 待验证的输出
+${outputText}
+
+## 回答格式
+第一行必须是 PASS 或 FAIL，后续行说明理由。`;
+
+  const validationConfig: MergedConfig = {
+    ...config,
+    maxTurns: 1
+  };
+
+  const result = await executeStep(prompt, validationConfig);
+  const passed = result.outputText.trim().toUpperCase().startsWith('PASS');
+
+  return {
+    passed,
+    output: result.outputText,
+    tokensUsed: result.tokensUsed
+  };
 }

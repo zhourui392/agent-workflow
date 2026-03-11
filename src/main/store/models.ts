@@ -18,6 +18,9 @@ export interface WorkflowStep {
     maxAttempts?: number;
     delayMs?: number;
   };
+  validation?: {
+    prompt: string;
+  };
 }
 
 /**
@@ -126,6 +129,8 @@ export interface StepExecution {
   tokensUsed: number;
   modelUsed?: string;
   errorMessage?: string;
+  validationStatus?: 'passed' | 'failed';
+  validationOutput?: string;
   startedAt: string;
   finishedAt?: string;
 }
@@ -153,6 +158,15 @@ export interface MergedConfig {
   maxTurns?: number;
   timeoutMs?: number;
   workingDirectory?: string;
+}
+
+/**
+ * 步骤验证结果
+ */
+export interface ValidationResult {
+  passed: boolean;
+  output: string;
+  tokensUsed: number;
 }
 
 /**

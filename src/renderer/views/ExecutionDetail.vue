@@ -50,6 +50,8 @@
                   <div class="step-title">
                     <span class="step-name">{{ step.step_name }}</span>
                     <el-tag :type="statusType(step.status)" size="small">{{ statusLabel(step.status) }}</el-tag>
+                    <el-tag v-if="step.validation_status === 'passed'" type="success" size="small">验证通过</el-tag>
+                    <el-tag v-if="step.validation_status === 'failed'" type="danger" size="small">验证失败</el-tag>
                     <span class="step-meta" v-if="step.tokens_used">{{ step.tokens_used.toLocaleString() }} tokens</span>
                     <span class="step-meta" v-if="step.model_used">{{ step.model_used }}</span>
                     <span class="step-meta">{{ formatDuration(step.started_at, step.finished_at) }}</span>
@@ -63,6 +65,10 @@
                   <div v-if="step.output_text" class="step-section">
                     <h4>输出</h4>
                     <pre class="code-block output">{{ step.output_text }}</pre>
+                  </div>
+                  <div v-if="step.validation_output" class="step-section">
+                    <h4>验证结果</h4>
+                    <pre class="code-block" :class="step.validation_status === 'passed' ? 'validation-pass' : 'validation-fail'">{{ step.validation_output }}</pre>
                   </div>
                   <div v-if="step.error_message" class="step-section">
                     <el-alert :title="step.error_message" type="error" :closable="false" />
@@ -227,4 +233,6 @@ function formatDuration(start?: string, end?: string) {
 .step-section h4 { margin: 0 0 8px 0; color: #606266; }
 .code-block { background: #f5f7fa; border: 1px solid #e4e7ed; border-radius: 4px; padding: 12px; white-space: pre-wrap; word-break: break-word; font-size: 13px; max-height: 400px; overflow-y: auto; }
 .code-block.output { background: #f0f9eb; border-color: #e1f3d8; }
+.code-block.validation-pass { background: #f0f9eb; border-color: #b3e19d; }
+.code-block.validation-fail { background: #fef0f0; border-color: #fab6b6; }
 </style>

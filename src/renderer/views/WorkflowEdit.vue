@@ -49,6 +49,14 @@
           <el-form-item label="最大轮次">
             <el-input-number v-model="step.max_turns" :min="1" :max="100" />
           </el-form-item>
+          <el-form-item label="输出验证">
+            <el-switch v-model="step.validation_enabled" />
+            <span class="form-tip" style="margin-left: 8px;">启用后将通过 LLM 验证步骤输出是否符合预期</span>
+          </el-form-item>
+          <el-form-item v-if="step.validation_enabled" label="验证提示词">
+            <el-input v-model="step.validation_prompt" type="textarea" :rows="3"
+              placeholder="描述期望的输出标准，如：输出必须包含JSON格式的分析结果，且包含 summary 和 details 字段" />
+          </el-form-item>
           <el-divider v-if="index < form.steps.length - 1" />
         </div>
       </el-card>
@@ -123,7 +131,7 @@ const form = reactive({
   working_directory: '',
   enabled: true,
   schedule: '',
-  steps: [{ name: '', prompt: '', max_turns: 30 }] as any[],
+  steps: [{ name: '', prompt: '', max_turns: 30, validation_enabled: false, validation_prompt: '' }] as any[],
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
@@ -142,7 +150,7 @@ const limitsMaxDuration = computed({
   set: (val: number) => { if (!form.limits) form.limits = {}; form.limits.max_duration = val || undefined }
 })
 
-function addStep() { form.steps.push({ name: '', prompt: '', max_turns: 30 }) }
+function addStep() { form.steps.push({ name: '', prompt: '', max_turns: 30, validation_enabled: false, validation_prompt: '' }) }
 function removeStep(index: number) { form.steps.splice(index, 1) }
 
 async function handleSave() {
@@ -174,7 +182,13 @@ onMounted(async () => {
         form.id = data.id; form.name = data.name; form.description = data.description || ''
         form.working_directory = data.working_directory || ''
         form.enabled = data.enabled ?? true; form.schedule = data.schedule || ''
-        form.steps = data.steps?.length ? data.steps : [{ name: '', prompt: '', max_turns: 30 }]
+        form.steps = data.steps?.length
+          ? data.steps.map((s: any) => ({
+              ...s,
+              validation_enabled: !!s.validation_prompt,
+              validation_prompt: s.validation_prompt || ''
+            }))
+          : [{ name: '', prompt: '', max_turns: 30, validation_enabled: false, validation_prompt: '' }]
         form.rules = data.rules || null; form.limits = data.limits || null
         form.on_failure = data.on_failure || 'stop'
       }

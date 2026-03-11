@@ -27,6 +27,8 @@ export interface StepExecutionData {
   tokens_used: number;
   model_used?: string;
   error_message?: string;
+  validation_status?: 'passed' | 'failed';
+  validation_output?: string;
 }
 
 export interface ExecutionData {
@@ -57,7 +59,9 @@ function stepExecutionToData(step: StepExecution, stepName: string): StepExecuti
     output_text: step.outputText,
     tokens_used: step.tokensUsed,
     model_used: step.modelUsed,
-    error_message: step.errorMessage
+    error_message: step.errorMessage,
+    validation_status: step.validationStatus,
+    validation_output: step.validationOutput
   };
 }
 
