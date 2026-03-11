@@ -69,7 +69,7 @@ export function findById(id: string): Workflow | null {
 export function findEnabledWithSchedule(): Workflow[] {
   const db = getDatabase();
   const rows = db
-    .prepare('SELECT * FROM workflows WHERE enabled = 1 AND schedule IS NOT NULL AND schedule != ""')
+    .prepare("SELECT * FROM workflows WHERE enabled = 1 AND schedule IS NOT NULL AND schedule != ''")
     .all();
   return rows.map(row => rowToWorkflow(row as Record<string, unknown>));
 }
