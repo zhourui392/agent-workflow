@@ -62,9 +62,12 @@
                     <h4>Prompt</h4>
                     <pre class="code-block">{{ step.prompt_rendered }}</pre>
                   </div>
-                  <div v-if="step.output_text" class="step-section">
-                    <h4>输出</h4>
-                    <pre class="code-block output">{{ step.output_text }}</pre>
+                  <div class="step-section">
+                    <h4>执行过程</h4>
+                    <StepEventViewer
+                      :events="getStepEvents(step)"
+                      :outputText="step.output_text"
+                    />
                   </div>
                   <div v-if="step.validation_output" class="step-section">
                     <h4>验证结果</h4>
@@ -88,7 +91,9 @@ import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
 import { subscribeExecutionProgress, type ExecutionProgressEvent } from '@/api/index'
-import type { ExecutionData } from '@/api/executions'
+import type { ExecutionData, StepExecutionData } from '@/api/executions'
+import type { StepEvent } from '../../main/store/models'
+import StepEventViewer from '@/components/StepEventViewer.vue'
 
 const route = useRoute()
 const store = useExecutionStore()
@@ -98,7 +103,20 @@ let unsubscribe: (() => void) | null = null
 const now = ref(Date.now())
 let tickTimer: ReturnType<typeof setInterval> | null = null
 
+/** 实时收集的事件（按 stepIndex 分组），用于运行中的步骤 */
+const liveEvents = ref<Map<number, StepEvent[]>>(new Map())
+
 const isRunning = computed(() => execution.value?.status === 'running')
+
+/**
+ * 获取步骤的事件列表（优先使用数据库中的历史事件，运行中使用实时收集的事件）
+ */
+function getStepEvents(step: StepExecutionData): StepEvent[] | undefined {
+  if (step.events && step.events.length > 0) {
+    return step.events
+  }
+  return liveEvents.value.get(step.step_index)
+}
 
 async function fetchExecutionData() {
   const id = route.params.id as string
@@ -108,6 +126,17 @@ async function fetchExecutionData() {
 function handleProgressEvent(event: ExecutionProgressEvent) {
   if (!execution.value || event.executionId !== execution.value.id) {
     return
+  }
+
+  // 收集实时流式事件
+  if (event.event) {
+    const stepIdx = event.stepIndex
+    if (!liveEvents.value.has(stepIdx)) {
+      liveEvents.value.set(stepIdx, [])
+    }
+    liveEvents.value.get(stepIdx)!.push(event.event)
+    // 触发响应式更新
+    liveEvents.value = new Map(liveEvents.value)
   }
 
   updateStepFromEvent(event)

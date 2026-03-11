@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
-import type { MergedConfig, StepResult, ValidationResult, McpServerConfig } from '../store/models';
+import type { MergedConfig, StepResult, ValidationResult, McpServerConfig, StepEvent } from '../store/models';
 
 type ClaudeCodeModule = typeof import('@anthropic-ai/claude-code');
 let claudeCodeModule: ClaudeCodeModule | null = null;
@@ -140,20 +140,76 @@ function extractText(content: unknown): string {
 }
 
 /**
+ * 截断字符串到指定长度
+ *
+ * @param str 原始字符串
+ * @param maxLen 最大长度
+ * @returns 截断后的字符串
+ */
+function truncate(str: string, maxLen: number): string {
+  return str.length > maxLen ? str.substring(0, maxLen) + '...' : str;
+}
+
+/**
+ * 从消息内容中提取工具结果
+ *
+ * @param content 消息内容
+ * @param toolNameMap 工具ID到工具名的映射
+ * @param turnIndex 当前轮次
+ * @returns 工具结果事件列表
+ */
+function extractToolResults(
+  content: unknown,
+  toolNameMap: Map<string, string>,
+  turnIndex: number
+): StepEvent[] {
+  const events: StepEvent[] = [];
+  if (!Array.isArray(content)) return events;
+
+  for (const block of content) {
+    if (typeof block !== 'object' || block === null) continue;
+    if ('type' in block && block.type === 'tool_result' && 'tool_use_id' in block) {
+      const toolUseId = block.tool_use_id as string;
+      const toolName = toolNameMap.get(toolUseId) || 'unknown';
+      let output = '';
+      if (typeof block.content === 'string') {
+        output = block.content;
+      } else if (Array.isArray(block.content)) {
+        output = block.content
+          .filter((c: any) => c?.type === 'text')
+          .map((c: any) => c.text)
+          .join('\n');
+      }
+      events.push({
+        type: 'tool_result',
+        toolUseId,
+        toolName,
+        output: truncate(output, 2000),
+        isError: !!block.is_error,
+        turnIndex
+      });
+    }
+  }
+  return events;
+}
+
+/**
  * 执行单个步骤
  *
  * @param prompt 渲染后的提示词
  * @param config 合并后的配置
- * @param onProgress 进度回调
+ * @param onEvent 流式事件回调
  * @returns 步骤执行结果
  */
 export async function executeStep(
   prompt: string,
   config: MergedConfig,
-  onProgress?: (text: string) => void
+  onEvent?: (event: StepEvent) => void
 ): Promise<StepResult> {
   let outputText = '';
   let tokensUsed = 0;
+  let turnIndex = 0;
+  const toolNameMap = new Map<string, string>();
   const stderrChunks: string[] = [];
 
   log.debug(`Executing step with prompt length: ${prompt.length}`);
@@ -193,23 +249,83 @@ export async function executeStep(
     });
 
     for await (const msg of q) {
+      // 1. 系统初始化消息
+      if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
+        const sysMsg = msg as any;
+        onEvent?.({
+          type: 'init',
+          tools: sysMsg.tools || [],
+          mcpServers: sysMsg.mcp_servers || [],
+          model: sysMsg.model || ''
+        });
+      }
+
+      // 2. Assistant 消息：包含 text 和 tool_use 内容块
       if (msg.type === 'assistant') {
-        const text = extractText(msg.message?.content);
-        if (text) {
-          if (outputText) {
-            outputText += '\n\n---\n\n';
+        const content = (msg as any).message?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (typeof block !== 'object' || block === null) continue;
+
+            if (block.type === 'text' && block.text) {
+              if (outputText) {
+                outputText += '\n\n---\n\n';
+              }
+              outputText += block.text;
+              onEvent?.({ type: 'text', text: block.text, turnIndex });
+            }
+
+            if (block.type === 'tool_use') {
+              toolNameMap.set(block.id, block.name);
+              onEvent?.({
+                type: 'tool_call',
+                toolUseId: block.id,
+                toolName: block.name,
+                input: block.input as Record<string, unknown>,
+                turnIndex
+              });
+            }
           }
-          outputText += text;
-          onProgress?.(outputText);
+        } else {
+          const text = extractText(content);
+          if (text) {
+            if (outputText) {
+              outputText += '\n\n---\n\n';
+            }
+            outputText += text;
+            onEvent?.({ type: 'text', text, turnIndex });
+          }
+        }
+
+        onEvent?.({ type: 'turn_end', turnIndex });
+        turnIndex++;
+      }
+
+      // 3. User 消息：包含 tool_result 内容块
+      if (msg.type === 'user') {
+        const content = (msg as any).message?.content;
+        const toolResults = extractToolResults(content, toolNameMap, turnIndex);
+        for (const event of toolResults) {
+          onEvent?.(event);
         }
       }
 
+      // 4. 最终结果
       if (msg.type === 'result') {
         const resultMsg = msg as any;
         const usage = resultMsg.usage;
         if (usage) {
           tokensUsed = (usage.input_tokens || 0) + (usage.output_tokens || 0);
         }
+        onEvent?.({
+          type: 'result',
+          success: resultMsg.subtype === 'success',
+          totalCostUsd: resultMsg.total_cost_usd || 0,
+          durationMs: resultMsg.duration_ms || 0,
+          numTurns: resultMsg.num_turns || 0,
+          inputTokens: usage?.input_tokens || 0,
+          outputTokens: usage?.output_tokens || 0
+        });
         log.debug(`Step completed with ${tokensUsed} tokens`);
       }
     }
@@ -230,6 +346,7 @@ export async function executeStep(
     }
 
     log.error('Step execution failed:', errorMessage);
+    onEvent?.({ type: 'error', message: errorMessage });
 
     return {
       success: false,
@@ -253,7 +370,7 @@ export async function executeStepWithTimeout(
   prompt: string,
   config: MergedConfig,
   timeoutMs: number,
-  onProgress?: (text: string) => void
+  onEvent?: (event: StepEvent) => void
 ): Promise<StepResult> {
   const timeoutPromise = new Promise<StepResult>((_, reject) => {
     setTimeout(() => {
@@ -261,7 +378,7 @@ export async function executeStepWithTimeout(
     }, timeoutMs);
   });
 
-  const executionPromise = executeStep(prompt, config, onProgress);
+  const executionPromise = executeStep(prompt, config, onEvent);
 
   try {
     return await Promise.race([executionPromise, timeoutPromise]);

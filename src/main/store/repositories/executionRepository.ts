@@ -10,6 +10,7 @@ import { getDatabase } from '../database';
 import type {
   Execution,
   StepExecution,
+  StepEvent,
   ExecutionStatus,
   TriggerType,
   ExecutionListParams
@@ -44,6 +45,15 @@ function rowToExecution(row: Record<string, unknown>): Execution {
  * @returns StepExecution对象
  */
 function rowToStepExecution(row: Record<string, unknown>): StepExecution {
+  let events: StepEvent[] | undefined;
+  if (row.events_json && typeof row.events_json === 'string') {
+    try {
+      events = JSON.parse(row.events_json);
+    } catch {
+      events = undefined;
+    }
+  }
+
   return {
     id: row.id as string,
     executionId: row.execution_id as string,
@@ -56,6 +66,7 @@ function rowToStepExecution(row: Record<string, unknown>): StepExecution {
     errorMessage: row.error_message as string | undefined,
     validationStatus: row.validation_status as 'passed' | 'failed' | undefined,
     validationOutput: row.validation_output as string | undefined,
+    events,
     startedAt: row.started_at as string,
     finishedAt: row.finished_at as string | undefined
   };
@@ -254,6 +265,7 @@ export function updateStepExecution(
     errorMessage?: string;
     validationStatus?: 'passed' | 'failed';
     validationOutput?: string;
+    eventsJson?: string;
   }
 ): void {
   const db = getDatabase();
@@ -292,6 +304,10 @@ export function updateStepExecution(
   if (data.validationOutput !== undefined) {
     fields.push('validation_output = ?');
     values.push(data.validationOutput);
+  }
+  if (data.eventsJson !== undefined) {
+    fields.push('events_json = ?');
+    values.push(data.eventsJson);
   }
 
   if (fields.length === 0) {

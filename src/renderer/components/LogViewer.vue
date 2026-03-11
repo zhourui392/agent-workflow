@@ -47,6 +47,10 @@ watch(() => props.logs.length, async () => {
 .log-item.step_retry .log-content { color: #ce9178; }
 .log-item.step_retry_success .log-content { color: #b5cea8; }
 .log-item.error .log-content { color: #f14c4c; }
+.log-item.failed .log-content { color: #f14c4c; }
 .log-item.execution_complete .log-content { color: #dcdcaa; font-weight: bold; }
+.log-item.tool_call .log-content { color: #dcdcaa; }
+.log-item.tool_result .log-content { color: #808080; font-style: italic; }
+.log-item.success .log-content { color: #4ec9b0; }
 .log-empty { color: #808080; text-align: center; padding: 20px; }
 </style>

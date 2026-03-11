@@ -14,7 +14,8 @@ import type {
   ExecutionResult,
   StepResult,
   ExecutionProgressEvent,
-  TriggerType
+  TriggerType,
+  StepEvent
 } from '../store/models';
 import { renderTemplate, type TemplateContext } from './template';
 import { executeStep, executeStepWithTimeout, validateStepOutput } from './executor';
@@ -60,7 +61,7 @@ async function executeStepWithRetry(
   config: MergedConfig,
   maxAttempts: number,
   delayMs: number,
-  onProgress?: (text: string) => void
+  onEvent?: (event: StepEvent) => void
 ): Promise<StepResult> {
   let lastResult: StepResult | null = null;
 
@@ -68,9 +69,9 @@ async function executeStepWithRetry(
     log.debug(`Step attempt ${attempt}/${maxAttempts}`);
 
     if (config.timeoutMs) {
-      lastResult = await executeStepWithTimeout(prompt, config, config.timeoutMs, onProgress);
+      lastResult = await executeStepWithTimeout(prompt, config, config.timeoutMs, onEvent);
     } else {
-      lastResult = await executeStep(prompt, config, onProgress);
+      lastResult = await executeStep(prompt, config, onEvent);
     }
 
     if (lastResult.success) {
@@ -156,6 +157,17 @@ async function runPipelineAsync(
 
       let result: StepResult;
       const onFailure = step.onFailure || workflow.onFailure;
+      const collectedEvents: StepEvent[] = [];
+
+      const onEvent = (event: StepEvent) => {
+        collectedEvents.push(event);
+        broadcastProgress({
+          executionId,
+          stepIndex: i,
+          status: 'running',
+          event
+        });
+      };
 
       if (onFailure === 'retry') {
         const maxAttempts = step.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS;
@@ -165,24 +177,10 @@ async function runPipelineAsync(
           stepConfig,
           maxAttempts,
           delayMs,
-          text => {
-            broadcastProgress({
-              executionId,
-              stepIndex: i,
-              status: 'running',
-              outputText: text
-            });
-          }
+          onEvent
         );
       } else {
-        result = await executeStep(renderedPrompt, stepConfig, text => {
-          broadcastProgress({
-            executionId,
-            stepIndex: i,
-            status: 'running',
-            outputText: text
-          });
-        });
+        result = await executeStep(renderedPrompt, stepConfig, onEvent);
       }
 
       executionRepository.addTokens(executionId, result.tokensUsed);
@@ -228,7 +226,8 @@ async function runPipelineAsync(
         modelUsed: stepConfig.model,
         errorMessage: result.errorMessage,
         validationStatus,
-        validationOutput
+        validationOutput,
+        eventsJson: JSON.stringify(collectedEvents)
       });
 
       context.steps![step.name] = { output: result.outputText };

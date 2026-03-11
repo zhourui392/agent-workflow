@@ -79,20 +79,78 @@ function selectExecution(exec: ExecutionData) {
   logs.value = []
 }
 
-function formatLogMessage(event: ExecutionProgressEvent): string {
+/** 工具图标映射 */
+function getToolIcon(toolName: string): string {
+  const iconMap: Record<string, string> = {
+    Read: '\uD83D\uDCD6',
+    Write: '\uD83D\uDCDD',
+    Edit: '\u270F\uFE0F',
+    Bash: '\uD83D\uDCBB',
+    Grep: '\uD83D\uDD0D',
+    Glob: '\uD83D\uDCC2',
+    WebSearch: '\uD83C\uDF10',
+    WebFetch: '\uD83C\uDF10',
+    Agent: '\uD83E\uDD16',
+  }
+  return iconMap[toolName] || '\uD83D\uDD27'
+}
+
+function formatLogMessage(event: ExecutionProgressEvent): string | null {
   const stepNum = event.stepIndex + 1
 
-  if (event.status === 'running' && event.outputText) {
-    return `[步骤 ${stepNum}] 输出: ${event.outputText.substring(0, 200)}${event.outputText.length > 200 ? '...' : ''}`
+  // 优先处理细粒度事件
+  if (event.event) {
+    const e = event.event
+    switch (e.type) {
+      case 'init':
+        return `\uD83D\uDE80 步骤 ${stepNum} 开始 | 模型: ${e.model} | 工具: ${e.tools.length}个`
+      case 'tool_call': {
+        const icon = getToolIcon(e.toolName)
+        let summary = ''
+        const input = e.input as Record<string, unknown>
+        if (e.toolName === 'Read' || e.toolName === 'Write' || e.toolName === 'Edit') {
+          summary = String(input.file_path || input.filePath || '')
+        } else if (e.toolName === 'Bash') {
+          const cmd = String(input.command || '')
+          summary = cmd.length > 60 ? cmd.substring(0, 60) + '...' : cmd
+        } else if (e.toolName === 'Grep') {
+          summary = `"${input.pattern || ''}" ${input.path || ''}`
+        } else if (e.toolName === 'Glob') {
+          summary = String(input.pattern || '')
+        }
+        return `${icon} ${e.toolName} ${summary}`
+      }
+      case 'tool_result': {
+        if (e.isError) {
+          return `\u274C ${e.toolName} 执行出错`
+        }
+        const firstLine = e.output.split('\n')[0] || ''
+        const summary = firstLine.length > 80 ? firstLine.substring(0, 80) + '...' : firstLine
+        return `   \u2192 ${summary}`
+      }
+      case 'text':
+        return null  // 文本回复太频繁，不在日志中展示
+      case 'turn_end':
+        return null  // 静默
+      case 'result':
+        return `${e.success ? '\u2705' : '\u274C'} 步骤 ${stepNum} 完成 | ${e.numTurns} 轮 | ${(e.inputTokens + e.outputTokens).toLocaleString()} tokens | ${Math.round(e.durationMs / 1000)}s`
+      case 'error':
+        return `\u274C 步骤 ${stepNum} 错误: ${e.message}`
+    }
   }
 
+  // 兼容旧的进度事件（无 event 字段）
   if (event.status === 'success') {
     const tokens = event.tokensUsed ? `, ${event.tokensUsed} tokens` : ''
-    return `[步骤 ${stepNum}] 完成 (成功${tokens})`
+    return `\u2705 [步骤 ${stepNum}] 完成 (成功${tokens})`
   }
 
   if (event.status === 'failed') {
-    return `[步骤 ${stepNum}] 失败: ${event.errorMessage || '未知错误'}`
+    return `\u274C [步骤 ${stepNum}] 失败: ${event.errorMessage || '未知错误'}`
+  }
+
+  if (event.status === 'running' && !event.event && event.outputText) {
+    return `[步骤 ${stepNum}] 输出: ${event.outputText.substring(0, 200)}${event.outputText.length > 200 ? '...' : ''}`
   }
 
   return `[步骤 ${stepNum}] 状态: ${event.status}`
@@ -103,10 +161,18 @@ function handleProgressEvent(event: ExecutionProgressEvent) {
     return
   }
 
-  const time = new Date().toLocaleTimeString()
   const message = formatLogMessage(event)
+  if (!message) return
 
-  logs.value.push({ type: event.status, time, message })
+  const time = new Date().toLocaleTimeString()
+  const logType = event.event?.type === 'tool_call' ? 'tool_call'
+    : event.event?.type === 'tool_result' ? 'tool_result'
+    : event.event?.type === 'init' ? 'step_start'
+    : event.event?.type === 'result' ? (event.event.success ? 'step_complete' : 'error')
+    : event.event?.type === 'error' ? 'error'
+    : event.status
+
+  logs.value.push({ type: logType, time, message })
 }
 
 onMounted(() => {

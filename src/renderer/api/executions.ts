@@ -13,6 +13,7 @@ import {
   type Execution,
   type StepExecution
 } from './index';
+import type { StepEvent } from '../../main/store/models';
 
 export interface StepExecutionData {
   id: string;
@@ -29,6 +30,7 @@ export interface StepExecutionData {
   error_message?: string;
   validation_status?: 'passed' | 'failed';
   validation_output?: string;
+  events?: StepEvent[];
 }
 
 export interface ExecutionData {
@@ -61,7 +63,8 @@ function stepExecutionToData(step: StepExecution, stepName: string): StepExecuti
     model_used: step.modelUsed,
     error_message: step.errorMessage,
     validation_status: step.validationStatus,
-    validation_output: step.validationOutput
+    validation_output: step.validationOutput,
+    events: step.events
   };
 }
 

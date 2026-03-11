@@ -110,6 +110,10 @@ function runMigrations(database: Database.Database): void {
     database.exec('ALTER TABLE step_executions ADD COLUMN validation_output TEXT');
     log.info('Migration: added validation_output column to step_executions table');
   }
+  if (!stepColumnNames.includes('events_json')) {
+    database.exec('ALTER TABLE step_executions ADD COLUMN events_json TEXT');
+    log.info('Migration: added events_json column to step_executions table');
+  }
 }
 
 /**
