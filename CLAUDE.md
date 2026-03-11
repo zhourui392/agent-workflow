@@ -61,3 +61,24 @@ frontend/src/
 - 后端: FastAPI, SQLAlchemy (异步), APScheduler, claude-code-sdk, structlog, Pydantic
 - 前端: Vue 3 (Composition API), TypeScript, Vite, Element Plus, Pinia, Axios
 - Python ≥ 3.11
+
+## 代码变更规范
+
+### README.md 同步检查
+
+每次完成代码变更后，必须判断 README.md 是否需要同步更新。需要更新 README 的情况：
+
+- **新增功能**: 添加新的 API 端点、页面、命令等
+- **修改架构**: 新增/删除/重命名目录或核心模块
+- **变更依赖**: 修改 package.json、requirements.txt 等依赖文件
+- **修改配置**: 环境变量、配置文件格式变化
+- **修改启动命令**: 开发或生产环境的启动方式变更
+- **修改技术栈**: 引入或移除主要框架/库
+
+不需要更新 README 的情况：
+
+- Bug 修复（不影响使用方式）
+- 代码重构（不改变外部行为）
+- 样式调整
+- 测试代码变更
+- 注释或文档字符串修改
