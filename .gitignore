@@ -53,3 +53,10 @@ frontend/src/**/*.d.ts
 frontend/*.js
 frontend/*.d.ts
 !frontend/src/**/*.config.js
+
+# Electron app
+electron-app/node_modules/
+electron-app/dist/
+electron-app/release/
+electron-app/data/
+electron-app/*.db
