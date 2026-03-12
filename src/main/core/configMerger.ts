@@ -1,11 +1,17 @@
 /**
  * 配置合并器
  *
- * 合并策略:
+ * 四层合并策略:
+ * - 第一层：磁盘全局配置（global_config/）
+ * - 第二层：数据库全局启用（mcp_servers.enabled=1 / skills.enabled=1）
+ * - 第三层：工作流配置（workflow.mcpServers / workflow.skills）
+ * - 第四层：步骤引用（step.mcpServerIds / step.skillIds）
+ *
+ * 合并规则:
  * - rules (systemPrompt): 拼接
  * - allowedTools: 取交集
- * - mcpServers: 取并集
- * - skills: 同名覆盖 (工作流优先)
+ * - mcpServers: 取并集，同名后者覆盖
+ * - skills: 同名后者覆盖
  *
  * @author zhourui(V33215020)
  * @since 2026/03/11
@@ -20,8 +26,33 @@ import type {
   GlobalConfig,
   MergedConfig,
   Workflow,
-  McpServerConfig
+  WorkflowStep,
+  McpServerConfig,
+  Skill
 } from '../store/models';
+import { mcpServerRepository, skillRepository } from '../store/repositories';
+import { SkillWriteError, type ReferenceValidationResult } from './errors';
+
+/**
+ * 步骤级合并配置
+ *
+ * @author zhourui(V33215020)
+ * @since 2026/03/12
+ */
+export interface StepMergedConfig extends MergedConfig {
+  skillsDir?: string;
+  hasSkills: boolean;
+}
+
+/**
+ * Skill 内容结构
+ */
+interface SkillContent {
+  name: string;
+  description?: string;
+  allowedTools?: string[];
+  content: string;
+}
 
 /**
  * 获取全局配置目录路径
@@ -183,9 +214,14 @@ export function mergeConfig(globalConfig: GlobalConfig, workflow: Workflow): Mer
  *
  * @param mergedConfig 基础合并配置
  * @param stepModel 步骤指定的模型
+ * @param stepMaxTurns 步骤指定的最大轮次
  * @returns 步骤级别的合并配置
  */
-export function getStepConfig(mergedConfig: MergedConfig, stepModel?: string, stepMaxTurns?: number): MergedConfig {
+export function getStepConfig(
+  mergedConfig: MergedConfig,
+  stepModel?: string,
+  stepMaxTurns?: number
+): MergedConfig {
   if (!stepModel && !stepMaxTurns) {
     return mergedConfig;
   }
@@ -194,5 +230,361 @@ export function getStepConfig(mergedConfig: MergedConfig, stepModel?: string, st
     ...mergedConfig,
     ...(stepModel && { model: stepModel }),
     ...(stepMaxTurns && { maxTurns: stepMaxTurns })
+  };
+}
+
+/**
+ * 将 McpServer 数据库对象转换为 McpServerConfig
+ *
+ * @param server MCP 服务数据库对象
+ * @returns MCP 服务配置
+ */
+function buildMcpServerConfig(server: {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}): McpServerConfig {
+  return {
+    command: server.command,
+    args: server.args,
+    env: server.env
+  };
+}
+
+/**
+ * 合并步骤的 MCP 配置（四层合并）
+ *
+ * @param diskConfig 磁盘全局配置
+ * @param workflowConfig 工作流配置
+ * @param stepMcpIds 步骤引用的 MCP ID 列表
+ * @returns 合并后的 MCP 配置
+ */
+export function mergeStepMcpServers(
+  diskConfig: Record<string, McpServerConfig> | undefined,
+  workflowConfig: Record<string, McpServerConfig> | undefined,
+  stepMcpIds: string[] = []
+): Record<string, McpServerConfig> {
+  const result: Record<string, McpServerConfig> = {};
+
+  if (diskConfig) {
+    Object.assign(result, diskConfig);
+  }
+
+  const enabledServers = mcpServerRepository.findEnabled();
+  for (const server of enabledServers) {
+    result[server.name] = buildMcpServerConfig(server);
+  }
+
+  if (workflowConfig) {
+    Object.assign(result, workflowConfig);
+  }
+
+  if (stepMcpIds.length > 0) {
+    const stepServers = mcpServerRepository.findByIds(stepMcpIds);
+    for (const server of stepServers) {
+      result[server.name] = buildMcpServerConfig(server);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 生成 SKILL.md 文件内容
+ *
+ * @param skill Skill 配置
+ * @returns SKILL.md 文件内容
+ */
+function buildSkillFileContent(skill: SkillContent): string {
+  const frontmatterParts: string[] = [];
+
+  if (skill.description) {
+    frontmatterParts.push(`description: ${skill.description}`);
+  }
+  if (skill.allowedTools && skill.allowedTools.length > 0) {
+    frontmatterParts.push(`allowed-tools: ${skill.allowedTools.join(', ')}`);
+  }
+
+  if (frontmatterParts.length > 0) {
+    return `---\n${frontmatterParts.join('\n')}\n---\n\n${skill.content}`;
+  }
+
+  return skill.content;
+}
+
+/**
+ * 写入单个 Skill 文件
+ *
+ * @param skillsDir Skills 隔离目录
+ * @param skill Skill 配置
+ */
+function writeSkillFile(skillsDir: string, skill: SkillContent): void {
+  const skillDir = path.join(skillsDir, skill.name);
+
+  try {
+    fs.mkdirSync(skillDir, { recursive: true });
+    const content = buildSkillFileContent(skill);
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), content, 'utf-8');
+  } catch (error) {
+    log.error('Skill 文件写入失败', {
+      skillName: skill.name,
+      skillsDir,
+      error: error instanceof Error ? error.message : String(error)
+    });
+
+    throw new SkillWriteError(
+      `无法写入 Skill "${skill.name}": ${error instanceof Error ? error.message : String(error)}`,
+      skill.name
+    );
+  }
+}
+
+/**
+ * 写入步骤的 Skills 到隔离目录（四层合并）
+ *
+ * @param workingDirectory 工作目录
+ * @param executionId 执行 ID
+ * @param stepIndex 步骤索引
+ * @param diskSkills 磁盘全局 Skills
+ * @param workflowSkills 工作流 Skills
+ * @param stepSkillIds 步骤引用的 Skill ID 列表
+ * @returns 隔离目录路径，无 Skills 时返回 undefined
+ */
+export function writeStepSkills(
+  workingDirectory: string,
+  executionId: string,
+  stepIndex: number,
+  diskSkills: Record<string, string> | undefined,
+  workflowSkills: Record<string, string> | undefined,
+  stepSkillIds: string[] = []
+): string | undefined {
+  const mergedSkills = new Map<string, SkillContent>();
+
+  if (diskSkills) {
+    for (const [name, content] of Object.entries(diskSkills)) {
+      mergedSkills.set(name, { name, content });
+    }
+  }
+
+  const enabledSkills = skillRepository.findEnabled();
+  for (const skill of enabledSkills) {
+    mergedSkills.set(skill.name, {
+      name: skill.name,
+      description: skill.description,
+      allowedTools: skill.allowedTools,
+      content: skill.content
+    });
+  }
+
+  if (workflowSkills) {
+    for (const [name, content] of Object.entries(workflowSkills)) {
+      mergedSkills.set(name, { name, content });
+    }
+  }
+
+  if (stepSkillIds.length > 0) {
+    const stepSkills = skillRepository.findByIds(stepSkillIds);
+    for (const skill of stepSkills) {
+      mergedSkills.set(skill.name, {
+        name: skill.name,
+        description: skill.description,
+        allowedTools: skill.allowedTools,
+        content: skill.content
+      });
+    }
+  }
+
+  if (mergedSkills.size === 0) {
+    return undefined;
+  }
+
+  const skillsDir = path.join(
+    workingDirectory,
+    '.claude',
+    `skills-${executionId}-${stepIndex}`
+  );
+
+  fs.mkdirSync(skillsDir, { recursive: true });
+
+  for (const skill of mergedSkills.values()) {
+    writeSkillFile(skillsDir, skill);
+  }
+
+  return skillsDir;
+}
+
+/**
+ * 清理步骤执行的 Skills 隔离目录
+ *
+ * @param skillsDir 隔离目录路径
+ */
+export function cleanupStepSkills(skillsDir: string): void {
+  try {
+    fs.rmSync(skillsDir, { recursive: true, force: true });
+  } catch (error) {
+    log.warn('清理 Skills 目录失败', { skillsDir, error });
+  }
+}
+
+/**
+ * 校验配置引用有效性
+ *
+ * @param mcpServerIds MCP 服务 ID 列表
+ * @param skillIds Skill ID 列表
+ * @returns 校验结果
+ */
+export function validateConfigReferences(
+  mcpServerIds: string[],
+  skillIds: string[]
+): ReferenceValidationResult {
+  const missingMcpIds: string[] = [];
+  const missingSkillIds: string[] = [];
+
+  if (mcpServerIds.length > 0) {
+    const foundServers = mcpServerRepository.findByIds(mcpServerIds);
+    const foundIds = new Set(foundServers.map(s => s.id));
+    for (const id of mcpServerIds) {
+      if (!foundIds.has(id)) {
+        missingMcpIds.push(id);
+      }
+    }
+  }
+
+  if (skillIds.length > 0) {
+    const foundSkills = skillRepository.findByIds(skillIds);
+    const foundIds = new Set(foundSkills.map(s => s.id));
+    for (const id of skillIds) {
+      if (!foundIds.has(id)) {
+        missingSkillIds.push(id);
+      }
+    }
+  }
+
+  return {
+    valid: missingMcpIds.length === 0 && missingSkillIds.length === 0,
+    missingMcpIds,
+    missingSkillIds
+  };
+}
+
+/**
+ * 处理悬挂引用（警告并跳过无效引用）
+ *
+ * @param result 校验结果
+ * @param onWarning 警告回调
+ */
+export function handleDanglingReferences(
+  result: ReferenceValidationResult,
+  onWarning?: (message: string) => void
+): void {
+  if (result.valid) {
+    return;
+  }
+
+  if (result.missingMcpIds.length > 0) {
+    const message = `MCP 配置不存在: ${result.missingMcpIds.join(', ')}`;
+    log.warn('MCP 配置引用不存在', { ids: result.missingMcpIds });
+    onWarning?.(message);
+  }
+
+  if (result.missingSkillIds.length > 0) {
+    const message = `Skill 配置不存在: ${result.missingSkillIds.join(', ')}`;
+    log.warn('Skill 配置引用不存在', { ids: result.missingSkillIds });
+    onWarning?.(message);
+  }
+}
+
+/**
+ * 生成步骤的 allowedTools 列表
+ *
+ * @param baseAllowedTools 基础工具列表
+ * @param mcpServers 合并后的 MCP 配置
+ * @param hasSkills 是否有 Skills
+ * @returns 完整的 allowedTools 列表
+ */
+export function buildAllowedTools(
+  baseAllowedTools: string[] | undefined,
+  mcpServers: Record<string, McpServerConfig>,
+  hasSkills: boolean
+): string[] {
+  const result: string[] = [];
+
+  if (baseAllowedTools) {
+    result.push(...baseAllowedTools);
+  }
+
+  for (const serverName of Object.keys(mcpServers)) {
+    const mcpPattern = `mcp__${serverName}__*`;
+    if (!result.includes(mcpPattern)) {
+      result.push(mcpPattern);
+    }
+  }
+
+  if (hasSkills && !result.includes('Skill')) {
+    result.push('Skill');
+  }
+
+  return result;
+}
+
+/**
+ * 为步骤构建完整的合并配置
+ *
+ * @param baseConfig 基础合并配置
+ * @param workflow 工作流对象
+ * @param step 步骤对象
+ * @param executionId 执行 ID
+ * @param stepIndex 步骤索引
+ * @param onWarning 警告回调
+ * @returns 步骤级合并配置
+ */
+export function buildStepMergedConfig(
+  baseConfig: MergedConfig,
+  workflow: Workflow,
+  step: WorkflowStep,
+  executionId: string,
+  stepIndex: number,
+  onWarning?: (message: string) => void
+): StepMergedConfig {
+  const workingDirectory = baseConfig.workingDirectory || process.cwd();
+  const stepMcpIds = step.mcpServerIds || [];
+  const stepSkillIds = step.skillIds || [];
+
+  if (stepMcpIds.length > 0 || stepSkillIds.length > 0) {
+    const validationResult = validateConfigReferences(stepMcpIds, stepSkillIds);
+    handleDanglingReferences(validationResult, onWarning);
+  }
+
+  const mcpServers = mergeStepMcpServers(
+    baseConfig.mcpServers,
+    workflow.mcpServers,
+    stepMcpIds
+  );
+
+  const skillsDir = writeStepSkills(
+    workingDirectory,
+    executionId,
+    stepIndex,
+    baseConfig.skills,
+    workflow.skills,
+    stepSkillIds
+  );
+
+  const hasSkills = skillsDir !== undefined;
+
+  const allowedTools = buildAllowedTools(
+    baseConfig.allowedTools,
+    mcpServers,
+    hasSkills
+  );
+
+  return {
+    ...baseConfig,
+    ...(step.model && { model: step.model }),
+    ...(step.maxTurns && { maxTurns: step.maxTurns }),
+    mcpServers,
+    allowedTools,
+    skillsDir,
+    hasSkills
   };
 }

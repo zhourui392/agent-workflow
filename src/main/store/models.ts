@@ -21,6 +21,8 @@ export interface WorkflowStep {
   validation?: {
     prompt: string;
   };
+  mcpServerIds?: string[];
+  skillIds?: string[];
 }
 
 /**
@@ -315,4 +317,99 @@ export interface ExecutionListParams {
   status?: ExecutionStatus;
   limit?: number;
   offset?: number;
+}
+
+// ========== MCP 和 Skills 配置管理 ==========
+
+/**
+ * MCP 服务配置项
+ *
+ * @author zhourui(V33215020)
+ * @since 2026/03/12
+ */
+export interface McpServer {
+  id: string;
+  name: string;
+  description?: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Skill 配置项
+ *
+ * @author zhourui(V33215020)
+ * @since 2026/03/12
+ */
+export interface Skill {
+  id: string;
+  name: string;
+  description?: string;
+  allowedTools?: string[];
+  content: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 创建 MCP 服务输入
+ *
+ * @author zhourui(V33215020)
+ * @since 2026/03/12
+ */
+export interface CreateMcpServerInput {
+  name: string;
+  description?: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  enabled?: boolean;
+}
+
+/**
+ * 更新 MCP 服务输入
+ *
+ * @author zhourui(V33215020)
+ * @since 2026/03/12
+ */
+export interface UpdateMcpServerInput {
+  name?: string;
+  description?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  enabled?: boolean;
+}
+
+/**
+ * 创建 Skill 输入
+ *
+ * @author zhourui(V33215020)
+ * @since 2026/03/12
+ */
+export interface CreateSkillInput {
+  name: string;
+  description?: string;
+  allowedTools?: string[];
+  content: string;
+  enabled?: boolean;
+}
+
+/**
+ * 更新 Skill 输入
+ *
+ * @author zhourui(V33215020)
+ * @since 2026/03/12
+ */
+export interface UpdateSkillInput {
+  name?: string;
+  description?: string;
+  allowedTools?: string[];
+  content?: string;
+  enabled?: boolean;
 }

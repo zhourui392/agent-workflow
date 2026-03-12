@@ -7,3 +7,5 @@
 
 export * as workflowRepository from './workflowRepository';
 export * as executionRepository from './executionRepository';
+export * as mcpServerRepository from './mcpServerRepository';
+export * as skillRepository from './skillRepository';

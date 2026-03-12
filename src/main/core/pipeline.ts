@@ -19,7 +19,13 @@ import type {
 } from '../store/models';
 import { renderTemplate, type TemplateContext } from './template';
 import { executeStep, executeStepWithTimeout, validateStepOutput } from './executor';
-import { loadGlobalConfig, mergeConfig, getStepConfig } from './configMerger';
+import {
+  loadGlobalConfig,
+  mergeConfig,
+  buildStepMergedConfig,
+  cleanupStepSkills,
+  type StepMergedConfig
+} from './configMerger';
 import { handleOutput } from './outputHandler';
 
 const DEFAULT_RETRY_MAX_ATTEMPTS = 3;
@@ -53,12 +59,12 @@ function delay(ms: number): Promise<void> {
  * @param config 合并后的配置
  * @param maxAttempts 最大重试次数
  * @param delayMs 重试延迟
- * @param onProgress 进度回调
+ * @param onEvent 流式事件回调
  * @returns 步骤执行结果
  */
 async function executeStepWithRetry(
   prompt: string,
-  config: MergedConfig,
+  config: MergedConfig | StepMergedConfig,
   maxAttempts: number,
   delayMs: number,
   onEvent?: (event: StepEvent) => void
@@ -153,7 +159,14 @@ async function runPipelineAsync(
         status: 'running'
       });
 
-      const stepConfig = getStepConfig(mergedConfig, step.model, step.maxTurns);
+      const stepConfig = buildStepMergedConfig(
+        mergedConfig,
+        workflow,
+        step,
+        executionId,
+        i,
+        (warning) => log.warn(warning)
+      );
 
       let result: StepResult;
       const onFailure = step.onFailure || workflow.onFailure;
@@ -169,18 +182,24 @@ async function runPipelineAsync(
         });
       };
 
-      if (onFailure === 'retry') {
-        const maxAttempts = step.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS;
-        const delayMs = step.retryConfig?.delayMs || DEFAULT_RETRY_DELAY_MS;
-        result = await executeStepWithRetry(
-          renderedPrompt,
-          stepConfig,
-          maxAttempts,
-          delayMs,
-          onEvent
-        );
-      } else {
-        result = await executeStep(renderedPrompt, stepConfig, onEvent);
+      try {
+        if (onFailure === 'retry') {
+          const maxAttempts = step.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS;
+          const delayMs = step.retryConfig?.delayMs || DEFAULT_RETRY_DELAY_MS;
+          result = await executeStepWithRetry(
+            renderedPrompt,
+            stepConfig,
+            maxAttempts,
+            delayMs,
+            onEvent
+          );
+        } else {
+          result = await executeStep(renderedPrompt, stepConfig, onEvent);
+        }
+      } finally {
+        if (stepConfig.skillsDir) {
+          cleanupStepSkills(stepConfig.skillsDir);
+        }
       }
 
       executionRepository.addTokens(executionId, result.tokensUsed);

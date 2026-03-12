@@ -36,6 +36,8 @@ export interface StepConfig {
     delayMs?: number;
   };
   validation_prompt?: string;
+  mcp_server_ids?: string[];
+  skill_ids?: string[];
 }
 
 export interface WorkflowData {
@@ -71,7 +73,9 @@ function workflowToData(workflow: Workflow): WorkflowData {
       max_turns: step.maxTurns,
       onFailure: step.onFailure,
       retryConfig: step.retryConfig,
-      validation_prompt: step.validation?.prompt || ''
+      validation_prompt: step.validation?.prompt || '',
+      mcp_server_ids: step.mcpServerIds,
+      skill_ids: step.skillIds
     })),
     rules: workflow.rules || null,
     mcp_servers: workflow.mcpServers,
@@ -95,7 +99,9 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     retryConfig: step.retryConfig,
     validation: step.validation_prompt
       ? { prompt: step.validation_prompt }
-      : undefined
+      : undefined,
+    mcpServerIds: step.mcp_server_ids,
+    skillIds: step.skill_ids
   }));
 
   return {

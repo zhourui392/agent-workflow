@@ -14,7 +14,13 @@ import type {
   UpdateWorkflowRequest,
   ExecutionListParams,
   ExecutionProgressEvent,
-  McpServerConfig
+  McpServerConfig,
+  McpServer,
+  Skill,
+  CreateMcpServerInput,
+  UpdateMcpServerInput,
+  CreateSkillInput,
+  UpdateSkillInput
 } from '../main/store/models';
 
 /**
@@ -42,6 +48,22 @@ export interface ElectronAPI {
     mcpServers?: Record<string, McpServerConfig>;
   }) => Promise<{ success: boolean }>;
 
+  // MCP Servers
+  getMcpServers: () => Promise<McpServer[]>;
+  getMcpServer: (id: string) => Promise<McpServer | null>;
+  createMcpServer: (data: CreateMcpServerInput) => Promise<McpServer>;
+  updateMcpServer: (id: string, data: UpdateMcpServerInput) => Promise<McpServer | null>;
+  deleteMcpServer: (id: string) => Promise<boolean>;
+  setMcpServerEnabled: (id: string, enabled: boolean) => Promise<McpServer | null>;
+
+  // Skills
+  getSkills: () => Promise<Skill[]>;
+  getSkill: (id: string) => Promise<Skill | null>;
+  createSkill: (data: CreateSkillInput) => Promise<Skill>;
+  updateSkill: (id: string, data: UpdateSkillInput) => Promise<Skill | null>;
+  deleteSkill: (id: string) => Promise<boolean>;
+  setSkillEnabled: (id: string, enabled: boolean) => Promise<Skill | null>;
+
   // Real-time events
   onExecutionProgress: (callback: (data: ExecutionProgressEvent) => void) => () => void;
 }
@@ -63,6 +85,22 @@ const api: ElectronAPI = {
   // Config
   getConfig: () => ipcRenderer.invoke('config:get'),
   updateConfig: (data) => ipcRenderer.invoke('config:update', data),
+
+  // MCP Servers
+  getMcpServers: () => ipcRenderer.invoke('mcp-servers:list'),
+  getMcpServer: (id) => ipcRenderer.invoke('mcp-servers:get', id),
+  createMcpServer: (data) => ipcRenderer.invoke('mcp-servers:create', data),
+  updateMcpServer: (id, data) => ipcRenderer.invoke('mcp-servers:update', id, data),
+  deleteMcpServer: (id) => ipcRenderer.invoke('mcp-servers:delete', id),
+  setMcpServerEnabled: (id, enabled) => ipcRenderer.invoke('mcp-servers:set-enabled', id, enabled),
+
+  // Skills
+  getSkills: () => ipcRenderer.invoke('skills:list'),
+  getSkill: (id) => ipcRenderer.invoke('skills:get', id),
+  createSkill: (data) => ipcRenderer.invoke('skills:create', data),
+  updateSkill: (id, data) => ipcRenderer.invoke('skills:update', id, data),
+  deleteSkill: (id) => ipcRenderer.invoke('skills:delete', id),
+  setSkillEnabled: (id, enabled) => ipcRenderer.invoke('skills:set-enabled', id, enabled),
 
   // Real-time events
   onExecutionProgress: (callback) => {

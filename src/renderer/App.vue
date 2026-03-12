@@ -28,6 +28,14 @@
           <el-icon><Setting /></el-icon>
           <span>全局配置</span>
         </el-menu-item>
+        <el-menu-item index="/mcp-servers">
+          <el-icon><Connection /></el-icon>
+          <span>MCP 服务</span>
+        </el-menu-item>
+        <el-menu-item index="/skills">
+          <el-icon><MagicStick /></el-icon>
+          <span>Skills</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -47,7 +55,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { List, Clock, Monitor, Setting } from '@element-plus/icons-vue'
+import { List, Clock, Monitor, Setting, Connection, MagicStick } from '@element-plus/icons-vue'
 
 const route = useRoute()
 

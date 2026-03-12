@@ -8,5 +8,23 @@
 export { executeStep, executeStepWithTimeout } from './executor';
 export { executePipeline } from './pipeline';
 export { renderTemplate, extractVariables, validateTemplate } from './template';
-export { loadGlobalConfig, mergeConfig, getStepConfig } from './configMerger';
+export {
+  loadGlobalConfig,
+  mergeConfig,
+  getStepConfig,
+  buildStepMergedConfig,
+  mergeStepMcpServers,
+  writeStepSkills,
+  cleanupStepSkills,
+  validateConfigReferences,
+  handleDanglingReferences,
+  buildAllowedTools,
+  type StepMergedConfig
+} from './configMerger';
 export { handleOutput } from './outputHandler';
+export {
+  SkillWriteError,
+  ConfigReferenceError,
+  type McpServerStartResult,
+  type ReferenceValidationResult
+} from './errors';

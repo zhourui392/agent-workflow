@@ -12,6 +12,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
 import type { MergedConfig, StepResult, ValidationResult, McpServerConfig, StepEvent } from '../store/models';
+import type { StepMergedConfig } from './configMerger';
 
 type ClaudeCodeModule = typeof import('@anthropic-ai/claude-code');
 let claudeCodeModule: ClaudeCodeModule | null = null;
@@ -197,13 +198,13 @@ function extractToolResults(
  * 执行单个步骤
  *
  * @param prompt 渲染后的提示词
- * @param config 合并后的配置
+ * @param config 合并后的配置（支持 StepMergedConfig）
  * @param onEvent 流式事件回调
  * @returns 步骤执行结果
  */
 export async function executeStep(
   prompt: string,
-  config: MergedConfig,
+  config: MergedConfig | StepMergedConfig,
   onEvent?: (event: StepEvent) => void
 ): Promise<StepResult> {
   let outputText = '';
@@ -220,6 +221,9 @@ export async function executeStep(
     const claudePath = findClaudeExecutable();
     const validMcpServers = getValidMcpServers(config.mcpServers);
 
+    const stepConfig = config as StepMergedConfig;
+    const hasSkillsDir = 'skillsDir' in stepConfig && stepConfig.skillsDir;
+
     const queryOptions: Parameters<typeof query>[0]['options'] = {
       customSystemPrompt: config.systemPrompt,
       allowedTools: config.allowedTools,
@@ -227,7 +231,11 @@ export async function executeStep(
       maxTurns: config.maxTurns || 30,
       permissionMode: 'acceptEdits',
       cwd: config.workingDirectory || process.cwd(),
-      env: { CLAUDECODE: '' }
+      env: { CLAUDECODE: '' },
+      ...(hasSkillsDir && {
+        settingSources: ['local'],
+        skillsDir: stepConfig.skillsDir
+      })
     };
 
     if (config.model) {
