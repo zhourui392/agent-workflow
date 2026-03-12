@@ -231,7 +231,6 @@ export async function executeStep(
       maxTurns: config.maxTurns || 30,
       permissionMode: 'acceptEdits',
       cwd: config.workingDirectory || process.cwd(),
-      env: { CLAUDECODE: '' },
       ...(skillsDir && {
         extraArgs: { 'plugin-dir': skillsDir }
       })

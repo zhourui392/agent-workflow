@@ -7,24 +7,6 @@
 
     <el-form label-width="120px" v-loading="loading">
       <el-card class="section-card">
-        <template #header>默认设置</template>
-        <el-form-item label="默认模型">
-          <el-select v-model="form.defaultModel" clearable placeholder="使用环境变量或 SDK 默认值" style="width: 100%;">
-            <el-option-group label="Claude 4">
-              <el-option label="claude-sonnet-4-20250514" value="claude-sonnet-4-20250514" />
-              <el-option label="claude-opus-4-20250514" value="claude-opus-4-20250514" />
-              <el-option label="claude-haiku-4-20250506" value="claude-haiku-4-20250506" />
-            </el-option-group>
-            <el-option-group label="Claude 3.5">
-              <el-option label="claude-3-5-sonnet-20241022" value="claude-3-5-sonnet-20241022" />
-              <el-option label="claude-3-5-haiku-20241022" value="claude-3-5-haiku-20241022" />
-            </el-option-group>
-          </el-select>
-          <div class="form-tip">优先级: 步骤级模型 > 全局默认模型 > 环境变量 ANTHROPIC_MODEL</div>
-        </el-form-item>
-      </el-card>
-
-      <el-card class="section-card">
         <template #header>System Prompt</template>
         <el-input
           v-model="form.systemPrompt"
@@ -87,7 +69,6 @@ const skills = ref<Skill[]>([])
 
 const form = reactive({
   systemPrompt: '',
-  defaultModel: '',
 })
 
 async function fetchConfig() {
@@ -100,7 +81,6 @@ async function fetchConfig() {
     ])
 
     form.systemPrompt = configRes.data.systemPrompt || ''
-    form.defaultModel = configRes.data.defaultModel || ''
     mcpServers.value = mcpRes.data || []
     skills.value = skillsRes.data || []
   } catch (e) {
@@ -115,7 +95,6 @@ async function handleSave() {
   try {
     await updateConfig({
       systemPrompt: form.systemPrompt || undefined,
-      defaultModel: form.defaultModel || undefined,
     })
     ElMessage.success('保存成功')
   } catch (e: any) {

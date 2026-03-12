@@ -1,1 +1,2 @@
-servers: []
+# MCP Server 配置
+# 格式: server_name: { command: "...", args: [...], env: {...} }

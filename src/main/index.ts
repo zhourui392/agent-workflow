@@ -5,6 +5,9 @@
  * @since 2026/03/11
  */
 
+// 清除嵌套会话检测，防止从 Claude Code 终端启动时子进程被拒绝
+delete process.env.CLAUDECODE;
+
 import { app, BrowserWindow, shell } from 'electron';
 import * as path from 'path';
 import log from 'electron-log';
