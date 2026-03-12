@@ -64,6 +64,10 @@ frontend/src/
 
 ## 代码变更规范
 
+### Git 提交前检查
+
+**重要**: 每次执行 `git commit` 前，必须先检查并更新 README.md 文档（如有必要）。
+
 ### README.md 同步检查
 
 每次完成代码变更后，必须判断 README.md 是否需要同步更新。需要更新 README 的情况：
