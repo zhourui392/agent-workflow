@@ -39,6 +39,8 @@ agent-workflow/
 - **多步骤流水线** — 顺序执行，上下文传递
 - **定时调度** — Cron表达式配置
 - **实时进度** — IPC事件推送执行日志，支持细粒度流式事件（工具调用、工具结果、文本回复等）
+- **MCP/Skills 管理** — 支持自定义 MCP 服务和 Skills，工作流步骤级按需引用
+- **Claude CLI 集成** — 自动读取 Claude Code CLI 全局配置（~/.claude.json MCP 和 plugins Skills）
 - **两层配置** — 全局配置 + 工作流配置自动合并
 - **模板变量** — `{{today}}`, `{{inputs.xxx}}`, `{{steps.name.output}}`
 - **输出验证** — 每个步骤可配置验证提示词，执行完成后由 LLM 自动判定输出是否符合预期（PASS/FAIL）
@@ -74,6 +76,18 @@ npm run electron:build
 | `executions:get` | 执行详情 |
 | `config:get` | 获取全局配置 |
 | `config:update` | 更新全局配置 |
+| `mcp-servers:list` | MCP 服务列表（仅数据库） |
+| `mcp-servers:list-all` | MCP 服务列表（数据库 + Claude CLI） |
+| `mcp-servers:create` | 创建 MCP 服务 |
+| `mcp-servers:update` | 更新 MCP 服务 |
+| `mcp-servers:delete` | 删除 MCP 服务 |
+| `mcp-servers:set-enabled` | 设置 MCP 服务启用状态 |
+| `skills:list` | Skills 列表（仅数据库） |
+| `skills:list-all` | Skills 列表（数据库 + Claude CLI） |
+| `skills:create` | 创建 Skill |
+| `skills:update` | 更新 Skill |
+| `skills:delete` | 删除 Skill |
+| `skills:set-enabled` | 设置 Skill 启用状态 |
 | `execution:progress` | 实时进度事件 |
 
 ## 步骤输出验证
@@ -104,9 +118,20 @@ npm run electron:build
 
 事件在执行过程中通过 IPC 实时推送到前端，同时持久化到数据库供历史查看。
 
+## MCP/Skills 配置来源
+
+系统支持从多个来源加载 MCP 服务和 Skills：
+
+| 来源 | 说明 |
+|------|------|
+| **数据库** | 通过 UI 创建的自定义配置 |
+| **Claude CLI** | 自动读取 `~/.claude.json` 中的 MCP 和 `~/.claude/plugins/` 中的 Skills |
+
+在工作流步骤配置中，可以从合并后的列表中按需选择所需的 MCP 服务和 Skills。
+
 ## 配置合并策略
 
 - **rules (systemPrompt)**: 拼接
 - **allowedTools**: 取交集
-- **mcpServers**: 取并集
-- **skills**: 同名覆盖 (工作流优先)
+- **mcpServers**: 按需加载（步骤引用的 + 全局配置的取并集）
+- **skills**: 按需加载（步骤引用的，同名覆盖）
