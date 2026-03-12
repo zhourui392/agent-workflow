@@ -8,7 +8,7 @@
       </div>
     </div>
 
-    <el-form :model="form" label-width="120px" v-loading="loading">
+    <el-form :model="form" label-width="120px" v-loading="loading || configLoading">
       <!-- Basic Info -->
       <el-card class="section-card">
         <template #header>基本信息</template>
@@ -56,6 +56,48 @@
           <el-form-item v-if="step.validation_enabled" label="验证提示词">
             <el-input v-model="step.validation_prompt" type="textarea" :rows="3"
               placeholder="描述期望的输出标准，如：输出必须包含JSON格式的分析结果，且包含 summary 和 details 字段" />
+          </el-form-item>
+          <el-form-item label="MCP 服务">
+            <el-select
+              v-model="step.mcp_server_ids"
+              multiple
+              filterable
+              placeholder="选择此步骤使用的 MCP 服务"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="mcp in mcpServerList"
+                :key="mcp.id"
+                :label="mcp.name"
+                :value="mcp.id"
+              >
+                <span>{{ mcp.name }}</span>
+                <span v-if="mcp.enabled" class="global-tag">全局</span>
+                <span v-if="mcp.description" class="option-desc">{{ mcp.description }}</span>
+              </el-option>
+            </el-select>
+            <div class="form-tip">选择此步骤需要调用的 MCP 服务（如数据库、API 等）</div>
+          </el-form-item>
+          <el-form-item label="Skills">
+            <el-select
+              v-model="step.skill_ids"
+              multiple
+              filterable
+              placeholder="选择此步骤使用的 Skills"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="skill in skillList"
+                :key="skill.id"
+                :label="skill.name"
+                :value="skill.id"
+              >
+                <span>{{ skill.name }}</span>
+                <span v-if="skill.enabled" class="global-tag">全局</span>
+                <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
+              </el-option>
+            </el-select>
+            <div class="form-tip">选择此步骤需要使用的 Skills（如代码审查、测试生成等）</div>
           </el-form-item>
           <el-divider v-if="index < form.steps.length - 1" />
         </div>
@@ -116,6 +158,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
+import { listMcpServers, type McpServerData } from '@/api/mcpServers'
+import { listSkills, type SkillData } from '@/api/skills'
 
 const route = useRoute()
 const router = useRouter()
@@ -123,6 +167,9 @@ const store = useWorkflowStore()
 const isEdit = computed(() => route.name === 'WorkflowEdit')
 const loading = ref(false)
 const saving = ref(false)
+const configLoading = ref(false)
+const mcpServerList = ref<McpServerData[]>([])
+const skillList = ref<SkillData[]>([])
 
 const form = reactive({
   id: undefined as string | undefined,
@@ -131,11 +178,23 @@ const form = reactive({
   working_directory: '',
   enabled: true,
   schedule: '',
-  steps: [{ name: '', prompt: '', max_turns: 30, validation_enabled: false, validation_prompt: '' }] as any[],
+  steps: [createEmptyStep()] as any[],
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
 })
+
+function createEmptyStep() {
+  return {
+    name: '',
+    prompt: '',
+    max_turns: 30,
+    validation_enabled: false,
+    validation_prompt: '',
+    mcp_server_ids: [] as string[],
+    skill_ids: [] as string[]
+  }
+}
 
 const rulesSystemPrompt = computed({
   get: () => form.rules?.system_prompt || '',
@@ -150,7 +209,7 @@ const limitsMaxDuration = computed({
   set: (val: number) => { if (!form.limits) form.limits = {}; form.limits.max_duration = val || undefined }
 })
 
-function addStep() { form.steps.push({ name: '', prompt: '', max_turns: 30, validation_enabled: false, validation_prompt: '' }) }
+function addStep() { form.steps.push(createEmptyStep()) }
 function removeStep(index: number) { form.steps.splice(index, 1) }
 
 async function handleSave() {
@@ -173,7 +232,25 @@ async function handleSave() {
   } finally { saving.value = false }
 }
 
+async function loadConfigOptions() {
+  configLoading.value = true
+  try {
+    const [mcpRes, skillRes] = await Promise.all([
+      listMcpServers(),
+      listSkills()
+    ])
+    mcpServerList.value = mcpRes.data
+    skillList.value = skillRes.data
+  } catch (e: any) {
+    console.error('Failed to load config options:', e)
+  } finally {
+    configLoading.value = false
+  }
+}
+
 onMounted(async () => {
+  loadConfigOptions()
+
   if (isEdit.value && route.params.id) {
     loading.value = true
     try {
@@ -186,9 +263,11 @@ onMounted(async () => {
           ? data.steps.map((s: any) => ({
               ...s,
               validation_enabled: !!s.validation_prompt,
-              validation_prompt: s.validation_prompt || ''
+              validation_prompt: s.validation_prompt || '',
+              mcp_server_ids: s.mcp_server_ids || [],
+              skill_ids: s.skill_ids || []
             }))
-          : [{ name: '', prompt: '', max_turns: 30, validation_enabled: false, validation_prompt: '' }]
+          : [createEmptyStep()]
         form.rules = data.rules || null; form.limits = data.limits || null
         form.on_failure = data.on_failure || 'stop'
       }
@@ -207,4 +286,17 @@ onMounted(async () => {
 .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .step-number { font-weight: bold; color: #409eff; }
 .form-tip { font-size: 12px; color: #909399; margin-top: 4px; }
+.global-tag {
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: #67c23a;
+  background: #f0f9eb;
+  border-radius: 4px;
+}
+.option-desc {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #909399;
+}
 </style>
