@@ -564,6 +564,18 @@ export function mergeStepMcpServers(
 }
 
 /**
+ * 将 skill 名称转换为安全的目录名
+ *
+ * Windows 系统不允许文件名包含 : \ / * ? " < > | 等字符
+ *
+ * @param name Skill 名称
+ * @returns 安全的目录名
+ */
+function toSafeDirectoryName(name: string): string {
+  return name.replace(/[:\\/*?"<>|]/g, '_');
+}
+
+/**
  * 生成 SKILL.md 文件内容
  *
  * @param skill Skill 配置
@@ -593,7 +605,8 @@ function buildSkillFileContent(skill: SkillContent): string {
  * @param skill Skill 配置
  */
 function writeSkillFile(skillsDir: string, skill: SkillContent): void {
-  const skillDir = path.join(skillsDir, skill.name);
+  const safeName = toSafeDirectoryName(skill.name);
+  const skillDir = path.join(skillsDir, safeName);
 
   try {
     fs.mkdirSync(skillDir, { recursive: true });
@@ -602,6 +615,7 @@ function writeSkillFile(skillsDir: string, skill: SkillContent): void {
   } catch (error) {
     log.error('Skill 文件写入失败', {
       skillName: skill.name,
+      safeName,
       skillsDir,
       error: error instanceof Error ? error.message : String(error)
     });
