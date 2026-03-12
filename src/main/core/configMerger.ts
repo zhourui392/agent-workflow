@@ -208,34 +208,126 @@ function parseSkillContent(name: string, content: string): SkillContent {
 /**
  * 读取用户的 Skills 配置
  *
- * 扫描路径: ~/.claude/skills/*.md
+ * 扫描路径:
+ * 1. ~/.claude/skills/*.md（直接 md 文件）
+ * 2. ~/.claude/skills/<name>/SKILL.md（标准目录格式）
+ * 3. ~/.claude/plugins/（递归扫描所有 SKILL.md）
  *
  * @returns Skills 配置（name → content），无配置时返回空对象
  */
 export function loadClaudeCliSkills(): Record<string, string> {
-  const skillsPath = path.join(os.homedir(), '.claude', 'skills');
+  const claudeDir = path.join(os.homedir(), '.claude');
+  const skillsPath = path.join(claudeDir, 'skills');
+  const pluginsPath = path.join(claudeDir, 'plugins');
+  const skills = new Map<string, SkillContent>();
 
-  if (!fs.existsSync(skillsPath)) {
-    return {};
+  if (fs.existsSync(skillsPath)) {
+    try {
+      const entries = fs.readdirSync(skillsPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(skillsPath, entry.name);
+
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          const skillName = path.basename(entry.name, '.md');
+          const content = readFileOrNull(fullPath);
+          if (content) {
+            skills.set(skillName, parseSkillContent(skillName, content));
+          }
+        } else if (entry.isDirectory()) {
+          const skillFile = path.join(fullPath, 'SKILL.md');
+          if (fs.existsSync(skillFile)) {
+            const content = readFileOrNull(skillFile);
+            if (content) {
+              skills.set(entry.name, parseSkillContent(entry.name, content));
+            }
+          }
+        }
+      }
+    } catch (error) {
+      log.warn('Failed to load skills from ~/.claude/skills', { path: skillsPath, error });
+    }
   }
+
+  if (fs.existsSync(pluginsPath)) {
+    scanSkillsDirectory(pluginsPath, skills);
+  }
+
+  log.debug('Loaded Claude CLI skills', { count: skills.size });
 
   const result: Record<string, string> = {};
+  for (const [name, skill] of skills) {
+    result[name] = skill.content;
+  }
+  return result;
+}
 
-  try {
-    const files = fs.readdirSync(skillsPath).filter(f => f.endsWith('.md'));
+/**
+ * CLI Skill 详细信息结构
+ */
+export interface CliSkillDetail {
+  name: string;
+  description?: string;
+  allowedTools?: string[];
+  content: string;
+}
 
-    for (const file of files) {
-      const skillName = path.basename(file, '.md');
-      const content = readFileOrNull(path.join(skillsPath, file));
-      if (content) {
-        result[skillName] = content.trim();
+/**
+ * 读取用户的 Skills 配置（带详细信息）
+ *
+ * 与 loadClaudeCliSkills 相同的扫描路径，但返回完整的 Skill 信息
+ *
+ * @returns Skills 详细信息数组
+ */
+export function loadClaudeCliSkillsWithDetails(): CliSkillDetail[] {
+  const claudeDir = path.join(os.homedir(), '.claude');
+  const skillsPath = path.join(claudeDir, 'skills');
+  const pluginsPath = path.join(claudeDir, 'plugins');
+  const skills = new Map<string, SkillContent>();
+
+  if (fs.existsSync(skillsPath)) {
+    try {
+      const entries = fs.readdirSync(skillsPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(skillsPath, entry.name);
+
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          const skillName = path.basename(entry.name, '.md');
+          const content = readFileOrNull(fullPath);
+          if (content) {
+            skills.set(skillName, parseSkillContent(skillName, content));
+          }
+        } else if (entry.isDirectory()) {
+          const skillFile = path.join(fullPath, 'SKILL.md');
+          if (fs.existsSync(skillFile)) {
+            const content = readFileOrNull(skillFile);
+            if (content) {
+              skills.set(entry.name, parseSkillContent(entry.name, content));
+            }
+          }
+        }
       }
+    } catch (error) {
+      log.warn('Failed to load skills from ~/.claude/skills', { path: skillsPath, error });
     }
-  } catch (error) {
-    log.warn('Failed to load skills from ~/.claude/skills', { path: skillsPath, error });
   }
 
-  log.debug('Loaded skills from ~/.claude/skills', { count: Object.keys(result).length });
+  if (fs.existsSync(pluginsPath)) {
+    scanSkillsDirectory(pluginsPath, skills);
+  }
+
+  log.debug('Loaded Claude CLI skills with details', { count: skills.size });
+
+  const result: CliSkillDetail[] = [];
+  for (const [, skill] of skills) {
+    result.push({
+      name: skill.name,
+      description: skill.description,
+      allowedTools: skill.allowedTools,
+      content: skill.content
+    });
+  }
   return result;
 }
 
@@ -445,13 +537,13 @@ function buildMcpServerConfig(server: {
  * 合并步骤的 MCP 配置（按需加载模式）
  *
  * 合并优先级（从低到高）：
- * 1. 磁盘全局配置
- * 2. 工作流配置
- * 3. 步骤引用的数据库配置
+ * 按需加载策略：
+ * - 如果步骤明确引用了 MCP（stepMcpIds 非空），只加载步骤引用的 MCP
+ * - 如果步骤没有引用任何 MCP，则合并全局和工作流配置
  *
  * 数据库 enabled 字段仅用于 UI 快速选择，不影响实际加载。
  *
- * @param diskConfig 磁盘全局配置
+ * @param diskConfig 磁盘全局配置（~/.claude.json）
  * @param workflowConfig 工作流配置
  * @param stepMcpIds 步骤引用的 MCP ID 列表
  * @returns 合并后的 MCP 配置
@@ -463,19 +555,20 @@ export function mergeStepMcpServers(
 ): Record<string, McpServerConfig> {
   const result: Record<string, McpServerConfig> = {};
 
+  if (stepMcpIds.length > 0) {
+    const stepServers = mcpServerRepository.findByIds(stepMcpIds);
+    for (const server of stepServers) {
+      result[server.name] = buildMcpServerConfig(server);
+    }
+    return result;
+  }
+
   if (diskConfig) {
     Object.assign(result, diskConfig);
   }
 
   if (workflowConfig) {
     Object.assign(result, workflowConfig);
-  }
-
-  if (stepMcpIds.length > 0) {
-    const stepServers = mcpServerRepository.findByIds(stepMcpIds);
-    for (const server of stepServers) {
-      result[server.name] = buildMcpServerConfig(server);
-    }
   }
 
   return result;

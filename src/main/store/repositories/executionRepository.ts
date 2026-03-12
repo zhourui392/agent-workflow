@@ -128,10 +128,10 @@ export function findById(id: string): Execution | null {
 }
 
 /**
- * 根据ID查找执行记录（包含步骤执行详情）
+ * 根据ID查找执行记录（包含步骤执行详情和步骤名称）
  *
  * @param id 执行ID
- * @returns 执行记录（含步骤执行），不存在则返回null
+ * @returns 执行记录（含步骤执行和步骤名称），不存在则返回null
  */
 export function findByIdWithSteps(id: string): Execution | null {
   const execution = findById(id);
@@ -140,13 +140,27 @@ export function findByIdWithSteps(id: string): Execution | null {
   }
 
   const db = getDatabase();
+
+  const workflowRow = db.prepare('SELECT steps FROM workflows WHERE id = ?').get(execution.workflowId);
+  let stepNames: string[] = [];
+  if (workflowRow && typeof (workflowRow as Record<string, unknown>).steps === 'string') {
+    try {
+      const steps = JSON.parse((workflowRow as Record<string, unknown>).steps as string);
+      stepNames = steps.map((s: { name?: string }, idx: number) => s.name || `Step ${idx + 1}`);
+    } catch {
+      stepNames = [];
+    }
+  }
+
   const stepRows = db
     .prepare('SELECT * FROM step_executions WHERE execution_id = ? ORDER BY step_index')
     .all(id);
 
-  execution.stepExecutions = stepRows.map(row =>
-    rowToStepExecution(row as Record<string, unknown>)
-  );
+  execution.stepExecutions = stepRows.map((row) => {
+    const stepExecution = rowToStepExecution(row as Record<string, unknown>);
+    stepExecution.stepName = stepNames[stepExecution.stepIndex] || `Step ${stepExecution.stepIndex + 1}`;
+    return stepExecution;
+  });
 
   return execution;
 }

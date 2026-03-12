@@ -125,6 +125,8 @@ export interface StepExecution {
   id: string;
   executionId: string;
   stepIndex: number;
+  /** 步骤名称（从工作流配置中获取） */
+  stepName?: string;
   status: ExecutionStatus;
   promptRendered?: string;
   outputText?: string;

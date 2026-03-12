@@ -7,7 +7,7 @@
 
 import { ipcMain } from 'electron';
 import { skillRepository } from '../store/repositories';
-import { loadClaudeCliSkills } from '../core';
+import { loadClaudeCliSkillsWithDetails } from '../core';
 import type { CreateSkillInput, UpdateSkillInput, Skill } from '../store/models';
 
 /**
@@ -35,20 +35,21 @@ export function registerSkillHandlers(): void {
 
   ipcMain.handle('skills:list-all', () => {
     const dbSkills = skillRepository.findAll();
-    const cliSkills = loadClaudeCliSkills();
+    const cliSkills = loadClaudeCliSkillsWithDetails();
 
     const result: (Skill | CliSkill)[] = [...dbSkills];
 
     const dbNames = new Set(dbSkills.map(s => s.name));
     const now = new Date().toISOString();
 
-    for (const [name, content] of Object.entries(cliSkills)) {
-      if (!dbNames.has(name)) {
+    for (const skill of cliSkills) {
+      if (!dbNames.has(skill.name)) {
         result.push({
-          id: `cli:${name}`,
-          name,
-          description: 'Claude Code CLI 插件 Skill',
-          content,
+          id: `cli:${skill.name}`,
+          name: skill.name,
+          description: skill.description || 'Claude Code CLI Skill',
+          allowedTools: skill.allowedTools,
+          content: skill.content,
           enabled: true,
           source: 'cli',
           createdAt: now,

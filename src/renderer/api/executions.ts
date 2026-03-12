@@ -48,12 +48,12 @@ export interface ExecutionData {
   step_executions?: StepExecutionData[];
 }
 
-function stepExecutionToData(step: StepExecution, stepName: string): StepExecutionData {
+function stepExecutionToData(step: StepExecution): StepExecutionData {
   return {
     id: step.id,
     execution_id: step.executionId,
     step_index: step.stepIndex,
-    step_name: stepName,
+    step_name: step.stepName || `Step ${step.stepIndex + 1}`,
     status: step.status,
     started_at: step.startedAt,
     finished_at: step.finishedAt,
@@ -81,9 +81,7 @@ function executionToData(execution: Execution): ExecutionData {
     total_steps: execution.totalSteps ?? execution.stepExecutions?.length ?? 0,
     total_tokens: execution.totalTokens,
     error_message: execution.errorMessage,
-    step_executions: execution.stepExecutions?.map((step, idx) =>
-      stepExecutionToData(step, `Step ${idx + 1}`)
-    )
+    step_executions: execution.stepExecutions?.map(step => stepExecutionToData(step))
   };
 }
 

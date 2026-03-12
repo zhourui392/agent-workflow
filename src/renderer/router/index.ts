@@ -39,11 +39,6 @@ const router = createRouter({
       component: () => import('@/views/GlobalConfig.vue'),
     },
     {
-      path: '/mcp-servers',
-      name: 'McpServerList',
-      component: () => import('@/views/McpServerList.vue'),
-    },
-    {
       path: '/skills',
       name: 'SkillList',
       component: () => import('@/views/SkillList.vue'),

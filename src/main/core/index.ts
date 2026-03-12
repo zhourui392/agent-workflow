@@ -21,7 +21,9 @@ export {
   buildAllowedTools,
   loadClaudeCliMcpServers,
   loadClaudeCliSkills,
-  type StepMergedConfig
+  loadClaudeCliSkillsWithDetails,
+  type StepMergedConfig,
+  type CliSkillDetail
 } from './configMerger';
 export { handleOutput } from './outputHandler';
 export {
