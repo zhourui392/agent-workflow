@@ -1,11 +1,14 @@
 /**
  * 配置合并器
  *
- * 四层合并策略:
+ * 三层合并策略（按需加载模式）:
  * - 第一层：磁盘全局配置（global_config/）
- * - 第二层：数据库全局启用（mcp_servers.enabled=1 / skills.enabled=1）
- * - 第三层：工作流配置（workflow.mcpServers / workflow.skills）
- * - 第四层：步骤引用（step.mcpServerIds / step.skillIds）
+ * - 第二层：工作流配置（workflow.mcpServers / workflow.skills）
+ * - 第三层：步骤引用（step.mcpServerIds / step.skillIds）
+ *
+ * 数据库配置（mcp_servers / skills 表）作为「配置库」：
+ * - enabled 字段仅标记是否可在 UI 中快速选择
+ * - 实际加载需在步骤中显式引用（按需加载）
  *
  * 合并规则:
  * - rules (systemPrompt): 拼接
@@ -252,7 +255,14 @@ function buildMcpServerConfig(server: {
 }
 
 /**
- * 合并步骤的 MCP 配置（四层合并）
+ * 合并步骤的 MCP 配置（按需加载模式）
+ *
+ * 合并优先级（从低到高）：
+ * 1. 磁盘全局配置
+ * 2. 工作流配置
+ * 3. 步骤引用的数据库配置
+ *
+ * 数据库 enabled 字段仅用于 UI 快速选择，不影响实际加载。
  *
  * @param diskConfig 磁盘全局配置
  * @param workflowConfig 工作流配置
@@ -268,11 +278,6 @@ export function mergeStepMcpServers(
 
   if (diskConfig) {
     Object.assign(result, diskConfig);
-  }
-
-  const enabledServers = mcpServerRepository.findEnabled();
-  for (const server of enabledServers) {
-    result[server.name] = buildMcpServerConfig(server);
   }
 
   if (workflowConfig) {
@@ -340,7 +345,14 @@ function writeSkillFile(skillsDir: string, skill: SkillContent): void {
 }
 
 /**
- * 写入步骤的 Skills 到隔离目录（四层合并）
+ * 写入步骤的 Skills 到隔离目录（按需加载模式）
+ *
+ * 合并优先级（从低到高）：
+ * 1. 磁盘全局 Skills
+ * 2. 工作流 Skills
+ * 3. 步骤引用的数据库 Skills
+ *
+ * 数据库 enabled 字段仅用于 UI 快速选择，不影响实际加载。
  *
  * @param workingDirectory 工作目录
  * @param executionId 执行 ID
@@ -364,16 +376,6 @@ export function writeStepSkills(
     for (const [name, content] of Object.entries(diskSkills)) {
       mergedSkills.set(name, { name, content });
     }
-  }
-
-  const enabledSkills = skillRepository.findEnabled();
-  for (const skill of enabledSkills) {
-    mergedSkills.set(skill.name, {
-      name: skill.name,
-      description: skill.description,
-      allowedTools: skill.allowedTools,
-      content: skill.content
-    });
   }
 
   if (workflowSkills) {
