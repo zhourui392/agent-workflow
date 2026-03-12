@@ -9,7 +9,7 @@
       <el-card class="section-card">
         <template #header>默认设置</template>
         <el-form-item label="默认模型">
-          <el-select v-model="form.default_model" clearable placeholder="使用环境变量或 SDK 默认值" style="width: 100%;">
+          <el-select v-model="form.defaultModel" clearable placeholder="使用环境变量或 SDK 默认值" style="width: 100%;">
             <el-option-group label="Claude 4">
               <el-option label="claude-sonnet-4-20250514" value="claude-sonnet-4-20250514" />
               <el-option label="claude-opus-4-20250514" value="claude-opus-4-20250514" />
@@ -27,7 +27,7 @@
       <el-card class="section-card">
         <template #header>System Prompt</template>
         <el-input
-          v-model="form.system_prompt"
+          v-model="form.systemPrompt"
           type="textarea"
           :rows="10"
           placeholder="全局 System Prompt，所有工作流都会继承"
@@ -38,40 +38,38 @@
         <template #header>
           <div class="section-header">
             <span>MCP 服务</span>
-            <el-button size="small" :icon="Plus" @click="addMcpServer">添加</el-button>
+            <span class="config-source">来自 Claude CLI (~/.claude.json)</span>
           </div>
         </template>
-        <div v-if="form.mcp_servers.length === 0" class="empty-hint">
-          暂无 MCP 服务配置
+        <div v-if="mcpServers.length === 0" class="empty-hint">
+          暂无 MCP 服务配置，请使用 Claude CLI 配置 MCP 服务
         </div>
-        <div v-for="(server, index) in form.mcp_servers" :key="index" class="mcp-item">
-          <el-row :gutter="12" align="middle">
-            <el-col :span="6">
-              <el-input v-model="server.name" placeholder="服务名称" />
-            </el-col>
-            <el-col :span="7">
-              <el-input v-model="server.command" placeholder="命令 (如 npx)" />
-            </el-col>
-            <el-col :span="8">
-              <el-input v-model="server.argsStr" placeholder="参数 (逗号分隔)" />
-            </el-col>
-            <el-col :span="3">
-              <el-button :icon="Delete" type="danger" plain @click="removeMcpServer(index)" />
-            </el-col>
-          </el-row>
+        <div v-else class="mcp-list">
+          <div v-for="server in mcpServers" :key="server.id" class="mcp-item">
+            <span class="mcp-name">{{ server.name }}</span>
+            <span class="mcp-command">{{ server.command }}</span>
+            <el-tag v-if="server.source === 'cli'" size="small" type="info">CLI</el-tag>
+          </div>
         </div>
+        <div class="form-tip">MCP 服务在 Claude CLI 中配置，可在工作流步骤中选择使用</div>
       </el-card>
 
       <el-card class="section-card">
-        <template #header>Skills</template>
-        <div v-if="form.skills.length === 0" class="empty-hint">
-          暂无 Skills 配置（在 global_config/skills/ 目录添加 .md 文件）
+        <template #header>
+          <div class="section-header">
+            <span>Skills</span>
+            <span class="config-source">来自 Claude CLI 插件</span>
+          </div>
+        </template>
+        <div v-if="skills.length === 0" class="empty-hint">
+          暂无 Skills 配置，请使用 Claude CLI 安装插件
         </div>
-        <el-collapse v-else>
-          <el-collapse-item v-for="skill in form.skills" :key="skill.name" :title="skill.name">
-            <pre class="skill-content">{{ skill.content }}</pre>
-          </el-collapse-item>
-        </el-collapse>
+        <div v-else class="skills-list">
+          <el-tag v-for="skill in skills" :key="skill.id" class="skill-tag">
+            {{ skill.name }}
+          </el-tag>
+        </div>
+        <div class="form-tip">Skills 从 Claude CLI 插件自动加载，可在工作流步骤中选择使用</div>
       </el-card>
     </el-form>
   </div>
@@ -80,37 +78,31 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
-import axios from 'axios'
+import { getConfig, updateConfig, getAllMcpServers, getAllSkills, type McpServer, type Skill } from '@/api/index'
 
 const loading = ref(false)
 const saving = ref(false)
-
-interface McpServer {
-  name: string
-  command: string
-  args?: string[]
-  argsStr?: string
-}
+const mcpServers = ref<McpServer[]>([])
+const skills = ref<Skill[]>([])
 
 const form = reactive({
-  system_prompt: '',
-  mcp_servers: [] as McpServer[],
-  skills: [] as { name: string; content: string }[],
-  default_model: '' as string,
+  systemPrompt: '',
+  defaultModel: '',
 })
 
 async function fetchConfig() {
   loading.value = true
   try {
-    const res = await axios.get('/api/config')
-    form.system_prompt = res.data.system_prompt || ''
-    form.mcp_servers = (res.data.mcp_servers || []).map((s: McpServer) => ({
-      ...s,
-      argsStr: (s.args || []).join(', '),
-    }))
-    form.skills = res.data.skills || []
-    form.default_model = res.data.default_model || ''
+    const [configRes, mcpRes, skillsRes] = await Promise.all([
+      getConfig(),
+      getAllMcpServers(),
+      getAllSkills()
+    ])
+
+    form.systemPrompt = configRes.data.systemPrompt || ''
+    form.defaultModel = configRes.data.defaultModel || ''
+    mcpServers.value = mcpRes.data || []
+    skills.value = skillsRes.data || []
   } catch (e) {
     console.error('Failed to fetch config', e)
   } finally {
@@ -118,30 +110,16 @@ async function fetchConfig() {
   }
 }
 
-function addMcpServer() {
-  form.mcp_servers.push({ name: '', command: '', argsStr: '' })
-}
-
-function removeMcpServer(index: number) {
-  form.mcp_servers.splice(index, 1)
-}
-
 async function handleSave() {
   saving.value = true
   try {
-    const payload = {
-      system_prompt: form.system_prompt,
-      mcp_servers: form.mcp_servers.map((s) => ({
-        name: s.name,
-        command: s.command,
-        args: s.argsStr ? s.argsStr.split(',').map((a) => a.trim()) : [],
-      })),
-      default_model: form.default_model || null,
-    }
-    await axios.put('/api/config', payload)
+    await updateConfig({
+      systemPrompt: form.systemPrompt || undefined,
+      defaultModel: form.defaultModel || undefined,
+    })
     ElMessage.success('保存成功')
   } catch (e: any) {
-    ElMessage.error('保存失败: ' + (e.response?.data?.detail || e.message))
+    ElMessage.error('保存失败: ' + (e.message || '未知错误'))
   } finally {
     saving.value = false
   }
@@ -155,9 +133,21 @@ onMounted(fetchConfig)
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h2 { margin: 0; }
 .section-card { margin-bottom: 20px; }
-.section-header { display: flex; justify-content: space-between; align-items: center; }
+.section-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.config-source { font-size: 12px; color: #909399; font-weight: normal; }
 .empty-hint { color: #909399; text-align: center; padding: 20px; }
-.mcp-item { margin-bottom: 12px; }
-.skill-content { background: #f5f7fa; padding: 12px; border-radius: 4px; white-space: pre-wrap; font-size: 13px; }
-.form-tip { font-size: 12px; color: #909399; margin-top: 4px; }
+.form-tip { font-size: 12px; color: #909399; margin-top: 8px; }
+.mcp-list { display: flex; flex-direction: column; gap: 8px; }
+.mcp-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+.mcp-name { font-weight: 500; }
+.mcp-command { color: #606266; font-family: monospace; font-size: 13px; }
+.skills-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.skill-tag { margin: 0; }
 </style>
