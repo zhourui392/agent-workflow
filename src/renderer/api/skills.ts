@@ -7,6 +7,7 @@
 
 import {
   getSkills as getSkillsApi,
+  getAllSkills as getAllSkillsApi,
   getSkill as getSkillApi,
   createSkill as createSkillApi,
   updateSkill as updateSkillApi,
@@ -25,6 +26,7 @@ export interface SkillData {
   allowed_tools: string[] | null;
   content: string;
   enabled: boolean;
+  source?: 'db' | 'cli';
   created_at: string;
   updated_at: string;
 }
@@ -103,12 +105,42 @@ function updateDataToInput(data: UpdateSkillData) {
 }
 
 /**
- * 获取 Skill 列表
+ * 获取 Skill 列表（仅数据库）
  */
 export async function listSkills() {
   const response = await getSkillsApi();
   return {
     data: response.data.map(skillToData)
+  };
+}
+
+/**
+ * 获取所有 Skill（数据库 + Claude CLI）
+ */
+export async function listAllSkills() {
+  const response = await getAllSkillsApi();
+  return {
+    data: response.data.map(skill => skillToDataWithSource(skill))
+  };
+}
+
+/**
+ * 将后端 Skill 转换为前端 SkillData（带来源标记）
+ *
+ * @param skill 后端数据
+ * @returns 前端数据
+ */
+function skillToDataWithSource(skill: Skill & { source?: string }): SkillData {
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description || null,
+    allowed_tools: skill.allowedTools || null,
+    content: skill.content,
+    enabled: skill.enabled,
+    source: skill.source === 'cli' ? 'cli' : 'db',
+    created_at: skill.createdAt,
+    updated_at: skill.updatedAt
   };
 }
 

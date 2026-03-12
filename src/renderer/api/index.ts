@@ -168,10 +168,17 @@ export function updateConfig(data: {
 // ============ MCP Servers API ============
 
 /**
- * 获取 MCP 服务列表
+ * 获取 MCP 服务列表（仅数据库）
  */
 export function getMcpServers(): Promise<AxiosLikeResponse<McpServer[]>> {
   return wrapResponse(window.api.getMcpServers());
+}
+
+/**
+ * 获取所有 MCP 服务（数据库 + Claude CLI）
+ */
+export function getAllMcpServers(): Promise<AxiosLikeResponse<McpServer[]>> {
+  return wrapResponse(window.api.getAllMcpServers());
 }
 
 /**
@@ -232,10 +239,17 @@ export function setMcpServerEnabled(
 // ============ Skills API ============
 
 /**
- * 获取 Skill 列表
+ * 获取 Skill 列表（仅数据库）
  */
 export function getSkills(): Promise<AxiosLikeResponse<Skill[]>> {
   return wrapResponse(window.api.getSkills());
+}
+
+/**
+ * 获取所有 Skill（数据库 + Claude CLI）
+ */
+export function getAllSkills(): Promise<AxiosLikeResponse<Skill[]>> {
+  return wrapResponse(window.api.getAllSkills());
 }
 
 /**

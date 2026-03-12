@@ -101,7 +101,7 @@ interface ClaudeCliConfig {
  *
  * @returns MCP 服务配置，无配置时返回空对象
  */
-function loadClaudeCliMcpServers(): Record<string, McpServerConfig> {
+export function loadClaudeCliMcpServers(): Record<string, McpServerConfig> {
   const configPath = getClaudeCliConfigPath();
   const content = readFileOrNull(configPath);
 
@@ -212,7 +212,7 @@ function parseSkillContent(name: string, content: string): SkillContent {
  *
  * @returns Skills 配置（name → content），无配置时返回空对象
  */
-function loadClaudeCliSkills(): Record<string, string> {
+export function loadClaudeCliSkills(): Record<string, string> {
   const pluginsPath = getClaudeCliPluginsPath();
   const marketplacesPath = path.join(pluginsPath, 'marketplaces');
 

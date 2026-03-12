@@ -50,6 +50,7 @@ export interface ElectronAPI {
 
   // MCP Servers
   getMcpServers: () => Promise<McpServer[]>;
+  getAllMcpServers: () => Promise<McpServer[]>;
   getMcpServer: (id: string) => Promise<McpServer | null>;
   createMcpServer: (data: CreateMcpServerInput) => Promise<McpServer>;
   updateMcpServer: (id: string, data: UpdateMcpServerInput) => Promise<McpServer | null>;
@@ -58,6 +59,7 @@ export interface ElectronAPI {
 
   // Skills
   getSkills: () => Promise<Skill[]>;
+  getAllSkills: () => Promise<Skill[]>;
   getSkill: (id: string) => Promise<Skill | null>;
   createSkill: (data: CreateSkillInput) => Promise<Skill>;
   updateSkill: (id: string, data: UpdateSkillInput) => Promise<Skill | null>;
@@ -88,6 +90,7 @@ const api: ElectronAPI = {
 
   // MCP Servers
   getMcpServers: () => ipcRenderer.invoke('mcp-servers:list'),
+  getAllMcpServers: () => ipcRenderer.invoke('mcp-servers:list-all'),
   getMcpServer: (id) => ipcRenderer.invoke('mcp-servers:get', id),
   createMcpServer: (data) => ipcRenderer.invoke('mcp-servers:create', data),
   updateMcpServer: (id, data) => ipcRenderer.invoke('mcp-servers:update', id, data),
@@ -96,6 +99,7 @@ const api: ElectronAPI = {
 
   // Skills
   getSkills: () => ipcRenderer.invoke('skills:list'),
+  getAllSkills: () => ipcRenderer.invoke('skills:list-all'),
   getSkill: (id) => ipcRenderer.invoke('skills:get', id),
   createSkill: (data) => ipcRenderer.invoke('skills:create', data),
   updateSkill: (id, data) => ipcRenderer.invoke('skills:update', id, data),

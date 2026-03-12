@@ -19,6 +19,8 @@ export {
   validateConfigReferences,
   handleDanglingReferences,
   buildAllowedTools,
+  loadClaudeCliMcpServers,
+  loadClaudeCliSkills,
   type StepMergedConfig
 } from './configMerger';
 export { handleOutput } from './outputHandler';

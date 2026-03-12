@@ -7,7 +7,23 @@
 
 import { ipcMain } from 'electron';
 import { skillRepository } from '../store/repositories';
-import type { CreateSkillInput, UpdateSkillInput } from '../store/models';
+import { loadClaudeCliSkills } from '../core';
+import type { CreateSkillInput, UpdateSkillInput, Skill } from '../store/models';
+
+/**
+ * CLI Skill 配置项（用于前端显示）
+ */
+interface CliSkill {
+  id: string;
+  name: string;
+  description: string;
+  allowedTools?: string[];
+  content: string;
+  enabled: boolean;
+  source: 'cli';
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * 注册 Skills 相关 IPC 处理器
@@ -15,6 +31,33 @@ import type { CreateSkillInput, UpdateSkillInput } from '../store/models';
 export function registerSkillHandlers(): void {
   ipcMain.handle('skills:list', () => {
     return skillRepository.findAll();
+  });
+
+  ipcMain.handle('skills:list-all', () => {
+    const dbSkills = skillRepository.findAll();
+    const cliSkills = loadClaudeCliSkills();
+
+    const result: (Skill | CliSkill)[] = [...dbSkills];
+
+    const dbNames = new Set(dbSkills.map(s => s.name));
+    const now = new Date().toISOString();
+
+    for (const [name, content] of Object.entries(cliSkills)) {
+      if (!dbNames.has(name)) {
+        result.push({
+          id: `cli:${name}`,
+          name,
+          description: 'Claude Code CLI 插件 Skill',
+          content,
+          enabled: true,
+          source: 'cli',
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+    }
+
+    return result;
   });
 
   ipcMain.handle('skills:get', (_, id: string) => {

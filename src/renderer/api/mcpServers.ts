@@ -7,6 +7,7 @@
 
 import {
   getMcpServers as getMcpServersApi,
+  getAllMcpServers as getAllMcpServersApi,
   getMcpServer as getMcpServerApi,
   createMcpServer as createMcpServerApi,
   updateMcpServer as updateMcpServerApi,
@@ -26,6 +27,7 @@ export interface McpServerData {
   args: string[] | null;
   env: Record<string, string> | null;
   enabled: boolean;
+  source?: 'db' | 'cli';
   created_at: string;
   updated_at: string;
 }
@@ -109,12 +111,43 @@ function updateDataToInput(data: UpdateMcpServerData) {
 }
 
 /**
- * 获取 MCP 服务列表
+ * 获取 MCP 服务列表（仅数据库）
  */
 export async function listMcpServers() {
   const response = await getMcpServersApi();
   return {
     data: response.data.map(serverToData)
+  };
+}
+
+/**
+ * 获取所有 MCP 服务（数据库 + Claude CLI）
+ */
+export async function listAllMcpServers() {
+  const response = await getAllMcpServersApi();
+  return {
+    data: response.data.map(server => serverToDataWithSource(server))
+  };
+}
+
+/**
+ * 将后端 McpServer 转换为前端 McpServerData（带来源标记）
+ *
+ * @param server 后端数据
+ * @returns 前端数据
+ */
+function serverToDataWithSource(server: McpServer & { source?: string }): McpServerData {
+  return {
+    id: server.id,
+    name: server.name,
+    description: server.description || null,
+    command: server.command,
+    args: server.args || null,
+    env: server.env || null,
+    enabled: server.enabled,
+    source: server.source === 'cli' ? 'cli' : 'db',
+    created_at: server.createdAt,
+    updated_at: server.updatedAt
   };
 }
 

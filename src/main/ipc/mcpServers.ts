@@ -7,7 +7,24 @@
 
 import { ipcMain } from 'electron';
 import { mcpServerRepository } from '../store/repositories';
-import type { CreateMcpServerInput, UpdateMcpServerInput } from '../store/models';
+import { loadClaudeCliMcpServers } from '../core';
+import type { CreateMcpServerInput, UpdateMcpServerInput, McpServer } from '../store/models';
+
+/**
+ * CLI MCP 配置项（用于前端显示）
+ */
+interface CliMcpServer {
+  id: string;
+  name: string;
+  description: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  enabled: boolean;
+  source: 'cli';
+  createdAt: string;
+  updatedAt: string;
+}
 
 /**
  * 注册 MCP 服务相关 IPC 处理器
@@ -15,6 +32,35 @@ import type { CreateMcpServerInput, UpdateMcpServerInput } from '../store/models
 export function registerMcpServerHandlers(): void {
   ipcMain.handle('mcp-servers:list', () => {
     return mcpServerRepository.findAll();
+  });
+
+  ipcMain.handle('mcp-servers:list-all', () => {
+    const dbServers = mcpServerRepository.findAll();
+    const cliServers = loadClaudeCliMcpServers();
+
+    const result: (McpServer | CliMcpServer)[] = [...dbServers];
+
+    const dbNames = new Set(dbServers.map(s => s.name));
+    const now = new Date().toISOString();
+
+    for (const [name, config] of Object.entries(cliServers)) {
+      if (!dbNames.has(name)) {
+        result.push({
+          id: `cli:${name}`,
+          name,
+          description: 'Claude Code CLI 全局配置',
+          command: config.command,
+          args: config.args,
+          env: config.env,
+          enabled: true,
+          source: 'cli',
+          createdAt: now,
+          updatedAt: now
+        });
+      }
+    }
+
+    return result;
   });
 
   ipcMain.handle('mcp-servers:get', (_, id: string) => {

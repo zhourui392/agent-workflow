@@ -72,7 +72,7 @@
                 :value="mcp.id"
               >
                 <span>{{ mcp.name }}</span>
-                <span v-if="mcp.enabled" class="global-tag">全局</span>
+                <span v-if="mcp.source === 'cli'" class="cli-tag">CLI</span>
                 <span v-if="mcp.description" class="option-desc">{{ mcp.description }}</span>
               </el-option>
             </el-select>
@@ -93,7 +93,7 @@
                 :value="skill.id"
               >
                 <span>{{ skill.name }}</span>
-                <span v-if="skill.enabled" class="global-tag">全局</span>
+                <span v-if="skill.source === 'cli'" class="cli-tag">CLI</span>
                 <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
               </el-option>
             </el-select>
@@ -158,8 +158,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import { listMcpServers, type McpServerData } from '@/api/mcpServers'
-import { listSkills, type SkillData } from '@/api/skills'
+import { listAllMcpServers, type McpServerData } from '@/api/mcpServers'
+import { listAllSkills, type SkillData } from '@/api/skills'
 
 const route = useRoute()
 const router = useRouter()
@@ -236,8 +236,8 @@ async function loadConfigOptions() {
   configLoading.value = true
   try {
     const [mcpRes, skillRes] = await Promise.all([
-      listMcpServers(),
-      listSkills()
+      listAllMcpServers(),
+      listAllSkills()
     ])
     mcpServerList.value = mcpRes.data
     skillList.value = skillRes.data
@@ -286,12 +286,12 @@ onMounted(async () => {
 .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .step-number { font-weight: bold; color: #409eff; }
 .form-tip { font-size: 12px; color: #909399; margin-top: 4px; }
-.global-tag {
+.cli-tag {
   margin-left: 8px;
   padding: 0 6px;
   font-size: 11px;
-  color: #67c23a;
-  background: #f0f9eb;
+  color: #409eff;
+  background: #ecf5ff;
   border-radius: 4px;
 }
 .option-desc {
