@@ -1,10 +1,11 @@
 /**
  * 配置合并器
  *
- * 三层合并策略（按需加载模式）:
- * - 第一层：磁盘全局配置（global_config/）
- * - 第二层：工作流配置（workflow.mcpServers / workflow.skills）
- * - 第三层：步骤引用（step.mcpServerIds / step.skillIds）
+ * 四层合并策略（按需加载模式）:
+ * - 第一层：Claude Code CLI 全局配置（~/.claude.json, ~/.claude/plugins/）
+ * - 第二层：应用磁盘全局配置（global_config/）
+ * - 第三层：工作流配置（workflow.mcpServers / workflow.skills）
+ * - 第四层：步骤引用（step.mcpServerIds / step.skillIds）
  *
  * 数据库配置（mcp_servers / skills 表）作为「配置库」：
  * - enabled 字段仅标记是否可在 UI 中快速选择
@@ -22,6 +23,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { app } from 'electron';
 import * as yaml from 'yaml';
 import log from 'electron-log';
@@ -58,7 +60,7 @@ interface SkillContent {
 }
 
 /**
- * 获取全局配置目录路径
+ * 获取应用全局配置目录路径
  *
  * @returns 全局配置目录绝对路径
  */
@@ -67,6 +69,188 @@ function getGlobalConfigPath(): string {
     return path.join(process.resourcesPath, 'global_config');
   }
   return path.join(__dirname, '..', '..', '..', 'global_config');
+}
+
+/**
+ * 获取 Claude Code CLI 配置文件路径
+ *
+ * @returns ~/.claude.json 路径
+ */
+function getClaudeCliConfigPath(): string {
+  return path.join(os.homedir(), '.claude.json');
+}
+
+/**
+ * 获取 Claude Code CLI plugins 目录路径
+ *
+ * @returns ~/.claude/plugins 路径
+ */
+function getClaudeCliPluginsPath(): string {
+  return path.join(os.homedir(), '.claude', 'plugins');
+}
+
+/**
+ * Claude CLI 配置文件结构（部分）
+ */
+interface ClaudeCliConfig {
+  mcpServers?: Record<string, McpServerConfig & { type?: string }>;
+}
+
+/**
+ * 读取 Claude Code CLI 的全局 MCP 配置
+ *
+ * @returns MCP 服务配置，无配置时返回空对象
+ */
+function loadClaudeCliMcpServers(): Record<string, McpServerConfig> {
+  const configPath = getClaudeCliConfigPath();
+  const content = readFileOrNull(configPath);
+
+  if (!content) {
+    return {};
+  }
+
+  try {
+    const config = JSON.parse(content) as ClaudeCliConfig;
+    if (!config.mcpServers) {
+      return {};
+    }
+
+    const result: Record<string, McpServerConfig> = {};
+
+    for (const [name, server] of Object.entries(config.mcpServers)) {
+      if (server.type === 'stdio' || !server.type) {
+        result[name] = {
+          command: server.command,
+          args: server.args,
+          env: server.env
+        };
+      }
+    }
+
+    log.debug('Loaded Claude CLI MCP servers', { count: Object.keys(result).length });
+    return result;
+  } catch (error) {
+    log.warn('Failed to parse Claude CLI config', { path: configPath, error });
+    return {};
+  }
+}
+
+/**
+ * 递归扫描目录查找 SKILL.md 文件
+ *
+ * @param dir 目录路径
+ * @param skills 结果集合
+ */
+function scanSkillsDirectory(dir: string, skills: Map<string, SkillContent>): void {
+  if (!fs.existsSync(dir)) {
+    return;
+  }
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        const skillFile = path.join(fullPath, 'SKILL.md');
+        if (fs.existsSync(skillFile)) {
+          const content = readFileOrNull(skillFile);
+          if (content) {
+            const skillContent = parseSkillContent(entry.name, content);
+            skills.set(entry.name, skillContent);
+          }
+        } else {
+          scanSkillsDirectory(fullPath, skills);
+        }
+      }
+    }
+  } catch (error) {
+    log.warn('Failed to scan skills directory', { dir, error });
+  }
+}
+
+/**
+ * 解析 SKILL.md 文件内容，提取 frontmatter
+ *
+ * @param name Skill 名称
+ * @param content 文件内容
+ * @returns 解析后的 Skill 内容
+ */
+function parseSkillContent(name: string, content: string): SkillContent {
+  const result: SkillContent = { name, content };
+
+  if (content.startsWith('---')) {
+    const endIndex = content.indexOf('---', 3);
+    if (endIndex > 0) {
+      const frontmatter = content.substring(3, endIndex).trim();
+      result.content = content.substring(endIndex + 3).trim();
+
+      for (const line of frontmatter.split('\n')) {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex > 0) {
+          const key = line.substring(0, colonIndex).trim();
+          const value = line.substring(colonIndex + 1).trim();
+
+          if (key === 'description') {
+            result.description = value;
+          } else if (key === 'allowed-tools') {
+            result.allowedTools = value.split(',').map(t => t.trim());
+          }
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 读取 Claude Code CLI 的全局 Skills 配置
+ *
+ * 扫描路径: ~/.claude/plugins/marketplaces/{marketplace}/plugins/{plugin}/skills/{skill}/SKILL.md
+ *
+ * @returns Skills 配置（name → content），无配置时返回空对象
+ */
+function loadClaudeCliSkills(): Record<string, string> {
+  const pluginsPath = getClaudeCliPluginsPath();
+  const marketplacesPath = path.join(pluginsPath, 'marketplaces');
+
+  if (!fs.existsSync(marketplacesPath)) {
+    return {};
+  }
+
+  const skills = new Map<string, SkillContent>();
+
+  try {
+    const marketplaces = fs.readdirSync(marketplacesPath, { withFileTypes: true });
+
+    for (const marketplace of marketplaces) {
+      if (!marketplace.isDirectory()) continue;
+
+      const pluginsDir = path.join(marketplacesPath, marketplace.name, 'plugins');
+      if (!fs.existsSync(pluginsDir)) continue;
+
+      const plugins = fs.readdirSync(pluginsDir, { withFileTypes: true });
+
+      for (const plugin of plugins) {
+        if (!plugin.isDirectory()) continue;
+
+        const skillsDir = path.join(pluginsDir, plugin.name, 'skills');
+        scanSkillsDirectory(skillsDir, skills);
+      }
+    }
+  } catch (error) {
+    log.warn('Failed to load Claude CLI skills', { path: marketplacesPath, error });
+  }
+
+  const result: Record<string, string> = {};
+  for (const [name, skill] of skills) {
+    result[name] = skill.content;
+  }
+
+  log.debug('Loaded Claude CLI skills', { count: Object.keys(result).length });
+  return result;
 }
 
 /**
@@ -109,11 +293,26 @@ function parseYamlFile<T>(filePath: string): T | null {
 /**
  * 加载全局配置
  *
+ * 合并顺序（后者覆盖前者）：
+ * 1. Claude Code CLI 配置（~/.claude.json, ~/.claude/plugins/）
+ * 2. 应用全局配置（global_config/）
+ *
  * @returns 全局配置对象
  */
 export function loadGlobalConfig(): GlobalConfig {
-  const configPath = getGlobalConfigPath();
   const config: GlobalConfig = {};
+
+  const cliMcpServers = loadClaudeCliMcpServers();
+  if (Object.keys(cliMcpServers).length > 0) {
+    config.mcpServers = cliMcpServers;
+  }
+
+  const cliSkills = loadClaudeCliSkills();
+  if (Object.keys(cliSkills).length > 0) {
+    config.skills = cliSkills;
+  }
+
+  const configPath = getGlobalConfigPath();
 
   const systemPromptPath = path.join(configPath, 'rules', 'system.md');
   const systemPrompt = readFileOrNull(systemPromptPath);
@@ -133,12 +332,14 @@ export function loadGlobalConfig(): GlobalConfig {
   const mcpPath = path.join(configPath, 'mcp', 'servers.yaml');
   const mcpConfig = parseYamlFile<Record<string, McpServerConfig>>(mcpPath);
   if (mcpConfig) {
-    config.mcpServers = mcpConfig;
+    config.mcpServers = { ...config.mcpServers, ...mcpConfig };
   }
 
   const skillsDir = path.join(configPath, 'skills');
   if (fs.existsSync(skillsDir)) {
-    config.skills = {};
+    if (!config.skills) {
+      config.skills = {};
+    }
     const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'));
     for (const file of files) {
       const skillName = path.basename(file, '.md');
