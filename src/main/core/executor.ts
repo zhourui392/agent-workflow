@@ -222,7 +222,7 @@ export async function executeStep(
     const validMcpServers = getValidMcpServers(config.mcpServers);
 
     const stepConfig = config as StepMergedConfig;
-    const hasSkillsDir = 'skillsDir' in stepConfig && stepConfig.skillsDir;
+    const skillsDir = 'skillsDir' in stepConfig ? stepConfig.skillsDir : undefined;
 
     const queryOptions: Parameters<typeof query>[0]['options'] = {
       customSystemPrompt: config.systemPrompt,
@@ -232,9 +232,8 @@ export async function executeStep(
       permissionMode: 'acceptEdits',
       cwd: config.workingDirectory || process.cwd(),
       env: { CLAUDECODE: '' },
-      ...(hasSkillsDir && {
-        settingSources: ['local'],
-        skillsDir: stepConfig.skillsDir
+      ...(skillsDir && {
+        extraArgs: { 'plugin-dir': skillsDir }
       })
     };
 
