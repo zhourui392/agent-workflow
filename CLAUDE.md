@@ -4,63 +4,67 @@
 
 ## 项目概述
 
-AI 驱动的多步骤工作流自动化平台。用户通过 Web 界面配置工作流，每个步骤调用 Claude Agent SDK 执行。支持 cron 定时调度、手动触发、模板变量，以及两层配置合并（全局磁盘文件 + 工作流级别数据库配置）。
+AI 驱动的多步骤工作流自动化平台（Electron 桌面应用）。用户通过 UI 配置工作流，每个步骤调用 Claude Agent SDK（@anthropic-ai/claude-code）执行。支持 cron 定时调度、手动触发、模板变量，以及多层配置合并（Claude CLI 全局配置 + 应用磁盘配置 + 工作流配置 + 步骤级按需引用）。
 
 ## 常用命令
 
-### 后端 (Python / FastAPI)
 ```bash
-cd backend && pip install -e .      # 安装依赖
-python -m src.main                   # 启动服务，端口 :8000
+npm install                          # 安装依赖
+npx tsc -p tsconfig.main.json       # 编译主进程 + preload
+npm run electron:dev                 # 开发模式（Vite + Electron）
+npm run dev                          # 仅启动 Vite 前端开发服务器，端口 :5173
+npm run electron:build               # 生产打包
+npm test                             # 运行测试
 ```
 
-### 前端 (Vue 3 / Vite)
-```bash
-cd frontend && npm install           # 安装依赖
-npm run dev                          # 开发服务器，端口 :5173
-npm run build                        # 生产构建（含类型检查）
-npm run type-check                   # 仅 TypeScript 类型检查
-```
+**注意**: `electron:dev` 依赖 `concurrently`、`wait-on`，首次运行前确保已安装。Electron 原生模块（better-sqlite3）需要匹配 Electron 版本编译，可用 `npx electron-rebuild -f -w better-sqlite3` 重建。
 
 ## 架构
 
 ```
-backend/src/
-  api/          # FastAPI 路由层 (workflows.py, executions.py)
-  core/         # 引擎层
-    pipeline.py       # 多步骤流水线顺序编排
-    executor.py       # 单步执行器 → 调用 Claude Agent SDK
-    config_merger.py  # 合并全局配置（磁盘）+ 工作流配置（数据库）
-    template.py       # 解析模板变量 {{today}}, {{steps.X.output}} 等
-  scheduler/
-    cron_manager.py   # APScheduler 定时任务注册/移除
-  store/
-    models.py         # SQLAlchemy 异步模型 (Workflow, Execution, StepExecution)
-    schemas.py        # Pydantic 请求/响应模式
-    database.py       # SQLite 异步会话管理
-  main.py             # 应用入口，生命周期事件
-
-frontend/src/
-  views/        # 页面组件 (WorkflowList/Edit, ExecutionList/Detail, LiveMonitor, GlobalConfig)
-  stores/       # Pinia 状态管理 (workflow.ts, execution.ts)
-  api/          # Axios 服务层
-  router/       # Vue Router 路由配置
+src/
+  main/                   # Electron 主进程
+    index.ts              # 应用入口，窗口管理，生命周期事件
+    core/
+      pipeline.ts         # 多步骤流水线顺序编排
+      executor.ts         # 单步执行器 → 调用 Claude Agent SDK
+      configMerger.ts     # 四层配置合并（CLI → 磁盘 → 工作流 → 步骤）
+      template.ts         # 解析模板变量 {{today}}, {{steps.X.output}} 等
+      outputHandler.ts    # 执行结果输出处理
+    ipc/                  # IPC 处理器（workflows, executions, config, mcp-servers, skills）
+    services/             # 业务服务层
+    store/
+      database.ts         # better-sqlite3 同步数据库
+      models.ts           # 类型定义
+      repositories/       # 数据访问层（workflowRepository, executionRepository 等）
+    scheduler/
+      cronManager.ts      # node-cron 定时任务注册/移除
+  renderer/               # 前端渲染进程（Vue 3）
+    views/                # 页面组件 (WorkflowList/Edit, ExecutionList/Detail, GlobalConfig)
+    stores/               # Pinia 状态管理 (workflow.ts, execution.ts)
+    api/                  # IPC 适配层（模拟 axios 风格接口）
+    router/               # Vue Router 路由配置
+  preload/                # Electron preload 脚本，通过 contextBridge 暴露 IPC API
+global_config/            # 应用全局配置（rules/, mcp/, skills/）
 ```
 
 ## 关键设计决策
 
-- **配置合并策略**: rules=拼接, tools=取交集, MCP=取并集, skills=同名覆盖
-- **异步执行**: `asyncio.create_task` — API 立即返回，执行在后台运行
+- **配置合并策略**: rules=拼接, allowedTools=取交集, MCP=按需加载取并集, skills=同名覆盖
+- **执行模型**: 主进程异步执行，IPC 事件实时推送进度到渲染进程
 - **模板变量**: `{{today}}`, `{{yesterday}}`, `{{now}}`, `{{inputs.xxx}}`, `{{steps.<name>.output}}`
 - **步骤失败策略**: stop（停止）/ skip（跳过）/ retry（重试）
-- **全局配置存储在磁盘**: `backend/global_config/` (rules/, mcp/, skills/)
-- **数据库**: SQLite，通过 aiosqlite 异步访问，文件路径 `backend/data/agent_workflow.db`
+- **全局配置存储在磁盘**: `global_config/` (rules/, mcp/, skills/)
+- **数据库**: SQLite (better-sqlite3 同步)，路径 `%APPDATA%/agent-workflow/agent_workflow.db`（macOS: `~/Library/Application Support/agent-workflow/`）
+- **嵌套会话保护**: 主进程启动时清除 `CLAUDECODE` 环境变量，防止从 Claude Code 终端启动时子进程被拒绝
 
 ## 技术栈
 
-- 后端: FastAPI, SQLAlchemy (异步), APScheduler, claude-code-sdk, structlog, Pydantic
-- 前端: Vue 3 (Composition API), TypeScript, Vite, Element Plus, Pinia, Axios
-- Python ≥ 3.11
+- 运行时: Electron 28, TypeScript 5
+- 前端: Vue 3 (Composition API), Vite, Element Plus, Pinia
+- 数据库: better-sqlite3
+- AI SDK: @anthropic-ai/claude-code
+- 调度器: node-cron
 
 ## 代码变更规范
 
