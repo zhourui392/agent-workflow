@@ -206,118 +206,36 @@ function parseSkillContent(name: string, content: string): SkillContent {
 }
 
 /**
- * 扫描 commands 目录加载 slash commands
+ * 读取用户的 Skills 配置
  *
- * @param dir commands 目录路径
- * @param pluginName 插件名称
- * @param skills 结果集合
- */
-function scanCommandsDirectory(
-  dir: string,
-  pluginName: string,
-  skills: Map<string, SkillContent>
-): void {
-  if (!fs.existsSync(dir)) {
-    return;
-  }
-
-  try {
-    const files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
-    for (const file of files) {
-      const commandName = path.basename(file, '.md');
-      const fullName = `${pluginName}:${commandName}`;
-      const content = readFileOrNull(path.join(dir, file));
-      if (content) {
-        const skillContent = parseSkillContent(fullName, content);
-        skills.set(fullName, skillContent);
-      }
-    }
-  } catch (error) {
-    log.warn('Failed to scan commands directory', { dir, error });
-  }
-}
-
-/**
- * 读取 Claude Code CLI 的全局 Skills 配置
- *
- * 扫描路径:
- * - ~/.claude/plugins/marketplaces/{marketplace}/plugins/{plugin}/skills/{skill}/SKILL.md
- * - ~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/commands/*.md
- * - ~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/skills/{skill}/SKILL.md
+ * 扫描路径: ~/.claude/skills/*.md
  *
  * @returns Skills 配置（name → content），无配置时返回空对象
  */
 export function loadClaudeCliSkills(): Record<string, string> {
-  const pluginsPath = getClaudeCliPluginsPath();
-  const skills = new Map<string, SkillContent>();
+  const skillsPath = path.join(os.homedir(), '.claude', 'skills');
 
-  const marketplacesPath = path.join(pluginsPath, 'marketplaces');
-  if (fs.existsSync(marketplacesPath)) {
-    try {
-      const marketplaces = fs.readdirSync(marketplacesPath, { withFileTypes: true });
-
-      for (const marketplace of marketplaces) {
-        if (!marketplace.isDirectory()) continue;
-
-        const pluginsDir = path.join(marketplacesPath, marketplace.name, 'plugins');
-        if (!fs.existsSync(pluginsDir)) continue;
-
-        const plugins = fs.readdirSync(pluginsDir, { withFileTypes: true });
-
-        for (const plugin of plugins) {
-          if (!plugin.isDirectory()) continue;
-
-          const skillsDir = path.join(pluginsDir, plugin.name, 'skills');
-          scanSkillsDirectory(skillsDir, skills);
-
-          const commandsDir = path.join(pluginsDir, plugin.name, 'commands');
-          scanCommandsDirectory(commandsDir, plugin.name, skills);
-        }
-      }
-    } catch (error) {
-      log.warn('Failed to load Claude CLI skills from marketplaces', { path: marketplacesPath, error });
-    }
-  }
-
-  const cachePath = path.join(pluginsPath, 'cache');
-  if (fs.existsSync(cachePath)) {
-    try {
-      const marketplaces = fs.readdirSync(cachePath, { withFileTypes: true });
-
-      for (const marketplace of marketplaces) {
-        if (!marketplace.isDirectory()) continue;
-
-        const pluginsDir = path.join(cachePath, marketplace.name);
-        const plugins = fs.readdirSync(pluginsDir, { withFileTypes: true });
-
-        for (const plugin of plugins) {
-          if (!plugin.isDirectory()) continue;
-
-          const versions = fs.readdirSync(path.join(pluginsDir, plugin.name), { withFileTypes: true });
-          for (const version of versions) {
-            if (!version.isDirectory()) continue;
-
-            const versionPath = path.join(pluginsDir, plugin.name, version.name);
-
-            const skillsDir = path.join(versionPath, 'skills');
-            scanSkillsDirectory(skillsDir, skills);
-
-            const commandsDir = path.join(versionPath, 'commands');
-            scanCommandsDirectory(commandsDir, plugin.name, skills);
-          }
-        }
-      }
-    } catch (error) {
-      log.warn('Failed to load Claude CLI skills from cache', { path: cachePath, error });
-    }
+  if (!fs.existsSync(skillsPath)) {
+    return {};
   }
 
   const result: Record<string, string> = {};
-  for (const [name, skill] of skills) {
-    result[name] = skill.content;
+
+  try {
+    const files = fs.readdirSync(skillsPath).filter(f => f.endsWith('.md'));
+
+    for (const file of files) {
+      const skillName = path.basename(file, '.md');
+      const content = readFileOrNull(path.join(skillsPath, file));
+      if (content) {
+        result[skillName] = content.trim();
+      }
+    }
+  } catch (error) {
+    log.warn('Failed to load skills from ~/.claude/skills', { path: skillsPath, error });
   }
 
-  log.debug('Loaded Claude CLI skills', { count: Object.keys(result).length });
+  log.debug('Loaded skills from ~/.claude/skills', { count: Object.keys(result).length });
   return result;
 }
 
