@@ -7,7 +7,7 @@ AI驱动的多步骤工作流自动化平台 (Electron桌面应用)。通过 UI 
 | 组件 | 技术 |
 |------|------|
 | 运行时 | Electron 28 |
-| 语言 | TypeScript 5.3 |
+| 语言 | TypeScript 5.9 |
 | 前端 | Vue 3 + Vite + Element Plus |
 | 数据库 | better-sqlite3 |
 | AI SDK | @anthropic-ai/claude-code |
@@ -41,7 +41,7 @@ agent-workflow/
 - **实时进度** — IPC事件推送执行日志，支持细粒度流式事件（工具调用、工具结果、文本回复等）
 - **MCP/Skills 管理** — 支持自定义 MCP 服务和 Skills，工作流步骤级按需引用
 - **Claude CLI 集成** — 自动读取 Claude Code CLI 全局配置（~/.claude.json MCP 和 plugins Skills）
-- **两层配置** — 全局配置 + 工作流配置自动合并
+- **四层配置合并** — Claude CLI 全局配置 → 应用磁盘配置 → 工作流配置 → 步骤级按需引用
 - **模板变量** — `{{today}}`, `{{inputs.xxx}}`, `{{steps.name.output}}`
 - **输出验证** — 每个步骤可配置验证提示词，执行完成后由 LLM 自动判定输出是否符合预期（PASS/FAIL）
 
@@ -51,15 +51,26 @@ agent-workflow/
 # 安装依赖
 npm install
 
+# 重建 Electron 原生模块（better-sqlite3）
+npx electron-rebuild -f -w better-sqlite3
+
+# 编译主进程 + preload
+npx tsc -p tsconfig.main.json
+
+# 开发模式（Vite + Electron 同时启动）
+npm run electron:dev
+
+# 仅启动前端开发服务器
+npm run dev
+
 # 运行测试
 npm test
 
-# 开发模式
-npm run electron:dev
-
-# 打包
+# 生产打包
 npm run electron:build
 ```
+
+> **注意**: 从 Claude Code 终端启动时，应用会自动清除 `CLAUDECODE` 环境变量以避免嵌套会话检测。数据库文件存储在系统应用数据目录（Windows: `%APPDATA%/agent-workflow/`，macOS: `~/Library/Application Support/agent-workflow/`）。
 
 ## IPC API
 
@@ -125,7 +136,7 @@ npm run electron:build
 | 来源 | 说明 |
 |------|------|
 | **数据库** | 通过 UI 创建的自定义配置 |
-| **Claude CLI** | 自动读取 `~/.claude.json` 中的 MCP 和 `~/.claude/plugins/` 中的 Skills |
+| **Claude CLI** | 自动读取 `~/.claude.json` 中的 MCP 和 `~/.claude/skills/`、`~/.claude/plugins/` 中的 Skills |
 
 在工作流步骤配置中，可以从合并后的列表中按需选择所需的 MCP 服务和 Skills。
 
