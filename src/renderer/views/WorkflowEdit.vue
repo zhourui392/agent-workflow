@@ -153,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, toRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
@@ -217,12 +217,18 @@ async function handleSave() {
   if (!form.steps.some((s: any) => s.prompt.trim())) { ElMessage.warning('至少需要一个有效步骤'); return }
   saving.value = true
   try {
+    const rawForm = toRaw(form)
     const payload = {
-      ...form,
-      schedule: form.schedule || null,
-      rules: form.rules?.system_prompt ? form.rules : null,
-      limits: (form.limits?.max_tokens || form.limits?.max_duration) ? form.limits : null,
-      working_directory: form.working_directory || null,
+      id: rawForm.id,
+      name: rawForm.name,
+      description: rawForm.description,
+      working_directory: rawForm.working_directory || null,
+      enabled: rawForm.enabled,
+      schedule: rawForm.schedule || null,
+      steps: rawForm.steps.map((s: any) => ({ ...toRaw(s) })),
+      rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
+      limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : null,
+      on_failure: rawForm.on_failure,
     }
     await store.saveWorkflow(payload)
     ElMessage.success('保存成功')
