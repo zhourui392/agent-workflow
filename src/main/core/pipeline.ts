@@ -17,7 +17,7 @@ import type {
   TriggerType,
   StepEvent
 } from '../store/models';
-import { renderTemplate, type TemplateContext } from './template';
+import { renderTemplate, validateTemplate, type TemplateContext } from './template';
 import { executeStep, executeStepWithTimeout, validateStepOutput } from './executor';
 import {
   loadGlobalConfig,
@@ -144,6 +144,13 @@ async function runPipelineAsync(
       executionRepository.updateCurrentStep(executionId, i);
 
       log.info(`Executing step ${i + 1}/${workflow.steps.length}: ${step.name}`);
+
+      const unresolvedVariables = validateTemplate(step.prompt, context);
+      if (unresolvedVariables.length > 0) {
+        log.warn(
+          `Step "${step.name}" has unresolved template variables: ${unresolvedVariables.join(', ')}`
+        );
+      }
 
       const renderedPrompt = renderTemplate(step.prompt, context);
 

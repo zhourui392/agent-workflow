@@ -7,12 +7,18 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const workflows = ref<WorkflowData[]>([])
   const currentWorkflow = ref<WorkflowData | null>(null)
   const loading = ref(false)
+  const error = ref<string | null>(null)
 
   async function fetchWorkflows() {
     loading.value = true
+    error.value = null
     try {
       const { data } = await listWorkflows()
       workflows.value = data
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      error.value = '加载工作流列表失败: ' + message
+      throw e
     } finally {
       loading.value = false
     }
@@ -20,10 +26,15 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   async function fetchWorkflow(id: string) {
     loading.value = true
+    error.value = null
     try {
       const { data } = await getWorkflow(id)
       currentWorkflow.value = data
       return data
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e)
+      error.value = '加载工作流详情失败: ' + message
+      throw e
     } finally {
       loading.value = false
     }
@@ -56,5 +67,5 @@ export const useWorkflowStore = defineStore('workflow', () => {
     return data.execution_id
   }
 
-  return { workflows, currentWorkflow, loading, fetchWorkflows, fetchWorkflow, saveWorkflow, removeWorkflow, toggle, run }
+  return { workflows, currentWorkflow, loading, error, fetchWorkflows, fetchWorkflow, saveWorkflow, removeWorkflow, toggle, run }
 })

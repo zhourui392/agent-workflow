@@ -56,6 +56,8 @@ interface LogEntry {
   message: string
 }
 
+const MAX_LOG_ENTRIES = 2000
+
 const runningExecutions = ref<ExecutionData[]>([])
 const selectedId = ref<string | null>(null)
 const selectedExec = ref<ExecutionData | null>(null)
@@ -173,6 +175,9 @@ function handleProgressEvent(event: ExecutionProgressEvent) {
     : event.status
 
   logs.value.push({ type: logType, time, message })
+  if (logs.value.length > MAX_LOG_ENTRIES) {
+    logs.value = logs.value.slice(-MAX_LOG_ENTRIES)
+  }
 }
 
 onMounted(() => {
