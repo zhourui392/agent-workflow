@@ -12,7 +12,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
 import type { MergedConfig, StepResult, ValidationResult, McpServerConfig, StepEvent } from '../store/models';
-import type { StepMergedConfig } from './configMerger';
+import type { StepMergedConfig } from './config/configMerger';
 
 type ClaudeCodeModule = typeof import('@anthropic-ai/claude-code');
 let claudeCodeModule: ClaudeCodeModule | null = null;

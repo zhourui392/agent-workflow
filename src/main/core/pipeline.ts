@@ -25,7 +25,7 @@ import {
   buildStepMergedConfig,
   cleanupStepSkills,
   type StepMergedConfig
-} from './configMerger';
+} from './config/configMerger';
 import { handleOutput } from './outputHandler';
 
 const DEFAULT_RETRY_MAX_ATTEMPTS = 3;

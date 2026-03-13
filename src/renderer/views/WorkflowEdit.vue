@@ -32,75 +32,18 @@
             <el-button size="small" type="primary" @click="addStep"><el-icon><Plus /></el-icon> 添加步骤</el-button>
           </div>
         </template>
-        <div v-for="(step, index) in form.steps" :key="index" class="step-item">
-          <div class="step-header">
-            <span class="step-number">步骤 {{ index + 1 }}</span>
-            <el-button size="small" type="danger" text @click="removeStep(index)" :disabled="form.steps.length <= 1">
-              <el-icon><Delete /></el-icon>
-            </el-button>
-          </div>
-          <el-form-item label="步骤名称">
-            <el-input v-model="step.name" placeholder="如: analyze_code" />
-          </el-form-item>
-          <el-form-item label="Prompt">
-            <el-input v-model="step.prompt" type="textarea" :rows="4"
-              placeholder="步骤提示词，支持 {{today}}, {{steps.prev_step.output}} 等模板变量" />
-          </el-form-item>
-          <el-form-item label="最大轮次">
-            <el-input-number v-model="step.max_turns" :min="1" :max="100" />
-          </el-form-item>
-          <el-form-item label="输出验证">
-            <el-switch v-model="step.validation_enabled" />
-            <span class="form-tip" style="margin-left: 8px;">启用后将通过 LLM 验证步骤输出是否符合预期</span>
-          </el-form-item>
-          <el-form-item v-if="step.validation_enabled" label="验证提示词">
-            <el-input v-model="step.validation_prompt" type="textarea" :rows="3"
-              placeholder="描述期望的输出标准，如：输出必须包含JSON格式的分析结果，且包含 summary 和 details 字段" />
-          </el-form-item>
-          <el-form-item label="MCP 服务">
-            <el-select
-              v-model="step.mcp_server_ids"
-              multiple
-              filterable
-              placeholder="选择此步骤使用的 MCP 服务"
-              style="width: 100%"
-            >
-              <el-option
-                v-for="mcp in mcpServerList"
-                :key="mcp.id"
-                :label="mcp.name"
-                :value="mcp.id"
-              >
-                <span>{{ mcp.name }}</span>
-                <span v-if="mcp.source === 'cli'" class="cli-tag">CLI</span>
-                <span v-if="mcp.description" class="option-desc">{{ mcp.description }}</span>
-              </el-option>
-            </el-select>
-            <div class="form-tip">选择此步骤需要调用的 MCP 服务（如数据库、API 等）</div>
-          </el-form-item>
-          <el-form-item label="Skills">
-            <el-select
-              v-model="step.skill_ids"
-              multiple
-              filterable
-              placeholder="选择此步骤使用的 Skills"
-              style="width: 100%"
-            >
-              <el-option
-                v-for="skill in skillList"
-                :key="skill.id"
-                :label="skill.name"
-                :value="skill.id"
-              >
-                <span>{{ skill.name }}</span>
-                <span v-if="skill.source === 'cli'" class="cli-tag">CLI</span>
-                <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
-              </el-option>
-            </el-select>
-            <div class="form-tip">选择此步骤需要使用的 Skills（如代码审查、测试生成等）</div>
-          </el-form-item>
+        <template v-for="(step, index) in form.steps" :key="index">
+          <StepEditor
+            :step="step"
+            :index="index"
+            :mcpServers="mcpServerList"
+            :skills="skillList"
+            :disableRemove="form.steps.length <= 1"
+            @update:step="form.steps[index] = $event"
+            @remove="removeStep(index)"
+          />
           <el-divider v-if="index < form.steps.length - 1" />
-        </div>
+        </template>
       </el-card>
 
       <!-- Schedule -->
@@ -157,9 +100,10 @@ import { computed, onMounted, reactive, ref, toRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { listAllMcpServers, type McpServerData } from '@/api/mcpServers'
 import { listAllSkills, type SkillData } from '@/api/skills'
+import StepEditor, { type StepFormData } from '@/components/StepEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -178,21 +122,21 @@ const form = reactive({
   working_directory: '',
   enabled: true,
   schedule: '',
-  steps: [createEmptyStep()] as any[],
+  steps: [createEmptyStep()] as StepFormData[],
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
 })
 
-function createEmptyStep() {
+function createEmptyStep(): StepFormData {
   return {
     name: '',
     prompt: '',
     max_turns: 30,
     validation_enabled: false,
     validation_prompt: '',
-    mcp_server_ids: [] as string[],
-    skill_ids: [] as string[]
+    mcp_server_ids: [],
+    skill_ids: []
   }
 }
 
@@ -214,7 +158,7 @@ function removeStep(index: number) { form.steps.splice(index, 1) }
 
 async function handleSave() {
   if (!form.name.trim()) { ElMessage.warning('请输入工作流名称'); return }
-  if (!form.steps.some((s: any) => s.prompt.trim())) { ElMessage.warning('至少需要一个有效步骤'); return }
+  if (!form.steps.some(s => s.prompt.trim())) { ElMessage.warning('至少需要一个有效步骤'); return }
   saving.value = true
   try {
     const rawForm = toRaw(form)
@@ -225,7 +169,7 @@ async function handleSave() {
       working_directory: rawForm.working_directory || null,
       enabled: rawForm.enabled,
       schedule: rawForm.schedule || null,
-      steps: rawForm.steps.map((s: any) => ({ ...toRaw(s) })),
+      steps: rawForm.steps.map(s => ({ ...toRaw(s) })),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
       limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : null,
       on_failure: rawForm.on_failure,
@@ -288,21 +232,5 @@ onMounted(async () => {
 .page-header h2 { margin: 0; }
 .section-card { margin-bottom: 20px; }
 .section-header { display: flex; justify-content: space-between; align-items: center; }
-.step-item { padding: 10px 0; }
-.step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.step-number { font-weight: bold; color: #409eff; }
 .form-tip { font-size: 12px; color: #909399; margin-top: 4px; }
-.cli-tag {
-  margin-left: 8px;
-  padding: 0 6px;
-  font-size: 11px;
-  color: #409eff;
-  background: #ecf5ff;
-  border-radius: 4px;
-}
-.option-desc {
-  margin-left: 8px;
-  font-size: 12px;
-  color: #909399;
-}
 </style>

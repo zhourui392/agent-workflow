@@ -24,7 +24,7 @@ export {
   loadClaudeCliSkillsWithDetails,
   type StepMergedConfig,
   type CliSkillDetail
-} from './configMerger';
+} from './config/configMerger';
 export { handleOutput } from './outputHandler';
 export {
   SkillWriteError,
