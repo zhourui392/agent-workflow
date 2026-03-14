@@ -44,6 +44,8 @@ import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
 import { Refresh } from '@element-plus/icons-vue'
+import { statusType, statusLabel } from '@/utils/statusUtils'
+import { formatDate, formatDuration } from '@/utils/dateUtils'
 
 const store = useExecutionStore()
 const router = useRouter()
@@ -51,28 +53,6 @@ const router = useRouter()
 onMounted(() => { store.fetchExecutions() })
 
 function handleRowClick(row: any) { router.push(`/executions/${row.id}`) }
-
-function statusType(status: string) {
-  const map: Record<string, string> = { success: 'success', failed: 'danger', running: 'primary', pending: 'info', timeout: 'warning' }
-  return map[status] || 'info'
-}
-function statusLabel(status: string) {
-  const map: Record<string, string> = { success: '成功', failed: '失败', running: '运行中', pending: '等待中', timeout: '超时' }
-  return map[status] || status
-}
-function formatDate(dateStr: string) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
-function formatDuration(start: string, end: string) {
-  if (!start) return '-'
-  const s = new Date(start).getTime()
-  const e = end ? new Date(end).getTime() : Date.now()
-  const sec = Math.round((e - s) / 1000)
-  if (sec < 60) return `${sec}s`
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`
-}
 </script>
 
 <style scoped>

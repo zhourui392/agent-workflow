@@ -53,6 +53,7 @@ import { useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { formatDate } from '@/utils/dateUtils'
 
 const store = useWorkflowStore()
 const router = useRouter()
@@ -90,11 +91,6 @@ async function handleDelete(row: any) {
   } catch {
     ElMessage.error('删除失败')
   }
-}
-
-function formatDate(dateStr: string) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
 }
 </script>
 

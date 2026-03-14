@@ -26,7 +26,7 @@
           <el-descriptions-item label="进度">{{ execution.status === 'success' ? execution.total_steps : (execution.total_steps ? ((execution.current_step ?? 0) + 1) : 0) }}/{{ execution.total_steps || 0 }}</el-descriptions-item>
           <el-descriptions-item label="开始时间">{{ formatDate(execution.started_at) }}</el-descriptions-item>
           <el-descriptions-item label="结束时间">{{ formatDate(execution.finished_at) }}</el-descriptions-item>
-          <el-descriptions-item label="耗时">{{ formatDuration(execution.started_at, execution.finished_at) }}</el-descriptions-item>
+          <el-descriptions-item label="耗时">{{ formatDurationLive(execution.started_at, execution.finished_at) }}</el-descriptions-item>
           <el-descriptions-item label="总 Tokens">{{ execution.total_tokens?.toLocaleString() || '0' }}</el-descriptions-item>
         </el-descriptions>
         <div v-if="execution.error_message" style="margin-top: 15px">
@@ -54,7 +54,7 @@
                     <el-tag v-if="step.validation_status === 'failed'" type="danger" size="small">验证失败</el-tag>
                     <span class="step-meta" v-if="step.tokens_used">{{ step.tokens_used.toLocaleString() }} tokens</span>
                     <span class="step-meta" v-if="step.model_used">{{ step.model_used }}</span>
-                    <span class="step-meta">{{ formatDuration(step.started_at, step.finished_at) }}</span>
+                    <span class="step-meta">{{ formatDurationLive(step.started_at, step.finished_at) }}</span>
                   </div>
                 </template>
                 <div class="step-content">
@@ -94,6 +94,8 @@ import { subscribeExecutionProgress, type ExecutionProgressEvent } from '@/api/i
 import type { ExecutionData, StepExecutionData } from '@/api/executions'
 import type { StepEvent } from '../../main/store/models'
 import StepEventViewer from '@/components/StepEventViewer.vue'
+import { statusType, statusLabel, timelineType } from '@/utils/statusUtils'
+import { formatDate, formatDuration } from '@/utils/dateUtils'
 
 const route = useRoute()
 const store = useExecutionStore()
@@ -208,30 +210,8 @@ onUnmounted(() => {
   if (tickTimer) clearInterval(tickTimer)
 })
 
-function statusType(status: string) {
-  const map: Record<string, string> = { success: 'success', failed: 'danger', running: 'primary', pending: 'info', timeout: 'warning' }
-  return map[status] || 'info'
-}
-function timelineType(status: string) {
-  const map: Record<string, string> = { success: 'success', failed: 'danger', running: 'primary', pending: 'info' }
-  return map[status] || 'info'
-}
-function statusLabel(status: string) {
-  const map: Record<string, string> = { success: '成功', failed: '失败', running: '运行中', pending: '等待中', timeout: '超时' }
-  return map[status] || status
-}
-function formatDate(dateStr?: string) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
-}
-function formatDuration(start?: string, end?: string) {
-  if (!start) return '-'
-  const s = new Date(start).getTime()
-  const e = end ? new Date(end).getTime() : now.value
-  const sec = Math.round((e - s) / 1000)
-  if (sec < 60) return `${sec}s`
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`
+function formatDurationLive(start?: string, end?: string) {
+  return formatDurationLive(start, end, now.value)
 }
 </script>
 

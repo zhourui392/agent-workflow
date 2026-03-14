@@ -93,6 +93,8 @@ import type {
   ResultEvent,
   ErrorEvent
 } from '../../main/store/models'
+import { getToolIcon } from '@/utils/toolIconUtils'
+import { formatDurationMs } from '@/utils/dateUtils'
 
 const props = defineProps<{
   events?: StepEvent[]
@@ -156,22 +158,6 @@ const turns = computed<TurnGroup[]>(() => {
     .map(([index, items]) => ({ index, items }))
 })
 
-/** 工具图标映射 */
-function getToolIcon(toolName: string): string {
-  const iconMap: Record<string, string> = {
-    Read: '\uD83D\uDCD6',    // 📖
-    Write: '\uD83D\uDCDD',   // 📝
-    Edit: '\u270F\uFE0F',    // ✏️
-    Bash: '\uD83D\uDCBB',    // 💻
-    Grep: '\uD83D\uDD0D',    // 🔍
-    Glob: '\uD83D\uDCC2',    // 📂
-    WebSearch: '\uD83C\uDF10', // 🌐
-    WebFetch: '\uD83C\uDF10',  // 🌐
-    Agent: '\uD83E\uDD16',     // 🤖
-  }
-  return iconMap[toolName] || '\uD83D\uDD27' // 🔧
-}
-
 /** 工具调用摘要 */
 function getToolCallSummary(event: ToolCallEvent): string {
   const input = event.input
@@ -214,12 +200,7 @@ function formatTokens(n: number): string {
   return n.toLocaleString()
 }
 
-function formatDuration(ms: number): string {
-  const sec = Math.round(ms / 1000)
-  if (sec < 60) return `${sec}s`
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`
-}
+const formatDuration = formatDurationMs
 
 function renderMarkdown(text: string): string {
   return text

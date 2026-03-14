@@ -30,9 +30,6 @@ async function dynamicImport<T>(modulePath: string): Promise<T> {
 /**
  * 查找 Claude CLI 可执行文件路径
  *
- * Electron 从桌面启动时 PATH 不包含 ~/.local/bin，SDK 找不到 claude 命令。
- * 按优先级搜索已知安装路径，支持通过环境变量 CLAUDE_CODE_PATH 手动覆盖。
- *
  * @returns Claude CLI 路径，未找到则返回 undefined
  */
 function findClaudeExecutable(): string | undefined {
@@ -68,9 +65,6 @@ function findClaudeExecutable(): string | undefined {
 
 /**
  * 过滤无效的 MCP server 配置
- *
- * 数据库中存的 {"servers":[]} 等无效格式会导致 SDK schema 校验失败。
- * 只保留包含 command 字段的合法配置。
  *
  * @param mcpServers 原始 MCP 配置
  * @returns 过滤后的有效配置，全部无效时返回 undefined
@@ -195,6 +189,183 @@ function extractToolResults(
 }
 
 /**
+ * 构建 SDK 查询选项
+ *
+ * @param config 合并后的配置
+ * @param stderrChunks stderr 收集数组
+ * @returns SDK query options
+ */
+function buildQueryOptions(
+  config: MergedConfig | StepMergedConfig,
+  stderrChunks: string[]
+): Record<string, unknown> {
+  const stepConfig = config as StepMergedConfig;
+  const skillsDir = 'skillsDir' in stepConfig ? stepConfig.skillsDir : undefined;
+  const claudePath = findClaudeExecutable();
+  const validMcpServers = getValidMcpServers(config.mcpServers);
+
+  const options: Record<string, unknown> = {
+    customSystemPrompt: config.systemPrompt,
+    allowedTools: config.allowedTools,
+    mcpServers: validMcpServers,
+    maxTurns: config.maxTurns || 30,
+    permissionMode: 'acceptEdits',
+    cwd: config.workingDirectory || process.cwd(),
+    ...(skillsDir && {
+      extraArgs: { 'plugin-dir': skillsDir }
+    })
+  };
+
+  if (config.model) {
+    options.model = config.model;
+  }
+
+  if (claudePath) {
+    options.pathToClaudeCodeExecutable = claudePath;
+  }
+
+  options.stderr = (chunk: string) => {
+    stderrChunks.push(chunk);
+    log.debug(`Claude CLI stderr: ${chunk}`);
+  };
+
+  return options;
+}
+
+/**
+ * 流式事件处理上下文
+ */
+interface StreamContext {
+  outputText: string;
+  tokensUsed: number;
+  turnIndex: number;
+  toolNameMap: Map<string, string>;
+}
+
+/**
+ * 处理 SDK 流式消息，提取事件和输出
+ *
+ * @param msg SDK 流式消息
+ * @param ctx 流处理上下文（会被修改）
+ * @param onEvent 流式事件回调
+ */
+function processStreamMessage(
+  msg: { type: string; [key: string]: unknown },
+  ctx: StreamContext,
+  onEvent?: (event: StepEvent) => void
+): void {
+  if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
+    const sysMsg = msg as any;
+    onEvent?.({
+      type: 'init',
+      tools: sysMsg.tools || [],
+      mcpServers: sysMsg.mcp_servers || [],
+      model: sysMsg.model || ''
+    });
+    return;
+  }
+
+  if (msg.type === 'assistant') {
+    processAssistantMessage(msg, ctx, onEvent);
+    return;
+  }
+
+  if (msg.type === 'user') {
+    const content = (msg as any).message?.content;
+    const toolResults = extractToolResults(content, ctx.toolNameMap, ctx.turnIndex);
+    for (const event of toolResults) {
+      onEvent?.(event);
+    }
+    return;
+  }
+
+  if (msg.type === 'result') {
+    processResultMessage(msg, ctx, onEvent);
+  }
+}
+
+/**
+ * 处理 assistant 类型消息
+ *
+ * @param msg assistant 消息
+ * @param ctx 流处理上下文
+ * @param onEvent 事件回调
+ */
+function processAssistantMessage(
+  msg: { type: string; [key: string]: unknown },
+  ctx: StreamContext,
+  onEvent?: (event: StepEvent) => void
+): void {
+  const content = (msg as any).message?.content;
+
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue;
+
+      if (block.type === 'text' && block.text) {
+        if (ctx.outputText) {
+          ctx.outputText += '\n\n---\n\n';
+        }
+        ctx.outputText += block.text;
+        onEvent?.({ type: 'text', text: block.text, turnIndex: ctx.turnIndex });
+      }
+
+      if (block.type === 'tool_use') {
+        ctx.toolNameMap.set(block.id, block.name);
+        onEvent?.({
+          type: 'tool_call',
+          toolUseId: block.id,
+          toolName: block.name,
+          input: block.input as Record<string, unknown>,
+          turnIndex: ctx.turnIndex
+        });
+      }
+    }
+  } else {
+    const text = extractText(content);
+    if (text) {
+      if (ctx.outputText) {
+        ctx.outputText += '\n\n---\n\n';
+      }
+      ctx.outputText += text;
+      onEvent?.({ type: 'text', text, turnIndex: ctx.turnIndex });
+    }
+  }
+
+  onEvent?.({ type: 'turn_end', turnIndex: ctx.turnIndex });
+  ctx.turnIndex++;
+}
+
+/**
+ * 处理 result 类型消息
+ *
+ * @param msg result 消息
+ * @param ctx 流处理上下文
+ * @param onEvent 事件回调
+ */
+function processResultMessage(
+  msg: { type: string; [key: string]: unknown },
+  ctx: StreamContext,
+  onEvent?: (event: StepEvent) => void
+): void {
+  const resultMsg = msg as any;
+  const usage = resultMsg.usage;
+  if (usage) {
+    ctx.tokensUsed = (usage.input_tokens || 0) + (usage.output_tokens || 0);
+  }
+  onEvent?.({
+    type: 'result',
+    success: resultMsg.subtype === 'success',
+    totalCostUsd: resultMsg.total_cost_usd || 0,
+    durationMs: resultMsg.duration_ms || 0,
+    numTurns: resultMsg.num_turns || 0,
+    inputTokens: usage?.input_tokens || 0,
+    outputTokens: usage?.output_tokens || 0
+  });
+  log.debug(`Step completed with ${ctx.tokensUsed} tokens`);
+}
+
+/**
  * 执行单个步骤
  *
  * @param prompt 渲染后的提示词
@@ -207,139 +378,30 @@ export async function executeStep(
   config: MergedConfig | StepMergedConfig,
   onEvent?: (event: StepEvent) => void
 ): Promise<StepResult> {
-  let outputText = '';
-  let tokensUsed = 0;
-  let turnIndex = 0;
-  const toolNameMap = new Map<string, string>();
   const stderrChunks: string[] = [];
+  const ctx: StreamContext = {
+    outputText: '',
+    tokensUsed: 0,
+    turnIndex: 0,
+    toolNameMap: new Map()
+  };
 
   log.debug(`Executing step with prompt length: ${prompt.length}`);
 
   try {
     const { query } = await getClaudeCode();
+    const options = buildQueryOptions(config, stderrChunks);
 
-    const claudePath = findClaudeExecutable();
-    const validMcpServers = getValidMcpServers(config.mcpServers);
-
-    const stepConfig = config as StepMergedConfig;
-    const skillsDir = 'skillsDir' in stepConfig ? stepConfig.skillsDir : undefined;
-
-    const queryOptions: Parameters<typeof query>[0]['options'] = {
-      customSystemPrompt: config.systemPrompt,
-      allowedTools: config.allowedTools,
-      mcpServers: validMcpServers,
-      maxTurns: config.maxTurns || 30,
-      permissionMode: 'acceptEdits',
-      cwd: config.workingDirectory || process.cwd(),
-      ...(skillsDir && {
-        extraArgs: { 'plugin-dir': skillsDir }
-      })
-    };
-
-    if (config.model) {
-      queryOptions.model = config.model;
-    }
-
-    if (claudePath) {
-      queryOptions.pathToClaudeCodeExecutable = claudePath;
-    }
-
-    queryOptions.stderr = (chunk: string) => {
-      stderrChunks.push(chunk);
-      log.debug(`Claude CLI stderr: ${chunk}`);
-    };
-
-    const q = query({
-      prompt,
-      options: queryOptions
-    });
+    const q = query({ prompt, options: options as any });
 
     for await (const msg of q) {
-      // 1. 系统初始化消息
-      if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
-        const sysMsg = msg as any;
-        onEvent?.({
-          type: 'init',
-          tools: sysMsg.tools || [],
-          mcpServers: sysMsg.mcp_servers || [],
-          model: sysMsg.model || ''
-        });
-      }
-
-      // 2. Assistant 消息：包含 text 和 tool_use 内容块
-      if (msg.type === 'assistant') {
-        const content = (msg as any).message?.content;
-        if (Array.isArray(content)) {
-          for (const block of content) {
-            if (typeof block !== 'object' || block === null) continue;
-
-            if (block.type === 'text' && block.text) {
-              if (outputText) {
-                outputText += '\n\n---\n\n';
-              }
-              outputText += block.text;
-              onEvent?.({ type: 'text', text: block.text, turnIndex });
-            }
-
-            if (block.type === 'tool_use') {
-              toolNameMap.set(block.id, block.name);
-              onEvent?.({
-                type: 'tool_call',
-                toolUseId: block.id,
-                toolName: block.name,
-                input: block.input as Record<string, unknown>,
-                turnIndex
-              });
-            }
-          }
-        } else {
-          const text = extractText(content);
-          if (text) {
-            if (outputText) {
-              outputText += '\n\n---\n\n';
-            }
-            outputText += text;
-            onEvent?.({ type: 'text', text, turnIndex });
-          }
-        }
-
-        onEvent?.({ type: 'turn_end', turnIndex });
-        turnIndex++;
-      }
-
-      // 3. User 消息：包含 tool_result 内容块
-      if (msg.type === 'user') {
-        const content = (msg as any).message?.content;
-        const toolResults = extractToolResults(content, toolNameMap, turnIndex);
-        for (const event of toolResults) {
-          onEvent?.(event);
-        }
-      }
-
-      // 4. 最终结果
-      if (msg.type === 'result') {
-        const resultMsg = msg as any;
-        const usage = resultMsg.usage;
-        if (usage) {
-          tokensUsed = (usage.input_tokens || 0) + (usage.output_tokens || 0);
-        }
-        onEvent?.({
-          type: 'result',
-          success: resultMsg.subtype === 'success',
-          totalCostUsd: resultMsg.total_cost_usd || 0,
-          durationMs: resultMsg.duration_ms || 0,
-          numTurns: resultMsg.num_turns || 0,
-          inputTokens: usage?.input_tokens || 0,
-          outputTokens: usage?.output_tokens || 0
-        });
-        log.debug(`Step completed with ${tokensUsed} tokens`);
-      }
+      processStreamMessage(msg as any, ctx, onEvent);
     }
 
     return {
       success: true,
-      outputText,
-      tokensUsed
+      outputText: ctx.outputText,
+      tokensUsed: ctx.tokensUsed
     };
   } catch (error) {
     let errorMessage = error instanceof Error ? error.message : String(error);
@@ -356,8 +418,8 @@ export async function executeStep(
 
     return {
       success: false,
-      outputText,
-      tokensUsed,
+      outputText: ctx.outputText,
+      tokensUsed: ctx.tokensUsed,
       errorMessage
     };
   }
@@ -369,7 +431,7 @@ export async function executeStep(
  * @param prompt 渲染后的提示词
  * @param config 合并后的配置
  * @param timeoutMs 超时时间（毫秒）
- * @param onProgress 进度回调
+ * @param onEvent 事件回调
  * @returns 步骤执行结果
  */
 export async function executeStepWithTimeout(
@@ -401,9 +463,6 @@ export async function executeStepWithTimeout(
 
 /**
  * 验证步骤输出
- *
- * 将步骤输出和验证提示词交给 Claude Agent SDK，判断输出是否符合预期。
- * LLM 需回答 PASS 或 FAIL 开头，后续行为理由说明。
  *
  * @param outputText 步骤输出文本
  * @param validationPrompt 验证提示词

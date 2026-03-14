@@ -49,6 +49,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { listExecutions, type ExecutionData } from '@/api/executions'
 import { subscribeExecutionProgress, type ExecutionProgressEvent } from '@/api/index'
 import LogViewer from '@/components/LogViewer.vue'
+import { getToolIcon } from '@/utils/toolIconUtils'
 
 interface LogEntry {
   type: string
@@ -79,22 +80,6 @@ function selectExecution(exec: ExecutionData) {
   selectedId.value = exec.id
   selectedExec.value = exec
   logs.value = []
-}
-
-/** 工具图标映射 */
-function getToolIcon(toolName: string): string {
-  const iconMap: Record<string, string> = {
-    Read: '\uD83D\uDCD6',
-    Write: '\uD83D\uDCDD',
-    Edit: '\u270F\uFE0F',
-    Bash: '\uD83D\uDCBB',
-    Grep: '\uD83D\uDD0D',
-    Glob: '\uD83D\uDCC2',
-    WebSearch: '\uD83C\uDF10',
-    WebFetch: '\uD83C\uDF10',
-    Agent: '\uD83E\uDD16',
-  }
-  return iconMap[toolName] || '\uD83D\uDD27'
 }
 
 function formatLogMessage(event: ExecutionProgressEvent): string | null {
