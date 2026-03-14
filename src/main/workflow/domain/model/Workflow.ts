@@ -9,6 +9,11 @@ import type { WorkflowInput } from './WorkflowInput';
 import type { WorkflowLimits } from './WorkflowLimits';
 import type { WorkflowOutput } from './WorkflowOutput';
 import type { FailureStrategy } from './FailureStrategy';
+export interface RetryConfig {
+  maxAttempts?: number;
+  delayMs?: number;
+}
+
 export interface CreateWorkflowRequest {
   name: string;
   enabled?: boolean;
@@ -21,6 +26,7 @@ export interface CreateWorkflowRequest {
   output?: WorkflowOutput;
   workingDirectory?: string;
   onFailure?: FailureStrategy;
+  retryConfig?: RetryConfig;
 }
 
 export interface UpdateWorkflowRequest extends Partial<CreateWorkflowRequest> {}
@@ -37,6 +43,7 @@ export class Workflow extends Entity {
   readonly output?: WorkflowOutput;
   readonly workingDirectory?: string;
   readonly onFailure: FailureStrategy;
+  readonly retryConfig?: RetryConfig;
 
   constructor(props: {
     id: string;
@@ -51,6 +58,7 @@ export class Workflow extends Entity {
     output?: WorkflowOutput;
     workingDirectory?: string;
     onFailure: FailureStrategy;
+    retryConfig?: RetryConfig;
     createdAt: string;
     updatedAt: string;
   }) {
@@ -66,6 +74,7 @@ export class Workflow extends Entity {
     this.output = props.output;
     this.workingDirectory = props.workingDirectory;
     this.onFailure = props.onFailure;
+    this.retryConfig = props.retryConfig;
   }
 
   get enabled(): boolean {

@@ -85,7 +85,21 @@
               <el-select v-model="form.on_failure">
                 <el-option label="停止 (stop)" value="stop" />
                 <el-option label="跳过 (skip)" value="skip" />
+                <el-option label="重试 (retry)" value="retry" />
               </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row v-if="form.on_failure === 'retry'" :gutter="20">
+          <el-col :span="8">
+            <el-form-item label="最大重试次数">
+              <el-input-number v-model="retryMaxAttempts" :min="1" :max="10" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="重试延迟(ms)">
+              <el-input-number v-model="retryDelayMs" :min="100" :max="60000" :step="500" />
+              <div class="form-tip">首次延迟，后续指数递增</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -123,6 +137,7 @@ const form = reactive({
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
+  retry_config: null as { maxAttempts?: number; delayMs?: number } | null,
 })
 
 function createEmptyStep(): StepFormData {
@@ -148,6 +163,14 @@ const limitsMaxDuration = computed({
   get: () => form.limits?.max_duration || 0,
   set: (val: number) => { if (!form.limits) form.limits = {}; form.limits.max_duration = val || undefined }
 })
+const retryMaxAttempts = computed({
+  get: () => form.retry_config?.maxAttempts || 3,
+  set: (val: number) => { if (!form.retry_config) form.retry_config = {}; form.retry_config.maxAttempts = val }
+})
+const retryDelayMs = computed({
+  get: () => form.retry_config?.delayMs || 1000,
+  set: (val: number) => { if (!form.retry_config) form.retry_config = {}; form.retry_config.delayMs = val }
+})
 
 function addStep() { form.steps.push(createEmptyStep()) }
 function removeStep(index: number) { form.steps.splice(index, 1) }
@@ -169,6 +192,7 @@ async function handleSave() {
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
       limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : undefined,
       on_failure: rawForm.on_failure,
+      retry_config: rawForm.on_failure === 'retry' ? toRaw(rawForm.retry_config) : null,
     }
     await store.saveWorkflow(payload)
     ElMessage.success('保存成功')
@@ -212,6 +236,7 @@ onMounted(async () => {
           : [createEmptyStep()]
         form.rules = data.rules || null; form.limits = data.limits || null
         form.on_failure = data.on_failure || 'stop'
+        form.retry_config = data.retry_config || null
       }
     } finally { loading.value = false }
   }

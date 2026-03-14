@@ -77,7 +77,11 @@ export const CreateWorkflowSchema = z.object({
   limits: LimitsSchema,
   output: OutputSchema,
   workingDirectory: z.string().optional(),
-  onFailure: z.enum(['stop', 'skip', 'retry']).optional()
+  onFailure: z.enum(['stop', 'skip', 'retry']).optional(),
+  retryConfig: z.object({
+    maxAttempts: z.number().int().min(1).max(10).optional(),
+    delayMs: z.number().int().min(100).max(60000).optional()
+  }).optional()
 });
 
 export const UpdateWorkflowSchema = CreateWorkflowSchema.partial();

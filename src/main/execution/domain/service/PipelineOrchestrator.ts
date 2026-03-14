@@ -85,6 +85,7 @@ export interface WorkflowRef {
   rules?: string;
   skills?: Record<string, string>;
   workingDirectory?: string;
+  retryConfig?: { maxAttempts?: number; delayMs?: number };
 }
 
 // ========== 常量 ==========
@@ -256,8 +257,8 @@ export class PipelineOrchestrator {
 
     try {
       if (onFailure === 'retry') {
-        const maxAttempts = step.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS;
-        const delayMs = step.retryConfig?.delayMs || DEFAULT_RETRY_DELAY_MS;
+        const maxAttempts = step.retryConfig?.maxAttempts || workflow.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS;
+        const delayMs = step.retryConfig?.delayMs || workflow.retryConfig?.delayMs || DEFAULT_RETRY_DELAY_MS;
         result = await this.executeWithRetry(renderedPrompt, stepConfig, maxAttempts, delayMs, onEvent);
       } else if (stepConfig.timeoutMs) {
         result = await this.stepExecutor.executeWithTimeout(renderedPrompt, stepConfig, stepConfig.timeoutMs, onEvent);

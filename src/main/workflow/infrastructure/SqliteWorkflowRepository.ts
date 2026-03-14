@@ -12,6 +12,7 @@ import type { WorkflowStep } from '../domain/model/WorkflowStep';
 import type { WorkflowInput } from '../domain/model/WorkflowInput';
 import type { WorkflowLimits } from '../domain/model/WorkflowLimits';
 import type { WorkflowOutput } from '../domain/model/WorkflowOutput';
+import type { RetryConfig } from '../domain/model/Workflow';
 function rowToWorkflow(row: Record<string, unknown>): Workflow {
   return new Workflow({
     id: row.id as string,
@@ -26,6 +27,7 @@ function rowToWorkflow(row: Record<string, unknown>): Workflow {
     output: safeJsonParse<WorkflowOutput | undefined>(row.output as string, undefined, 'workflow.output'),
     workingDirectory: row.working_directory as string | undefined,
     onFailure: (row.on_failure as 'stop' | 'skip' | 'retry') || 'stop',
+    retryConfig: safeJsonParse<RetryConfig | undefined>(row.retry_config as string, undefined, 'workflow.retryConfig'),
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
   });
@@ -58,8 +60,8 @@ export class SqliteWorkflowRepository implements WorkflowRepository {
     this.db.prepare(`
       INSERT INTO workflows (
         id, name, enabled, schedule, inputs, steps, rules,
-        skills, limits, output, working_directory, on_failure, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        skills, limits, output, working_directory, on_failure, retry_config, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.name,
@@ -73,6 +75,7 @@ export class SqliteWorkflowRepository implements WorkflowRepository {
       data.output ? JSON.stringify(data.output) : null,
       data.workingDirectory || null,
       data.onFailure || 'stop',
+      data.retryConfig ? JSON.stringify(data.retryConfig) : null,
       now,
       now
     );
@@ -98,6 +101,7 @@ export class SqliteWorkflowRepository implements WorkflowRepository {
     if (data.output !== undefined) { fields.push('output = ?'); values.push(data.output ? JSON.stringify(data.output) : null); }
     if (data.workingDirectory !== undefined) { fields.push('working_directory = ?'); values.push(data.workingDirectory || null); }
     if (data.onFailure !== undefined) { fields.push('on_failure = ?'); values.push(data.onFailure); }
+    if (data.retryConfig !== undefined) { fields.push('retry_config = ?'); values.push(data.retryConfig ? JSON.stringify(data.retryConfig) : null); }
 
     values.push(id);
     this.db.prepare(`UPDATE workflows SET ${fields.join(', ')} WHERE id = ?`).run(...values);

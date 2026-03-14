@@ -86,6 +86,10 @@ export function runMigrations(database: Database.Database): void {
     database.exec('ALTER TABLE workflows ADD COLUMN working_directory TEXT');
   }
 
+  if (!columnNames.includes('retry_config')) {
+    database.exec('ALTER TABLE workflows ADD COLUMN retry_config TEXT');
+  }
+
   const stepColumns = database.prepare("PRAGMA table_info(step_executions)").all() as { name: string }[];
   const stepColumnNames = stepColumns.map(col => col.name);
 

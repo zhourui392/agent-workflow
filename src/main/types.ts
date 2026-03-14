@@ -13,6 +13,7 @@ export type { WorkflowInput } from './workflow/domain/model/WorkflowInput';
 export type { WorkflowLimits } from './workflow/domain/model/WorkflowLimits';
 export type { WorkflowOutput } from './workflow/domain/model/WorkflowOutput';
 export type { FailureStrategy } from './workflow/domain/model/FailureStrategy';
+export type { RetryConfig } from './workflow/domain/model/Workflow';
 
 // Execution context
 export { Execution, StepExecution } from './execution/domain/model';
@@ -35,6 +36,7 @@ import type { WorkflowInput } from './workflow/domain/model/WorkflowInput';
 import type { WorkflowLimits } from './workflow/domain/model/WorkflowLimits';
 import type { WorkflowOutput } from './workflow/domain/model/WorkflowOutput';
 import type { FailureStrategy } from './workflow/domain/model/FailureStrategy';
+import type { RetryConfig } from './workflow/domain/model/Workflow';
 import type { ExecutionStatus, TriggerType } from './execution/domain/model/ExecutionStatus';
 import type { StepEvent } from './execution/domain/model/StepEvent';
 export interface WorkflowDTO {
@@ -50,6 +52,7 @@ export interface WorkflowDTO {
   output?: WorkflowOutput;
   workingDirectory?: string;
   onFailure: FailureStrategy;
+  retryConfig?: RetryConfig;
   createdAt: string;
   updatedAt: string;
 }

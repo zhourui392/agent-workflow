@@ -34,6 +34,7 @@ export function workflowToDTO(w: Workflow): WorkflowDTO {
     output: w.output,
     workingDirectory: w.workingDirectory,
     onFailure: w.onFailure,
+    retryConfig: w.retryConfig,
     createdAt: w.createdAt,
     updatedAt: w.updatedAt
   };

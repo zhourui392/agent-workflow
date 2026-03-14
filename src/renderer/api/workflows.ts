@@ -52,6 +52,7 @@ export interface WorkflowData {
   output?: Record<string, unknown>;
   working_directory?: string | null;
   on_failure?: string;
+  retry_config?: { maxAttempts?: number; delayMs?: number } | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -79,6 +80,7 @@ function workflowToData(workflow: WorkflowDTO): WorkflowData {
     output: workflow.output as Record<string, unknown> | undefined,
     working_directory: workflow.workingDirectory || null,
     on_failure: workflow.onFailure,
+    retry_config: workflow.retryConfig || null,
     created_at: workflow.createdAt,
     updated_at: workflow.updatedAt
   };
@@ -109,7 +111,8 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     limits: data.limits ? { ...data.limits } as WorkflowLimits : undefined,
     output: data.output ? { ...data.output } as WorkflowOutput : undefined,
     workingDirectory: data.working_directory || undefined,
-    onFailure: (data.on_failure as 'stop' | 'skip' | 'retry') || 'stop'
+    onFailure: (data.on_failure as 'stop' | 'skip' | 'retry') || 'stop',
+    retryConfig: data.retry_config || undefined
   };
 }
 
