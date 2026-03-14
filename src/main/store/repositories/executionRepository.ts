@@ -114,6 +114,35 @@ export function findAll(params?: ExecutionListParams): Execution[] {
 }
 
 /**
+ * 统计执行记录数量
+ *
+ * @param params 查询参数（workflowId、status）
+ * @returns 记录总数
+ */
+export function count(params?: ExecutionListParams): number {
+  const db = getDatabase();
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+
+  if (params?.workflowId) {
+    conditions.push('workflow_id = ?');
+    values.push(params.workflowId);
+  }
+  if (params?.status) {
+    conditions.push('status = ?');
+    values.push(params.status);
+  }
+
+  let sql = 'SELECT COUNT(*) AS total FROM executions';
+  if (conditions.length > 0) {
+    sql += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  const row = db.prepare(sql).get(...values) as { total: number };
+  return row.total;
+}
+
+/**
  * 根据ID查找执行记录
  *
  * @param id 执行ID

@@ -211,7 +211,7 @@ onUnmounted(() => {
 })
 
 function formatDurationLive(start?: string, end?: string) {
-  return formatDurationLive(start, end, now.value)
+  return formatDuration(start, end, now.value)
 }
 </script>
 

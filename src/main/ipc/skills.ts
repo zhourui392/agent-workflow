@@ -8,7 +8,14 @@
 import { ipcMain } from 'electron';
 import { skillRepository } from '../store/repositories';
 import { loadClaudeCliSkillsWithDetails } from '../core';
-import type { CreateSkillInput, UpdateSkillInput, Skill } from '../store/models';
+import type { Skill } from '../store/models';
+import {
+  IdSchema,
+  CreateSkillSchema,
+  UpdateSkillSchema,
+  validateInput
+} from './schemas';
+import { z } from 'zod';
 
 /**
  * CLI Skill 配置项（用于前端显示）
@@ -61,23 +68,29 @@ export function registerSkillHandlers(): void {
     return result;
   });
 
-  ipcMain.handle('skills:get', (_, id: string) => {
-    return skillRepository.findById(id);
+  ipcMain.handle('skills:get', (_, id: unknown) => {
+    return skillRepository.findById(validateInput(IdSchema, id));
   });
 
-  ipcMain.handle('skills:create', (_, data: CreateSkillInput) => {
-    return skillRepository.create(data);
+  ipcMain.handle('skills:create', (_, data: unknown) => {
+    return skillRepository.create(validateInput(CreateSkillSchema, data));
   });
 
-  ipcMain.handle('skills:update', (_, id: string, data: UpdateSkillInput) => {
-    return skillRepository.update(id, data);
+  ipcMain.handle('skills:update', (_, id: unknown, data: unknown) => {
+    return skillRepository.update(
+      validateInput(IdSchema, id),
+      validateInput(UpdateSkillSchema, data)
+    );
   });
 
-  ipcMain.handle('skills:delete', (_, id: string) => {
-    return skillRepository.remove(id);
+  ipcMain.handle('skills:delete', (_, id: unknown) => {
+    return skillRepository.remove(validateInput(IdSchema, id));
   });
 
-  ipcMain.handle('skills:set-enabled', (_, id: string, enabled: boolean) => {
-    return skillRepository.setEnabled(id, enabled);
+  ipcMain.handle('skills:set-enabled', (_, id: unknown, enabled: unknown) => {
+    return skillRepository.setEnabled(
+      validateInput(IdSchema, id),
+      validateInput(z.boolean(), enabled)
+    );
   });
 }

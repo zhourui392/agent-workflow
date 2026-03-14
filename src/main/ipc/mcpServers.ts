@@ -8,7 +8,14 @@
 import { ipcMain } from 'electron';
 import { mcpServerRepository } from '../store/repositories';
 import { loadClaudeCliMcpServers } from '../core';
-import type { CreateMcpServerInput, UpdateMcpServerInput, McpServer } from '../store/models';
+import type { McpServer } from '../store/models';
+import {
+  IdSchema,
+  CreateMcpServerSchema,
+  UpdateMcpServerSchema,
+  validateInput
+} from './schemas';
+import { z } from 'zod';
 
 /**
  * CLI MCP 配置项（用于前端显示）
@@ -63,23 +70,29 @@ export function registerMcpServerHandlers(): void {
     return result;
   });
 
-  ipcMain.handle('mcp-servers:get', (_, id: string) => {
-    return mcpServerRepository.findById(id);
+  ipcMain.handle('mcp-servers:get', (_, id: unknown) => {
+    return mcpServerRepository.findById(validateInput(IdSchema, id));
   });
 
-  ipcMain.handle('mcp-servers:create', (_, data: CreateMcpServerInput) => {
-    return mcpServerRepository.create(data);
+  ipcMain.handle('mcp-servers:create', (_, data: unknown) => {
+    return mcpServerRepository.create(validateInput(CreateMcpServerSchema, data));
   });
 
-  ipcMain.handle('mcp-servers:update', (_, id: string, data: UpdateMcpServerInput) => {
-    return mcpServerRepository.update(id, data);
+  ipcMain.handle('mcp-servers:update', (_, id: unknown, data: unknown) => {
+    return mcpServerRepository.update(
+      validateInput(IdSchema, id),
+      validateInput(UpdateMcpServerSchema, data)
+    );
   });
 
-  ipcMain.handle('mcp-servers:delete', (_, id: string) => {
-    return mcpServerRepository.remove(id);
+  ipcMain.handle('mcp-servers:delete', (_, id: unknown) => {
+    return mcpServerRepository.remove(validateInput(IdSchema, id));
   });
 
-  ipcMain.handle('mcp-servers:set-enabled', (_, id: string, enabled: boolean) => {
-    return mcpServerRepository.setEnabled(id, enabled);
+  ipcMain.handle('mcp-servers:set-enabled', (_, id: unknown, enabled: unknown) => {
+    return mcpServerRepository.setEnabled(
+      validateInput(IdSchema, id),
+      validateInput(z.boolean(), enabled)
+    );
   });
 }

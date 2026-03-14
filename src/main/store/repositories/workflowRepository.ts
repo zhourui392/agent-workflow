@@ -9,9 +9,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../database';
 import type {
   Workflow,
+  WorkflowStep,
+  WorkflowInput,
+  WorkflowLimits,
+  WorkflowOutput,
+  McpServerConfig,
   CreateWorkflowRequest,
   UpdateWorkflowRequest
 } from '../models';
+import { safeJsonParse } from '../../utils/safeJson';
 
 /**
  * 数据库行转换为Workflow对象
@@ -25,13 +31,13 @@ function rowToWorkflow(row: Record<string, unknown>): Workflow {
     name: row.name as string,
     enabled: Boolean(row.enabled),
     schedule: row.schedule as string | undefined,
-    inputs: row.inputs ? JSON.parse(row.inputs as string) : undefined,
-    steps: JSON.parse(row.steps as string),
+    inputs: safeJsonParse<WorkflowInput[] | undefined>(row.inputs as string, undefined, 'workflow.inputs'),
+    steps: safeJsonParse<WorkflowStep[]>(row.steps as string, [], 'workflow.steps'),
     rules: row.rules as string | undefined,
-    mcpServers: row.mcp_servers ? JSON.parse(row.mcp_servers as string) : undefined,
-    skills: row.skills ? JSON.parse(row.skills as string) : undefined,
-    limits: row.limits ? JSON.parse(row.limits as string) : undefined,
-    output: row.output ? JSON.parse(row.output as string) : undefined,
+    mcpServers: safeJsonParse<Record<string, McpServerConfig> | undefined>(row.mcp_servers as string, undefined, 'workflow.mcpServers'),
+    skills: safeJsonParse<Record<string, string> | undefined>(row.skills as string, undefined, 'workflow.skills'),
+    limits: safeJsonParse<WorkflowLimits | undefined>(row.limits as string, undefined, 'workflow.limits'),
+    output: safeJsonParse<WorkflowOutput | undefined>(row.output as string, undefined, 'workflow.output'),
     workingDirectory: row.working_directory as string | undefined,
     onFailure: (row.on_failure as 'stop' | 'skip' | 'retry') || 'stop',
     createdAt: row.created_at as string,

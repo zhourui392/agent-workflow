@@ -27,6 +27,18 @@ function toSafeDirectoryName(name: string): string {
 }
 
 /**
+ * 校验 Skill 名称，防止路径穿越攻击
+ *
+ * @param name 原始 Skill 名称
+ * @param safeName 转换后的安全目录名
+ */
+function validateSkillName(name: string, safeName: string): void {
+  if (safeName.includes('..') || path.isAbsolute(safeName)) {
+    throw new Error(`非法 Skill 名称: "${name}"`);
+  }
+}
+
+/**
  * 生成 SKILL.md 文件内容
  *
  * @param skill Skill 配置
@@ -57,6 +69,7 @@ function buildSkillFileContent(skill: SkillContent): string {
  */
 function writeSkillFile(skillsDir: string, skill: SkillContent): void {
   const safeName = toSafeDirectoryName(skill.name);
+  validateSkillName(skill.name, safeName);
   const skillDir = path.join(skillsDir, safeName);
 
   try {

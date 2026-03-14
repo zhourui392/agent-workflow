@@ -171,8 +171,9 @@ export function extractToolResults(
         output = block.content;
       } else if (Array.isArray(block.content)) {
         output = block.content
-          .filter((c: any) => c?.type === 'text')
-          .map((c: any) => c.text)
+          .filter((c: unknown): c is { type: string; text: string } =>
+            typeof c === 'object' && c !== null && 'type' in c && (c as { type: string }).type === 'text')
+          .map((c: { type: string; text: string }) => c.text)
           .join('\n');
       }
       events.push({
@@ -243,6 +244,27 @@ interface StreamContext {
 }
 
 /**
+ * Claude SDK 流式消息结构（松散类型，覆盖已知字段）
+ */
+interface SdkStreamMessage {
+  type: string;
+  subtype?: string;
+  message?: {
+    content: unknown;
+  };
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+  tools?: string[];
+  mcp_servers?: { name: string; status: string }[];
+  model?: string;
+  total_cost_usd?: number;
+  duration_ms?: number;
+  num_turns?: number;
+}
+
+/**
  * 处理 SDK 流式消息，提取事件和输出
  *
  * @param msg SDK 流式消息
@@ -250,17 +272,16 @@ interface StreamContext {
  * @param onEvent 流式事件回调
  */
 function processStreamMessage(
-  msg: { type: string; [key: string]: unknown },
+  msg: SdkStreamMessage,
   ctx: StreamContext,
   onEvent?: (event: StepEvent) => void
 ): void {
-  if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
-    const sysMsg = msg as any;
+  if (msg.type === 'system' && msg.subtype === 'init') {
     onEvent?.({
       type: 'init',
-      tools: sysMsg.tools || [],
-      mcpServers: sysMsg.mcp_servers || [],
-      model: sysMsg.model || ''
+      tools: msg.tools || [],
+      mcpServers: msg.mcp_servers || [],
+      model: msg.model || ''
     });
     return;
   }
@@ -271,7 +292,7 @@ function processStreamMessage(
   }
 
   if (msg.type === 'user') {
-    const content = (msg as any).message?.content;
+    const content = msg.message?.content;
     const toolResults = extractToolResults(content, ctx.toolNameMap, ctx.turnIndex);
     for (const event of toolResults) {
       onEvent?.(event);
@@ -292,11 +313,11 @@ function processStreamMessage(
  * @param onEvent 事件回调
  */
 function processAssistantMessage(
-  msg: { type: string; [key: string]: unknown },
+  msg: SdkStreamMessage,
   ctx: StreamContext,
   onEvent?: (event: StepEvent) => void
 ): void {
-  const content = (msg as any).message?.content;
+  const content = msg.message?.content;
 
   if (Array.isArray(content)) {
     for (const block of content) {
@@ -344,21 +365,20 @@ function processAssistantMessage(
  * @param onEvent 事件回调
  */
 function processResultMessage(
-  msg: { type: string; [key: string]: unknown },
+  msg: SdkStreamMessage,
   ctx: StreamContext,
   onEvent?: (event: StepEvent) => void
 ): void {
-  const resultMsg = msg as any;
-  const usage = resultMsg.usage;
+  const usage = msg.usage;
   if (usage) {
     ctx.tokensUsed = (usage.input_tokens || 0) + (usage.output_tokens || 0);
   }
   onEvent?.({
     type: 'result',
-    success: resultMsg.subtype === 'success',
-    totalCostUsd: resultMsg.total_cost_usd || 0,
-    durationMs: resultMsg.duration_ms || 0,
-    numTurns: resultMsg.num_turns || 0,
+    success: msg.subtype === 'success',
+    totalCostUsd: msg.total_cost_usd || 0,
+    durationMs: msg.duration_ms || 0,
+    numTurns: msg.num_turns || 0,
     inputTokens: usage?.input_tokens || 0,
     outputTokens: usage?.output_tokens || 0
   });
@@ -395,7 +415,7 @@ export async function executeStep(
     const q = query({ prompt, options: options as any });
 
     for await (const msg of q) {
-      processStreamMessage(msg as any, ctx, onEvent);
+      processStreamMessage(msg as SdkStreamMessage, ctx, onEvent);
     }
 
     return {

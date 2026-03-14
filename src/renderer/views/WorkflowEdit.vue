@@ -177,8 +177,9 @@ async function handleSave() {
     await store.saveWorkflow(payload)
     ElMessage.success('保存成功')
     router.push('/')
-  } catch (e: any) {
-    ElMessage.error('保存失败: ' + (e.response?.data?.detail || e.message))
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    ElMessage.error('保存失败: ' + msg)
   } finally { saving.value = false }
 }
 
@@ -191,7 +192,7 @@ async function loadConfigOptions() {
     ])
     mcpServerList.value = mcpRes.data
     skillList.value = skillRes.data
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Failed to load config options:', e)
   } finally {
     configLoading.value = false
@@ -210,7 +211,7 @@ onMounted(async () => {
         form.working_directory = data.working_directory || ''
         form.enabled = data.enabled ?? true; form.schedule = data.schedule || ''
         form.steps = data.steps?.length
-          ? data.steps.map((s: any) => ({
+          ? data.steps.map((s: Record<string, unknown>) => ({
               ...s,
               validation_enabled: !!s.validation_prompt,
               validation_prompt: s.validation_prompt || '',

@@ -54,6 +54,7 @@ import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { formatDate } from '@/utils/dateUtils'
+import type { WorkflowData } from '@/api/workflows'
 
 const store = useWorkflowStore()
 const router = useRouter()
@@ -61,35 +62,42 @@ const runningId = ref<string | null>(null)
 
 onMounted(() => { store.fetchWorkflows() })
 
-async function handleToggle(row: any) {
+function extractErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message
+  return String(e)
+}
+
+async function handleToggle(row: WorkflowData) {
   try {
     await store.toggle(row.id)
     ElMessage.success(row.enabled ? '已启用' : '已停用')
-  } catch {
-    ElMessage.error('操作失败')
+  } catch (e: unknown) {
+    console.error('Toggle failed:', e)
+    ElMessage.error('操作失败: ' + extractErrorMessage(e))
     row.enabled = !row.enabled
   }
 }
 
-async function handleRun(row: any) {
+async function handleRun(row: WorkflowData) {
   runningId.value = row.id
   try {
     const executionId = await store.run(row.id)
     ElMessage.success('已触发执行')
     router.push(`/executions/${executionId}`)
-  } catch (e: any) {
-    ElMessage.error('触发失败: ' + (e.response?.data?.detail || e.message))
+  } catch (e: unknown) {
+    ElMessage.error('触发失败: ' + extractErrorMessage(e))
   } finally {
     runningId.value = null
   }
 }
 
-async function handleDelete(row: any) {
+async function handleDelete(row: WorkflowData) {
   try {
     await store.removeWorkflow(row.id)
     ElMessage.success('已删除')
-  } catch {
-    ElMessage.error('删除失败')
+  } catch (e: unknown) {
+    console.error('Delete failed:', e)
+    ElMessage.error('删除失败: ' + extractErrorMessage(e))
   }
 }
 </script>

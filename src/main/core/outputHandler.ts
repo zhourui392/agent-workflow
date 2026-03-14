@@ -135,6 +135,19 @@ function formatAsMarkdown(result: ExecutionResult): string {
 }
 
 /**
+ * 校验 Webhook URL，仅允许 http/https 协议
+ *
+ * @param url 待校验 URL
+ */
+function validateWebhookUrl(url: string): void {
+  const parsed = new URL(url);
+  const allowedProtocols = ['http:', 'https:'];
+  if (!allowedProtocols.includes(parsed.protocol)) {
+    throw new Error(`Webhook URL 协议不允许: ${parsed.protocol}，仅支持 http/https`);
+  }
+}
+
+/**
  * 发送Webhook通知
  *
  * @param webhookConfig Webhook配置
@@ -145,6 +158,7 @@ async function sendWebhook(
   result: ExecutionResult
 ): Promise<void> {
   try {
+    validateWebhookUrl(webhookConfig.url);
     const method = webhookConfig.method || 'POST';
     const headers = {
       'Content-Type': 'application/json',
@@ -164,7 +178,7 @@ async function sendWebhook(
       url: webhookConfig.url,
       headers,
       data: payload,
-      timeout: 30000
+      timeout: webhookConfig.timeoutMs || 30000
     });
 
     log.info(`Webhook sent to: ${webhookConfig.url}`);

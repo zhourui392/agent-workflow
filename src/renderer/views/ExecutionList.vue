@@ -2,7 +2,7 @@
   <div class="execution-list">
     <div class="page-header">
       <h2>执行历史</h2>
-      <el-button @click="store.fetchExecutions()" :loading="store.loading">
+      <el-button @click="loadPage(currentPage)" :loading="store.loading">
         <el-icon><Refresh /></el-icon> 刷新
       </el-button>
     </div>
@@ -36,11 +36,21 @@
         <template #default="{ row }">{{ row.total_tokens?.toLocaleString() || '-' }}</template>
       </el-table-column>
     </el-table>
+
+    <div class="pagination-wrapper">
+      <el-pagination
+        v-model:current-page="currentPage"
+        :page-size="pageSize"
+        :total="totalEstimate"
+        layout="prev, pager, next"
+        @current-change="loadPage"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
 import { Refresh } from '@element-plus/icons-vue'
@@ -50,13 +60,30 @@ import { formatDate, formatDuration } from '@/utils/dateUtils'
 const store = useExecutionStore()
 const router = useRouter()
 
-onMounted(() => { store.fetchExecutions() })
+const pageSize = 20
+const currentPage = ref(1)
+const totalEstimate = ref(0)
 
-function handleRowClick(row: any) { router.push(`/executions/${row.id}`) }
+async function loadPage(page: number) {
+  currentPage.value = page
+  const offset = (page - 1) * pageSize
+  await store.fetchExecutions({ limit: pageSize, offset })
+  // 估算总数：如果返回满页，假设还有更多
+  if (store.executions.length === pageSize) {
+    totalEstimate.value = Math.max(totalEstimate.value, page * pageSize + 1)
+  } else {
+    totalEstimate.value = (page - 1) * pageSize + store.executions.length
+  }
+}
+
+onMounted(() => { loadPage(1) })
+
+function handleRowClick(row: { id: string }) { router.push(`/executions/${row.id}`) }
 </script>
 
 <style scoped>
 .execution-list { padding: 20px; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h2 { margin: 0; }
+.pagination-wrapper { display: flex; justify-content: center; margin-top: 16px; }
 </style>

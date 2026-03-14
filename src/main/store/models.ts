@@ -57,6 +57,7 @@ export interface WorkflowOutput {
     url: string;
     method?: 'POST' | 'PUT';
     headers?: Record<string, string>;
+    timeoutMs?: number;
   };
 }
 

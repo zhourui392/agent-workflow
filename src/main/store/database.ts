@@ -103,6 +103,8 @@ function initializeTables(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_step_executions_execution_id ON step_executions(execution_id);
     CREATE INDEX IF NOT EXISTS idx_mcp_servers_enabled ON mcp_servers(enabled);
     CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(enabled);
+    CREATE INDEX IF NOT EXISTS idx_workflows_enabled_schedule ON workflows(enabled, schedule);
+    CREATE INDEX IF NOT EXISTS idx_step_executions_exec_step ON step_executions(execution_id, step_index);
   `);
 
   runMigrations(database);
