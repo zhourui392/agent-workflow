@@ -69,7 +69,7 @@ function findClaudeExecutable(): string | undefined {
  * @param mcpServers 原始 MCP 配置
  * @returns 过滤后的有效配置，全部无效时返回 undefined
  */
-function getValidMcpServers(
+export function getValidMcpServers(
   mcpServers?: Record<string, McpServerConfig>
 ): Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined {
   if (!mcpServers) {
@@ -113,7 +113,7 @@ async function getClaudeCode(): Promise<ClaudeCodeModule> {
  * @param content 消息内容
  * @returns 提取的文本
  */
-function extractText(content: unknown): string {
+export function extractText(content: unknown): string {
   if (typeof content === 'string') {
     return content;
   }
@@ -141,7 +141,7 @@ function extractText(content: unknown): string {
  * @param maxLen 最大长度
  * @returns 截断后的字符串
  */
-function truncate(str: string, maxLen: number): string {
+export function truncate(str: string, maxLen: number): string {
   return str.length > maxLen ? str.substring(0, maxLen) + '...' : str;
 }
 
@@ -153,7 +153,7 @@ function truncate(str: string, maxLen: number): string {
  * @param turnIndex 当前轮次
  * @returns 工具结果事件列表
  */
-function extractToolResults(
+export function extractToolResults(
   content: unknown,
   toolNameMap: Map<string, string>,
   turnIndex: number
