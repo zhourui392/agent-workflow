@@ -157,8 +157,8 @@ export async function toggleWorkflow(id: string) {
   };
 }
 
-export async function runWorkflow(id: string) {
-  const response = await runWorkflowApi(id);
+export async function runWorkflow(id: string, inputs?: Record<string, unknown>) {
+  const response = await runWorkflowApi(id, inputs);
   return {
     data: { execution_id: response.data || '' }
   };

@@ -44,6 +44,11 @@
         </template>
       </el-table-column>
     </el-table>
+    <RunInputDialog
+      v-model="showInputDialog"
+      :inputs="pendingRunInputs"
+      @confirm="handleRunWithInputs"
+    />
   </div>
 </template>
 
@@ -55,10 +60,14 @@ import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { formatDate } from '@/utils/dateUtils'
 import type { WorkflowData } from '@/api/workflows'
+import RunInputDialog, { type InputDefinition } from '@/components/RunInputDialog.vue'
 
 const store = useWorkflowStore()
 const router = useRouter()
 const runningId = ref<string | null>(null)
+const showInputDialog = ref(false)
+const pendingRunInputs = ref<InputDefinition[]>([])
+const pendingRunId = ref<string | null>(null)
 
 onMounted(() => { store.fetchWorkflows() })
 
@@ -79,9 +88,26 @@ async function handleToggle(row: WorkflowData) {
 }
 
 async function handleRun(row: WorkflowData) {
-  runningId.value = row.id
+  const inputs = row.inputs?.items as InputDefinition[] | undefined
+  if (inputs && inputs.length > 0) {
+    pendingRunId.value = row.id!
+    pendingRunInputs.value = inputs
+    showInputDialog.value = true
+    return
+  }
+  await executeRun(row.id!)
+}
+
+async function handleRunWithInputs(values: Record<string, unknown>) {
+  if (pendingRunId.value) {
+    await executeRun(pendingRunId.value, values)
+  }
+}
+
+async function executeRun(id: string, inputs?: Record<string, unknown>) {
+  runningId.value = id
   try {
-    const executionId = await store.run(row.id)
+    const executionId = await store.run(id, inputs)
     ElMessage.success('已触发执行')
     router.push(`/executions/${executionId}`)
   } catch (e: unknown) {

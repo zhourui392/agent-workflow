@@ -24,6 +24,57 @@
         </el-form-item>
       </el-card>
 
+      <!-- Inputs -->
+      <el-card class="section-card">
+        <template #header>
+          <div class="section-header">
+            <span>输入参数</span>
+            <el-button size="small" type="primary" @click="addInput"><el-icon><Plus /></el-icon> 添加参数</el-button>
+          </div>
+        </template>
+        <el-empty v-if="form.inputs.length === 0" description="暂无输入参数，步骤 Prompt 中可用 {{inputs.xxx}} 引用" :image-size="60" />
+        <el-table v-else :data="form.inputs" border size="small">
+          <el-table-column label="参数名" min-width="120">
+            <template #default="{ row }">
+              <el-input v-model="row.name" placeholder="参数名" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" width="120">
+            <template #default="{ row }">
+              <el-select v-model="row.type" size="small">
+                <el-option label="string" value="string" />
+                <el-option label="number" value="number" />
+                <el-option label="boolean" value="boolean" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="必填" width="70" align="center">
+            <template #default="{ row }">
+              <el-checkbox v-model="row.required" />
+            </template>
+          </el-table-column>
+          <el-table-column label="默认值" min-width="120">
+            <template #default="{ row }">
+              <el-switch v-if="row.type === 'boolean'" v-model="row.default" size="small" />
+              <el-input-number v-else-if="row.type === 'number'" v-model="row.default" size="small" :controls="false" style="width: 100%" />
+              <el-input v-else v-model="row.default" placeholder="默认值" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="描述" min-width="150">
+            <template #default="{ row }">
+              <el-input v-model="row.description" placeholder="参数描述" size="small" />
+            </template>
+          </el-table-column>
+          <el-table-column label="" width="60" align="center">
+            <template #default="{ $index }">
+              <el-button size="small" type="danger" text @click="removeInput($index)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
       <!-- Steps -->
       <el-card class="section-card">
         <template #header>
@@ -113,7 +164,7 @@ import { computed, onMounted, reactive, ref, toRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Delete } from '@element-plus/icons-vue'
 import { listAllSkills, type SkillData } from '@/api/skills'
 import StepEditor, { type StepFormData } from '@/components/StepEditor.vue'
 
@@ -133,6 +184,7 @@ const form = reactive({
   working_directory: '',
   enabled: true,
   schedule: '',
+  inputs: [] as Array<{ name: string; type: 'string' | 'number' | 'boolean'; required: boolean; default?: string | number | boolean; description: string }>,
   steps: [createEmptyStep()] as StepFormData[],
   rules: null as Record<string, any> | null,
   limits: null as Record<string, any> | null,
@@ -172,6 +224,8 @@ const retryDelayMs = computed({
   set: (val: number) => { if (!form.retry_config) form.retry_config = {}; form.retry_config.delayMs = val }
 })
 
+function addInput() { form.inputs.push({ name: '', type: 'string', required: false, description: '' }) }
+function removeInput(index: number) { form.inputs.splice(index, 1) }
 function addStep() { form.steps.push(createEmptyStep()) }
 function removeStep(index: number) { form.steps.splice(index, 1) }
 
@@ -188,6 +242,7 @@ async function handleSave() {
       working_directory: rawForm.working_directory || null,
       enabled: rawForm.enabled,
       schedule: rawForm.schedule || null,
+      inputs: rawForm.inputs.length > 0 ? { items: rawForm.inputs.map(i => toRaw(i)) } : undefined,
       steps: rawForm.steps.map(s => ({ ...toRaw(s) })),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
       limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : undefined,
@@ -234,6 +289,15 @@ onMounted(async () => {
               skill_ids: s.skill_ids || []
             }))
           : [createEmptyStep()]
+        form.inputs = Array.isArray(data.inputs?.items)
+          ? data.inputs.items.map((i: Record<string, unknown>) => ({
+              name: String(i.name || ''),
+              type: (i.type as 'string' | 'number' | 'boolean') || 'string',
+              required: !!i.required,
+              default: i.default as string | number | boolean | undefined,
+              description: String(i.description || '')
+            }))
+          : []
         form.rules = data.rules || null; form.limits = data.limits || null
         form.on_failure = data.on_failure || 'stop'
         form.retry_config = data.retry_config || null
