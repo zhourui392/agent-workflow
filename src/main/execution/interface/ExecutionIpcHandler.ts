@@ -11,9 +11,13 @@ import { ipcMain } from 'electron';
 import { IdSchema, ExecutionListParamsSchema, validateInput } from '../../shared/interface';
 import { executionToDTO } from '../../shared/interface/dtoMapper';
 import type { QueryExecutionUseCase } from '../application/QueryExecutionUseCase';
+import type { CancelExecutionUseCase } from '../application/CancelExecutionUseCase';
 
 export class ExecutionIpcHandler {
-  constructor(private readonly queryUseCase: QueryExecutionUseCase) {}
+  constructor(
+    private readonly queryUseCase: QueryExecutionUseCase,
+    private readonly cancelUseCase: CancelExecutionUseCase
+  ) {}
 
   register(): void {
     ipcMain.handle('executions:list', (_, params?: unknown) => {
@@ -24,6 +28,10 @@ export class ExecutionIpcHandler {
     ipcMain.handle('executions:get', (_, id: unknown) => {
       const e = this.queryUseCase.get(validateInput(IdSchema, id));
       return e ? executionToDTO(e) : null;
+    });
+
+    ipcMain.handle('executions:cancel', (_, id: unknown) => {
+      return this.cancelUseCase.cancel(validateInput(IdSchema, id));
     });
   }
 }

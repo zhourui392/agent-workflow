@@ -101,6 +101,51 @@ describe('CreateWorkflowSchema', () => {
     })).toThrow();
   });
 
+  it('should accept step with validation rules', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        name: 'Step 1',
+        prompt: 'Do something',
+        validation: {
+          prompt: 'check it',
+          rules: [
+            { type: 'contains', value: 'expected' },
+            { type: 'regex', pattern: '\\d+' }
+          ]
+        }
+      }]
+    });
+    expect(result.steps[0].validation?.rules).toHaveLength(2);
+  });
+
+  it('should accept step with only validation rules (no prompt)', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        name: 'Step 1',
+        prompt: 'Do something',
+        validation: {
+          rules: [{ type: 'contains', value: 'ok' }]
+        }
+      }]
+    });
+    expect(result.steps[0].validation?.rules).toHaveLength(1);
+  });
+
+  it('should reject invalid validation rule type', () => {
+    expect(() => validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        name: 'Step 1',
+        prompt: 'Do',
+        validation: {
+          rules: [{ type: 'invalid' }]
+        }
+      }]
+    })).toThrow();
+  });
+
   it('should reject retryConfig with maxAttempts > 10', () => {
     expect(() => validateInput(CreateWorkflowSchema, {
       name: 'Test',
@@ -155,6 +200,11 @@ describe('ExecutionListParamsSchema', () => {
   it('should accept undefined', () => {
     const result = validateInput(ExecutionListParamsSchema, undefined);
     expect(result).toBeUndefined();
+  });
+
+  it('should accept cancelled status', () => {
+    const result = validateInput(ExecutionListParamsSchema, { status: 'cancelled' });
+    expect(result?.status).toBe('cancelled');
   });
 
   it('should reject invalid status', () => {

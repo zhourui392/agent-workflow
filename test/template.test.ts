@@ -5,7 +5,7 @@
  * @since 2026/03/14
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { TemplateEngine } from '../src/main/execution/domain/service/TemplateEngine'
 
 const engine = new TemplateEngine()
@@ -14,30 +14,6 @@ const extractVariables = engine.extractVariables.bind(engine)
 const validateTemplate = engine.validate.bind(engine)
 
 describe('renderTemplate', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(2026, 2, 14, 10, 30, 45)) // 2026-03-14 10:30:45
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('替换内置变量 {{today}}', () => {
-    const result = renderTemplate('今天是 {{today}}')
-    expect(result).toBe('今天是 2026-03-14')
-  })
-
-  it('替换内置变量 {{yesterday}}', () => {
-    const result = renderTemplate('昨天是 {{yesterday}}')
-    expect(result).toBe('昨天是 2026-03-13')
-  })
-
-  it('替换内置变量 {{now}}', () => {
-    const result = renderTemplate('现在是 {{now}}')
-    expect(result).toBe('现在是 2026-03-14 10:30:45')
-  })
-
   it('替换上下文输入变量 {{inputs.xxx}}', () => {
     const context = { inputs: { name: 'Alice', age: 30 } }
     const result = renderTemplate('Hello {{inputs.name}}, age {{inputs.age}}', context)
@@ -87,28 +63,52 @@ describe('renderTemplate', () => {
     expect(result).toBe('值: {{inputs.empty}}')
   })
 
+  it('替换中文步骤名变量 {{steps.分析数据.output}}', () => {
+    const context = {
+      steps: { '分析数据': { output: '数据分析完成' } }
+    }
+    const result = renderTemplate('结果: {{steps.分析数据.output}}', context)
+    expect(result).toBe('结果: 数据分析完成')
+  })
+
+  it('替换连字符步骤名变量 {{steps.step-1.output}}', () => {
+    const context = {
+      steps: { 'step-1': { output: 'first done' } }
+    }
+    const result = renderTemplate('结果: {{steps.step-1.output}}', context)
+    expect(result).toBe('结果: first done')
+  })
+
+  it('按索引取步骤输出 {{steps.0.output}}', () => {
+    const context = {
+      steps: { 'first-step': { output: 'indexed output' } }
+    }
+    const result = renderTemplate('结果: {{steps.0.output}}', context)
+    expect(result).toBe('结果: indexed output')
+  })
+
   it('同一模板中混合多种变量类型', () => {
     const context = {
       inputs: { user: 'Alice' },
       steps: { analyze: { output: 'OK' } }
     }
     const result = renderTemplate(
-      '{{today}} {{inputs.user}} {{steps.analyze.output}} {{missing}}',
+      '{{inputs.user}} {{steps.analyze.output}} {{missing}}',
       context
     )
-    expect(result).toBe('2026-03-14 Alice OK {{missing}}')
+    expect(result).toBe('Alice OK {{missing}}')
   })
 })
 
 describe('extractVariables', () => {
   it('提取所有变量名', () => {
-    const vars = extractVariables('{{today}} and {{inputs.name}} and {{steps.s1.output}}')
-    expect(vars).toEqual(['today', 'inputs.name', 'steps.s1.output'])
+    const vars = extractVariables('{{inputs.name}} and {{steps.s1.output}}')
+    expect(vars).toEqual(['inputs.name', 'steps.s1.output'])
   })
 
   it('去重同名变量', () => {
-    const vars = extractVariables('{{today}} {{today}} {{today}}')
-    expect(vars).toEqual(['today'])
+    const vars = extractVariables('{{inputs.x}} {{inputs.x}} {{inputs.x}}')
+    expect(vars).toEqual(['inputs.x'])
   })
 
   it('无变量模板返回空数组', () => {
@@ -125,14 +125,14 @@ describe('extractVariables', () => {
     const vars = extractVariables('')
     expect(vars).toEqual([])
   })
+
+  it('提取含中文和连字符的变量名', () => {
+    const vars = extractVariables('{{steps.分析数据.output}} {{steps.step-1.output}}')
+    expect(vars).toEqual(['steps.分析数据.output', 'steps.step-1.output'])
+  })
 })
 
 describe('validateTemplate', () => {
-  it('内置变量不报告为未解析', () => {
-    const unresolved = validateTemplate('{{today}} {{yesterday}} {{now}}')
-    expect(unresolved).toEqual([])
-  })
-
   it('上下文中存在的变量不报告', () => {
     const context = { inputs: { name: 'test' } }
     const unresolved = validateTemplate('{{inputs.name}}', context)
@@ -146,12 +146,18 @@ describe('validateTemplate', () => {
 
   it('混合有效和无效变量', () => {
     const context = { inputs: { name: 'test' } }
-    const unresolved = validateTemplate('{{today}} {{inputs.name}} {{inputs.age}}', context)
+    const unresolved = validateTemplate('{{inputs.name}} {{inputs.age}}', context)
     expect(unresolved).toEqual(['inputs.age'])
   })
 
   it('无变量模板返回空数组', () => {
     const unresolved = validateTemplate('no variables')
+    expect(unresolved).toEqual([])
+  })
+
+  it('含中文变量名可正确判断', () => {
+    const context = { steps: { '分析数据': { output: 'done' } } }
+    const unresolved = validateTemplate('{{steps.分析数据.output}}', context)
     expect(unresolved).toEqual([])
   })
 })

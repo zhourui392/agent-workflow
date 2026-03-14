@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { listWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow, toggleWorkflow, runWorkflow } from '@/api/workflows'
+import { listWorkflows, getWorkflow, createWorkflow, updateWorkflow, deleteWorkflow, toggleWorkflow, cloneWorkflow, runWorkflow } from '@/api/workflows'
 import type { WorkflowData } from '@/api/workflows'
 
 export const useWorkflowStore = defineStore('workflow', () => {
@@ -62,10 +62,18 @@ export const useWorkflowStore = defineStore('workflow', () => {
     return data
   }
 
+  async function clone(id: string) {
+    const { data } = await cloneWorkflow(id);
+    if (data) {
+      workflows.value.unshift(data);
+    }
+    return data;
+  }
+
   async function run(id: string, inputs?: Record<string, unknown>) {
     const { data } = await runWorkflow(id, inputs)
     return data.execution_id
   }
 
-  return { workflows, currentWorkflow, loading, error, fetchWorkflows, fetchWorkflow, saveWorkflow, removeWorkflow, toggle, run }
+  return { workflows, currentWorkflow, loading, error, fetchWorkflows, fetchWorkflow, saveWorkflow, removeWorkflow, toggle, clone, run }
 })

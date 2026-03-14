@@ -89,6 +89,8 @@
             :index="index"
             :skills="skillList"
             :disableRemove="form.steps.length <= 1"
+            :workflow-inputs="form.inputs"
+            :prior-steps="form.steps.slice(0, index)"
             @update:step="form.steps[index] = $event"
             @remove="removeStep(index)"
           />
@@ -199,6 +201,7 @@ function createEmptyStep(): StepFormData {
     max_turns: 30,
     validation_enabled: false,
     validation_prompt: '',
+    validation_rules: [],
     skill_ids: []
   }
 }
@@ -284,8 +287,9 @@ onMounted(async () => {
         form.steps = data.steps?.length
           ? data.steps.map((s: Record<string, unknown>) => ({
               ...s,
-              validation_enabled: !!s.validation_prompt,
+              validation_enabled: !!s.validation_prompt || (Array.isArray(s.validation_rules) && s.validation_rules.length > 0),
               validation_prompt: s.validation_prompt || '',
+              validation_rules: (s.validation_rules as any[]) || [],
               skill_ids: s.skill_ids || []
             }))
           : [createEmptyStep()]

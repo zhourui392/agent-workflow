@@ -74,6 +74,28 @@ export class WorkflowApplicationService {
     return workflow;
   }
 
+  clone(id: string): Workflow | null {
+    const source = this.repo.findById(id);
+    if (!source) return null;
+
+    const cloneData: CreateWorkflowRequest = {
+      name: `${source.name} (Copy)`,
+      enabled: false,
+      schedule: source.schedule,
+      inputs: source.inputs,
+      steps: source.steps,
+      rules: source.rules,
+      skills: source.skills,
+      limits: source.limits,
+      output: source.output,
+      workingDirectory: source.workingDirectory,
+      onFailure: source.onFailure,
+      retryConfig: source.retryConfig
+    };
+
+    return this.create(cloneData);
+  }
+
   async run(id: string, inputs: Record<string, unknown> = {}): Promise<string | null> {
     const workflow = this.repo.findById(id);
     if (!workflow) return null;

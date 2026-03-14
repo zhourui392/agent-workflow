@@ -26,7 +26,12 @@ const StepSchema = z.object({
     delayMs: z.number().int().min(100).max(60000).optional()
   }).optional(),
   validation: z.object({
-    prompt: z.string().min(1)
+    prompt: z.string().min(1).optional(),
+    rules: z.array(z.object({
+      type: z.enum(['regex', 'contains']),
+      pattern: z.string().optional(),
+      value: z.string().optional()
+    })).optional()
   }).optional(),
   skillIds: z.array(z.string()).optional()
 });
@@ -92,7 +97,7 @@ export const RunWorkflowInputsSchema = z.record(z.string(), z.unknown()).optiona
 
 export const ExecutionListParamsSchema = z.object({
   workflowId: z.string().optional(),
-  status: z.enum(['pending', 'running', 'success', 'failed']).optional(),
+  status: z.enum(['pending', 'running', 'success', 'failed', 'cancelled']).optional(),
   limit: z.number().int().positive().max(1000).optional(),
   offset: z.number().int().min(0).optional()
 }).optional();

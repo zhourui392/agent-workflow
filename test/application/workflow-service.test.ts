@@ -172,6 +172,77 @@ describe('WorkflowApplicationService', () => {
     });
   });
 
+  // ── clone ──────────────────────────────────────────────────────────
+  describe('clone', () => {
+    it('returns cloned workflow with "(Copy)" suffix and enabled=false', () => {
+      const source = createTestWorkflow({
+        name: 'My Flow',
+        schedule: '0 9 * * *',
+        enabled: true,
+        steps: [{ name: 'S1', prompt: 'do it' }],
+        rules: 'some rules',
+        skills: { skill1: 'content1' },
+        limits: { maxTokens: 5000 },
+        onFailure: 'retry'
+      });
+      (repo.findById as ReturnType<typeof vi.fn>).mockReturnValue(source);
+
+      const clonedWf = createTestWorkflow({ name: 'My Flow (Copy)', enabled: false });
+      (repo.create as ReturnType<typeof vi.fn>).mockReturnValue(clonedWf);
+
+      const result = service.clone('wf-001');
+
+      expect(repo.findById).toHaveBeenCalledWith('wf-001');
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'My Flow (Copy)',
+          enabled: false,
+          steps: [{ name: 'S1', prompt: 'do it' }],
+          rules: 'some rules',
+          skills: { skill1: 'content1' },
+          limits: { maxTokens: 5000 },
+          onFailure: 'retry'
+        })
+      );
+      expect(result).toBe(clonedWf);
+    });
+
+    it('returns null for non-existent workflow', () => {
+      (repo.findById as ReturnType<typeof vi.fn>).mockReturnValue(null);
+
+      const result = service.clone('non-existent');
+
+      expect(result).toBeNull();
+      expect(repo.create).not.toHaveBeenCalled();
+    });
+
+    it('preserves all fields including inputs, schedule, workingDirectory, retryConfig', () => {
+      const source = createTestWorkflow({
+        name: 'Full',
+        schedule: '*/5 * * * *',
+        enabled: true,
+        inputs: [{ name: 'param1', type: 'string' as any, required: true }],
+        steps: [{ name: 'S1', prompt: 'p' }],
+        workingDirectory: '/tmp/work',
+        retryConfig: { maxAttempts: 5, delayMs: 2000 },
+        onFailure: 'stop'
+      });
+      (repo.findById as ReturnType<typeof vi.fn>).mockReturnValue(source);
+      (repo.create as ReturnType<typeof vi.fn>).mockReturnValue(createTestWorkflow());
+
+      service.clone('wf-001');
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          schedule: '*/5 * * * *',
+          inputs: [{ name: 'param1', type: 'string', required: true }],
+          workingDirectory: '/tmp/work',
+          retryConfig: { maxAttempts: 5, delayMs: 2000 }
+        })
+      );
+    });
+  });
+
   // ── run ───────────────────────────────────────────────────────────
   describe('run', () => {
     it('calls pipeline.execute with workflow and returns executionId', async () => {

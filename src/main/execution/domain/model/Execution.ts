@@ -23,10 +23,11 @@ export interface ExecutionListParams {
  * 合法的状态转换表
  */
 const VALID_TRANSITIONS: Record<ExecutionStatus, ExecutionStatus[]> = {
-  pending: ['running', 'failed'],
-  running: ['success', 'failed'],
+  pending: ['running', 'failed', 'cancelled'],
+  running: ['success', 'failed', 'cancelled'],
   success: [],
-  failed: []
+  failed: [],
+  cancelled: []
 };
 
 export class Execution extends Entity {
@@ -76,7 +77,7 @@ export class Execution extends Entity {
   get errorMessage(): string | undefined { return this._errorMessage; }
 
   get isTerminal(): boolean {
-    return this._status === 'success' || this._status === 'failed';
+    return this._status === 'success' || this._status === 'failed' || this._status === 'cancelled';
   }
 
   /**
@@ -93,6 +94,15 @@ export class Execution extends Entity {
    */
   markSuccess(): void {
     this.transitionTo('success');
+    this._finishedAt = new Date().toISOString();
+  }
+
+  /**
+   * 标记执行取消
+   * @throws 当前状态不允许转换时抛出错误
+   */
+  markCancelled(): void {
+    this.transitionTo('cancelled');
     this._finishedAt = new Date().toISOString();
   }
 

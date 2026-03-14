@@ -2,9 +2,6 @@
  * 模板变量渲染引擎（领域服务）
  *
  * 支持的模板变量:
- * - {{today}}: 当前日期 YYYY-MM-DD
- * - {{yesterday}}: 昨天日期 YYYY-MM-DD
- * - {{now}}: 当前时间 YYYY-MM-DD HH:mm:ss
  * - {{inputs.xxx}}: 输入参数
  * - {{steps.<name>.output}}: 步骤输出
  *
@@ -18,36 +15,6 @@
 export interface TemplateContext {
   inputs?: Record<string, unknown>;
   steps?: Record<string, { output: string }>;
-}
-
-/**
- * 格式化日期为 YYYY-MM-DD
- */
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-/**
- * 格式化日期时间为 YYYY-MM-DD HH:mm:ss
- */
-function formatDateTime(date: Date): string {
-  const dateStr = formatDate(date);
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  return `${dateStr} ${hours}:${minutes}:${seconds}`;
-}
-
-/**
- * 获取昨天的日期
- */
-function getYesterday(): Date {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday;
 }
 
 /**
@@ -68,7 +35,16 @@ function getNestedValue(context: TemplateContext, path: string): unknown {
     if (typeof current !== 'object') {
       return undefined;
     }
-    current = (current as Record<string, unknown>)[part];
+    const record = current as Record<string, unknown>;
+    if (part in record) {
+      current = record[part];
+    } else if (/^\d+$/.test(part)) {
+      const entries = Object.entries(record);
+      const idx = parseInt(part, 10);
+      current = idx < entries.length ? entries[idx][1] : undefined;
+    } else {
+      current = undefined;
+    }
   }
 
   return current;
@@ -88,20 +64,8 @@ export class TemplateEngine {
    * @returns 渲染后的字符串
    */
   render(template: string, context: TemplateContext = {}): string {
-    const now = new Date();
-
-    const builtinVariables: Record<string, string> = {
-      today: formatDate(now),
-      yesterday: formatDate(getYesterday()),
-      now: formatDateTime(now)
-    };
-
-    return template.replace(/\{\{(\s*[\w.]+\s*)\}\}/g, (match, variableName: string) => {
+    return template.replace(/\{\{(\s*[^{}]+?\s*)\}\}/g, (match, variableName: string) => {
       const trimmedName = variableName.trim();
-
-      if (trimmedName in builtinVariables) {
-        return builtinVariables[trimmedName];
-      }
 
       const value = getNestedValue(context, trimmedName);
       if (value === undefined || value === null) {
@@ -123,7 +87,7 @@ export class TemplateEngine {
    * @returns 变量名列表（去重）
    */
   extractVariables(template: string): string[] {
-    const matches = template.matchAll(/\{\{(\s*[\w.]+\s*)\}\}/g);
+    const matches = template.matchAll(/\{\{(\s*[^{}]+?\s*)\}\}/g);
     const variables = new Set<string>();
 
     for (const match of matches) {
@@ -142,14 +106,9 @@ export class TemplateEngine {
    */
   validate(template: string, context: TemplateContext = {}): string[] {
     const variables = this.extractVariables(template);
-    const builtinVariables = ['today', 'yesterday', 'now'];
     const unresolvedVariables: string[] = [];
 
     for (const variable of variables) {
-      if (builtinVariables.includes(variable)) {
-        continue;
-      }
-
       const value = getNestedValue(context, variable);
       if (value === undefined) {
         unresolvedVariables.push(variable);

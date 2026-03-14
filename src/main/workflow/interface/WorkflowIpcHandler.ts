@@ -47,6 +47,11 @@ export class WorkflowIpcHandler {
       return w ? workflowToDTO(w) : null;
     });
 
+    ipcMain.handle('workflows:clone', (_, id: unknown) => {
+      const w = this.service.clone(validateInput(IdSchema, id));
+      return w ? workflowToDTO(w) : null;
+    });
+
     ipcMain.handle('workflows:run', async (_, id: unknown, inputs?: unknown) => {
       return this.service.run(
         validateInput(IdSchema, id),

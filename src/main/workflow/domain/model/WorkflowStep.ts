@@ -14,7 +14,12 @@ export interface WorkflowStep {
     delayMs?: number;
   };
   validation?: {
-    prompt: string;
+    prompt?: string;
+    rules?: Array<{
+      type: 'regex' | 'contains';
+      pattern?: string;
+      value?: string;
+    }>;
   };
   skillIds?: string[];
 }

@@ -177,7 +177,7 @@ export class SqliteExecutionRepository implements ExecutionRepository {
   updateStatus(id: string, status: ExecutionStatus, errorMessage?: string): void {
     const now = new Date().toISOString();
 
-    if (status === 'success' || status === 'failed') {
+    if (status === 'success' || status === 'failed' || status === 'cancelled') {
       const stmt = this.db.prepare(`
         UPDATE executions SET status = ?, finished_at = ?, error_message = ? WHERE id = ?
       `);

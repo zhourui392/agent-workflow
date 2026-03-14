@@ -10,8 +10,13 @@
       <el-input :model-value="step.name" @update:model-value="updateField('name', $event)" placeholder="如: analyze_code" />
     </el-form-item>
     <el-form-item label="Prompt">
-      <el-input :model-value="step.prompt" @update:model-value="updateField('prompt', $event)" type="textarea" :rows="4"
-        placeholder="步骤提示词，支持 {{today}}, {{steps.prev_step.output}} 等模板变量" />
+      <PromptEditor
+        :model-value="step.prompt"
+        @update:model-value="updateField('prompt', $event)"
+        :rows="4"
+        :workflow-inputs="workflowInputs"
+        :prior-steps="priorSteps"
+      />
     </el-form-item>
     <el-form-item label="最大轮次">
       <el-input-number :model-value="step.max_turns" @update:model-value="updateField('max_turns', $event)" :min="1" :max="100" />
@@ -23,6 +28,37 @@
     <el-form-item v-if="step.validation_enabled" label="验证提示词">
       <el-input :model-value="step.validation_prompt" @update:model-value="updateField('validation_prompt', $event)" type="textarea" :rows="3"
         placeholder="描述期望的输出标准，如：输出必须包含JSON格式的分析结果，且包含 summary 和 details 字段" />
+    </el-form-item>
+    <el-form-item v-if="step.validation_enabled" label="验证规则">
+      <div class="validation-rules">
+        <div v-for="(rule, rIdx) in step.validation_rules" :key="rIdx" class="rule-row">
+          <el-select :model-value="rule.type" @update:model-value="updateRule(rIdx, 'type', $event)" size="small" style="width: 120px">
+            <el-option label="包含" value="contains" />
+            <el-option label="正则" value="regex" />
+          </el-select>
+          <el-input
+            v-if="rule.type === 'contains'"
+            :model-value="rule.value"
+            @update:model-value="updateRule(rIdx, 'value', $event)"
+            size="small"
+            placeholder="输出应包含的文本"
+            style="flex: 1"
+          />
+          <el-input
+            v-else
+            :model-value="rule.pattern"
+            @update:model-value="updateRule(rIdx, 'pattern', $event)"
+            size="small"
+            placeholder="正则表达式"
+            style="flex: 1"
+          />
+          <el-button size="small" type="danger" text @click="removeRule(rIdx)">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </div>
+        <el-button size="small" @click="addRule">+ 添加规则</el-button>
+        <div class="form-tip">快速规则验证（无 LLM 调用成本），优先于验证提示词执行</div>
+      </div>
     </el-form-item>
     <el-form-item label="Skills">
       <el-select
@@ -52,16 +88,24 @@
 <script setup lang="ts">
 import { Delete } from '@element-plus/icons-vue'
 import type { SkillData } from '@/api/skills'
+import PromptEditor from './PromptEditor.vue'
 
 /**
  * 步骤表单数据结构
  */
+export interface ValidationRuleData {
+  type: 'regex' | 'contains'
+  pattern?: string
+  value?: string
+}
+
 export interface StepFormData {
   name: string
   prompt: string
   max_turns: number
   validation_enabled: boolean
   validation_prompt: string
+  validation_rules: ValidationRuleData[]
   skill_ids: string[]
 }
 
@@ -70,6 +114,8 @@ const props = defineProps<{
   index: number
   skills: SkillData[]
   disableRemove: boolean
+  workflowInputs?: { name: string }[]
+  priorSteps?: { name: string }[]
 }>()
 
 const emit = defineEmits<{
@@ -85,6 +131,23 @@ const emit = defineEmits<{
  */
 function updateField(field: keyof StepFormData, value: unknown) {
   emit('update:step', { ...props.step, [field]: value })
+}
+
+function addRule() {
+  const rules = [...(props.step.validation_rules || []), { type: 'contains' as const, value: '' }]
+  emit('update:step', { ...props.step, validation_rules: rules })
+}
+
+function removeRule(index: number) {
+  const rules = [...(props.step.validation_rules || [])]
+  rules.splice(index, 1)
+  emit('update:step', { ...props.step, validation_rules: rules })
+}
+
+function updateRule(index: number, field: string, value: unknown) {
+  const rules = [...(props.step.validation_rules || [])]
+  rules[index] = { ...rules[index], [field]: value }
+  emit('update:step', { ...props.step, validation_rules: rules })
 }
 </script>
 
@@ -105,5 +168,14 @@ function updateField(field: keyof StepFormData, value: unknown) {
   margin-left: 8px;
   font-size: 12px;
   color: #909399;
+}
+.validation-rules {
+  width: 100%;
+}
+.rule-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
 }
 </style>

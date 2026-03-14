@@ -10,7 +10,8 @@ const STATUS_TYPE_MAP: Record<string, string> = {
   failed: 'danger',
   running: 'primary',
   pending: 'info',
-  timeout: 'warning'
+  timeout: 'warning',
+  cancelled: 'warning'
 }
 
 const STATUS_LABEL_MAP: Record<string, string> = {
@@ -18,7 +19,8 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   failed: '失败',
   running: '运行中',
   pending: '等待中',
-  timeout: '超时'
+  timeout: '超时',
+  cancelled: '已取消'
 }
 
 /**
@@ -52,7 +54,8 @@ export function timelineType(status: string): string {
     success: 'success',
     failed: 'danger',
     running: 'primary',
-    pending: 'info'
+    pending: 'info',
+    cancelled: 'warning'
   }
   return map[status] || 'info'
 }

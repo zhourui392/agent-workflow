@@ -209,6 +209,32 @@ describe('Execution', () => {
     });
   });
 
+  describe('markCancelled', () => {
+    it('pending → cancelled', () => {
+      const exec = createTestExecution({ status: 'pending' });
+      exec.markCancelled();
+      expect(exec.status).toBe('cancelled');
+      expect(exec.finishedAt).toBeDefined();
+    });
+
+    it('running → cancelled', () => {
+      const exec = createTestExecution({ status: 'running' });
+      exec.markCancelled();
+      expect(exec.status).toBe('cancelled');
+      expect(exec.finishedAt).toBeDefined();
+    });
+
+    it('success → cancelled 抛出错误（终态不可取消）', () => {
+      const exec = createTestExecution({ status: 'success' });
+      expect(() => exec.markCancelled()).toThrow('非法状态转换');
+    });
+
+    it('failed → cancelled 抛出错误', () => {
+      const exec = createTestExecution({ status: 'failed' });
+      expect(() => exec.markCancelled()).toThrow('非法状态转换');
+    });
+  });
+
   describe('isTerminal', () => {
     it('success 是终态', () => {
       const exec = createTestExecution({ status: 'success' });
@@ -217,6 +243,11 @@ describe('Execution', () => {
 
     it('failed 是终态', () => {
       const exec = createTestExecution({ status: 'failed' });
+      expect(exec.isTerminal).toBe(true);
+    });
+
+    it('cancelled 是终态', () => {
+      const exec = createTestExecution({ status: 'cancelled' });
       expect(exec.isTerminal).toBe(true);
     });
 

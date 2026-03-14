@@ -14,6 +14,7 @@ import {
   updateWorkflow as updateWorkflowApi,
   deleteWorkflow as deleteWorkflowApi,
   toggleWorkflow as toggleWorkflowApi,
+  cloneWorkflow as cloneWorkflowApi,
   runWorkflow as runWorkflowApi,
   type WorkflowDTO,
   type WorkflowStep,
@@ -35,6 +36,7 @@ export interface StepConfig {
     delayMs?: number;
   };
   validation_prompt?: string;
+  validation_rules?: Array<{ type: 'regex' | 'contains'; pattern?: string; value?: string }>;
   skill_ids?: string[];
 }
 
@@ -72,6 +74,7 @@ function workflowToData(workflow: WorkflowDTO): WorkflowData {
       onFailure: step.onFailure,
       retryConfig: step.retryConfig,
       validation_prompt: step.validation?.prompt || '',
+      validation_rules: step.validation?.rules || [],
       skill_ids: step.skillIds
     })),
     rules: workflow.rules || null,
@@ -94,8 +97,11 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     maxTurns: step.max_turns,
     onFailure: step.onFailure,
     retryConfig: step.retryConfig,
-    validation: step.validation_prompt
-      ? { prompt: step.validation_prompt }
+    validation: (step.validation_prompt || (step.validation_rules && step.validation_rules.length > 0))
+      ? {
+          prompt: step.validation_prompt || undefined,
+          rules: step.validation_rules && step.validation_rules.length > 0 ? step.validation_rules : undefined
+        }
       : undefined,
     skillIds: step.skill_ids
   }));
@@ -152,6 +158,13 @@ export async function deleteWorkflow(id: string) {
 
 export async function toggleWorkflow(id: string) {
   const response = await toggleWorkflowApi(id);
+  return {
+    data: response.data ? workflowToData(response.data) : null
+  };
+}
+
+export async function cloneWorkflow(id: string) {
+  const response = await cloneWorkflowApi(id);
   return {
     data: response.data ? workflowToData(response.data) : null
   };

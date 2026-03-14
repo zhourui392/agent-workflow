@@ -10,6 +10,8 @@ import { PipelineOrchestrator } from '../src/main/execution/domain/service/Pipel
 import type { StepExecutor, ProgressNotifier, OutputProcessor } from '../src/main/execution/domain/service/PipelineOrchestrator';
 import type { ConfigMergeService } from '../src/main/configuration/domain/service/ConfigMergeService';
 import { TemplateEngine } from '../src/main/execution/domain/service/TemplateEngine';
+import { CancellationRegistry } from '../src/main/execution/domain/service/CancellationRegistry';
+import { RuleValidator } from '../src/main/execution/domain/service/RuleValidator';
 import {
   createTestWorkflow,
   createMockExecutionRepository,
@@ -25,6 +27,7 @@ describe('PipelineOrchestrator', () => {
   let configService: ConfigMergeService;
   let notifier: ProgressNotifier;
   let outputProcessor: OutputProcessor;
+  let cancellationRegistry: CancellationRegistry;
   let orchestrator: PipelineOrchestrator;
 
   beforeEach(() => {
@@ -34,8 +37,9 @@ describe('PipelineOrchestrator', () => {
     configService = createMockConfigMergeService();
     notifier = createMockProgressNotifier();
     outputProcessor = createMockOutputProcessor();
+    cancellationRegistry = new CancellationRegistry();
     orchestrator = new PipelineOrchestrator(
-      execRepo, stepExecutor, configService, notifier, outputProcessor, new TemplateEngine()
+      execRepo, stepExecutor, configService, notifier, outputProcessor, new TemplateEngine(), cancellationRegistry, new RuleValidator()
     );
   });
 
@@ -124,5 +128,111 @@ describe('PipelineOrchestrator', () => {
     await vi.waitFor(() => {
       expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'SDK crash');
     }, { timeout: 2000 });
+  });
+
+  it('should run rule validation before LLM validation', async () => {
+    vi.mocked(stepExecutor.execute).mockResolvedValue({
+      success: true, outputText: 'no match here', tokensUsed: 100
+    });
+
+    const workflow = createTestWorkflow({
+      steps: [{
+        name: 'Validated Step',
+        prompt: 'do it',
+        validation: {
+          prompt: 'check output',
+          rules: [{ type: 'contains', value: 'expected-keyword' }]
+        }
+      }]
+    });
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', expect.stringContaining('规则验证失败'));
+    }, { timeout: 2000 });
+
+    // LLM validateOutput should NOT have been called since rules failed first
+    expect(stepExecutor.validateOutput).not.toHaveBeenCalled();
+  });
+
+  it('should retry on validation failure when onFailure=retry', async () => {
+    let callCount = 0;
+    vi.mocked(stepExecutor.execute).mockImplementation(async () => {
+      callCount++;
+      return {
+        success: true,
+        outputText: callCount === 1 ? 'bad output' : 'good output with expected-keyword',
+        tokensUsed: 100
+      };
+    });
+
+    const workflow = createTestWorkflow({
+      onFailure: 'retry',
+      retryConfig: { maxAttempts: 3, delayMs: 10 },
+      steps: [{
+        name: 'Retry Step',
+        prompt: 'do it',
+        validation: {
+          rules: [{ type: 'contains', value: 'expected-keyword' }]
+        }
+      }]
+    });
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    }, { timeout: 2000 });
+
+    // Should have been called twice (first fail, second pass)
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('should fail after max retry attempts on validation failure', async () => {
+    vi.mocked(stepExecutor.execute).mockResolvedValue({
+      success: true, outputText: 'always bad', tokensUsed: 50
+    });
+
+    const workflow = createTestWorkflow({
+      onFailure: 'retry',
+      retryConfig: { maxAttempts: 2, delayMs: 10 },
+      steps: [{
+        name: 'Always Fail Step',
+        prompt: 'do it',
+        validation: {
+          rules: [{ type: 'contains', value: 'never-matches' }]
+        }
+      }]
+    });
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', expect.stringContaining('规则验证失败'));
+    }, { timeout: 2000 });
+
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('should cancel pipeline when cancellation is requested before step execution', async () => {
+    // Make first step slow so cancellation can be checked before second step
+    vi.mocked(stepExecutor.execute).mockImplementation(async () => {
+      // After first step completes, request cancellation
+      cancellationRegistry.requestCancellation('exec-001');
+      return { success: true, outputText: 'output', tokensUsed: 100 };
+    });
+
+    const workflow = createTestWorkflow({
+      steps: [
+        { name: 'Step 1', prompt: 'first' },
+        { name: 'Step 2', prompt: 'second' }
+      ]
+    });
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'cancelled', '用户取消');
+    }, { timeout: 2000 });
+
+    // Only first step should have executed
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
   });
 });

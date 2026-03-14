@@ -18,6 +18,8 @@ import type { StepResult, ValidationResult, ExecutionResult, ExecutionProgressEv
 import type { ExecutionStatus, TriggerType } from '../model/ExecutionStatus';
 import type { TemplateContext } from './TemplateEngine';
 import { TemplateEngine } from './TemplateEngine';
+import type { CancellationRegistry } from './CancellationRegistry';
+import type { RuleValidator, ValidationRule } from './RuleValidator';
 
 // ========== 依赖注入接口 ==========
 
@@ -63,7 +65,8 @@ export interface WorkflowStepRef {
     delayMs?: number;
   };
   validation?: {
-    prompt: string;
+    prompt?: string;
+    rules?: ValidationRule[];
   };
   skillIds?: string[];
 }
@@ -116,7 +119,9 @@ export class PipelineOrchestrator {
     private readonly configMergeService: ConfigMergeService,
     private readonly progressNotifier: ProgressNotifier,
     private readonly outputProcessor: OutputProcessor,
-    private readonly templateEngine: TemplateEngine
+    private readonly templateEngine: TemplateEngine,
+    private readonly cancellationRegistry?: CancellationRegistry,
+    private readonly ruleValidator?: RuleValidator
   ) {}
 
   /**
@@ -165,6 +170,12 @@ export class PipelineOrchestrator {
       const mergedConfig = this.configMergeService.mergeWorkflowConfig(globalConfig, workflowConfigRef);
 
       for (let i = 0; i < workflow.steps.length; i++) {
+        if (this.cancellationRegistry?.isCancellationRequested(executionId)) {
+          this.cancellationRegistry.clear(executionId);
+          this.executionRepository.updateStatus(executionId, 'cancelled', '用户取消');
+          return;
+        }
+
         const step = workflow.steps[i];
         const onFailure = step.onFailure || workflow.onFailure;
 
@@ -245,53 +256,88 @@ export class PipelineOrchestrator {
       mergedConfig, workflowConfigRef, stepConfigRef, executionId, stepIndex
     );
 
-    // 4. 执行步骤（含事件收集）
+    // 4. 执行步骤（含事件收集）+ 验证（含重试）
     const collectedEvents: StepEvent[] = [];
     const onEvent = (event: StepEvent) => {
       collectedEvents.push(event);
       this.progressNotifier.broadcastStepEvent(executionId, stepIndex, event);
     };
 
-    let result: StepResult;
+    let result!: StepResult;
     const onFailure = step.onFailure || workflow.onFailure;
-
-    try {
-      if (onFailure === 'retry') {
-        const maxAttempts = step.retryConfig?.maxAttempts || workflow.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS;
-        const delayMs = step.retryConfig?.delayMs || workflow.retryConfig?.delayMs || DEFAULT_RETRY_DELAY_MS;
-        result = await this.executeWithRetry(renderedPrompt, stepConfig, maxAttempts, delayMs, onEvent);
-      } else if (stepConfig.timeoutMs) {
-        result = await this.stepExecutor.executeWithTimeout(renderedPrompt, stepConfig, stepConfig.timeoutMs, onEvent);
-      } else {
-        result = await this.stepExecutor.execute(renderedPrompt, stepConfig, onEvent);
-      }
-    } finally {
-      if (stepConfig.skillsDir) {
-        this.configMergeService.cleanupStepSkills(stepConfig.skillsDir);
-      }
-    }
-
-    // 5. 输出验证（可选）
     let validationStatus: 'passed' | 'failed' | undefined;
     let validationOutput: string | undefined;
     let validationTokens = 0;
 
-    if (result.success && step.validation?.prompt) {
-      this.progressNotifier.broadcast({
-        executionId, stepIndex, status: 'running', outputText: result.outputText
-      });
+    const hasValidation = step.validation && (step.validation.prompt || (step.validation.rules && step.validation.rules.length > 0));
+    const maxValidationAttempts = (onFailure === 'retry' && hasValidation)
+      ? (step.retryConfig?.maxAttempts || workflow.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS)
+      : 1;
+    const validationDelayMs = step.retryConfig?.delayMs || workflow.retryConfig?.delayMs || DEFAULT_RETRY_DELAY_MS;
 
-      const validation = await this.stepExecutor.validateOutput(result.outputText, step.validation.prompt, stepConfig);
-      validationStatus = validation.passed ? 'passed' : 'failed';
-      validationOutput = validation.output;
-      validationTokens = validation.tokensUsed;
+    try {
+      let currentPrompt = renderedPrompt;
 
-      if (!validation.passed) {
-        result = {
-          ...result,
-          success: false,
-          errorMessage: `验证失败: ${validation.output}`
-        };
+      for (let attempt = 1; attempt <= maxValidationAttempts; attempt++) {
+        // 4a. 执行步骤
+        if (onFailure === 'retry' && !hasValidation) {
+          const maxAttempts = step.retryConfig?.maxAttempts || workflow.retryConfig?.maxAttempts || DEFAULT_RETRY_MAX_ATTEMPTS;
+          const delayMs = step.retryConfig?.delayMs || workflow.retryConfig?.delayMs || DEFAULT_RETRY_DELAY_MS;
+          result = await this.executeWithRetry(currentPrompt, stepConfig, maxAttempts, delayMs, onEvent);
+        } else if (stepConfig.timeoutMs) {
+          result = await this.stepExecutor.executeWithTimeout(currentPrompt, stepConfig, stepConfig.timeoutMs, onEvent);
+        } else {
+          result = await this.stepExecutor.execute(currentPrompt, stepConfig, onEvent);
+        }
+
+        if (!result.success) break;
+
+        // 4b. 规则验证（快速，无成本）
+        if (step.validation?.rules && step.validation.rules.length > 0 && this.ruleValidator) {
+          const ruleResult = this.ruleValidator.validate(result.outputText, step.validation.rules);
+          if (!ruleResult.passed) {
+            validationStatus = 'failed';
+            validationOutput = ruleResult.reason;
+            if (attempt < maxValidationAttempts) {
+              currentPrompt = `${renderedPrompt}\n\n前次输出未通过验证，原因: ${ruleResult.reason}\n请重新生成符合要求的输出。`;
+              await this.delay(validationDelayMs * Math.pow(2, attempt - 1));
+              continue;
+            }
+            result = { ...result, success: false, errorMessage: `规则验证失败: ${ruleResult.reason}` };
+            break;
+          }
+        }
+
+        // 4c. LLM 验证
+        if (result.success && step.validation?.prompt) {
+          this.progressNotifier.broadcast({
+            executionId, stepIndex, status: 'running', outputText: result.outputText
+          });
+
+          const validation = await this.stepExecutor.validateOutput(result.outputText, step.validation.prompt, stepConfig);
+          validationStatus = validation.passed ? 'passed' : 'failed';
+          validationOutput = validation.output;
+          validationTokens += validation.tokensUsed;
+
+          if (!validation.passed) {
+            if (attempt < maxValidationAttempts) {
+              currentPrompt = `${renderedPrompt}\n\n前次输出未通过验证，原因: ${validation.output}\n请重新生成符合要求的输出。`;
+              await this.delay(validationDelayMs * Math.pow(2, attempt - 1));
+              continue;
+            }
+            result = { ...result, success: false, errorMessage: `验证失败: ${validation.output}` };
+          }
+        }
+
+        // If we reach here without continue, validation passed or no validation
+        if (result.success && hasValidation && !validationStatus) {
+          validationStatus = 'passed';
+        }
+        break;
+      }
+    } finally {
+      if (stepConfig.skillsDir) {
+        this.configMergeService.cleanupStepSkills(stepConfig.skillsDir);
       }
     }
 

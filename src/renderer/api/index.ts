@@ -114,6 +114,17 @@ export function toggleWorkflow(
 }
 
 /**
+ * 克隆工作流
+ *
+ * @param id 工作流ID
+ */
+export function cloneWorkflow(
+  id: string
+): Promise<AxiosLikeResponse<WorkflowDTO | null>> {
+  return wrapResponse(window.api.cloneWorkflow(id));
+}
+
+/**
  * 执行工作流
  *
  * @param id 工作流ID
@@ -148,6 +159,17 @@ export function getExecution(
   id: string
 ): Promise<AxiosLikeResponse<ExecutionDTO | null>> {
   return wrapResponse(window.api.getExecution(id));
+}
+
+/**
+ * 取消执行
+ *
+ * @param id 执行ID
+ */
+export function cancelExecution(
+  id: string
+): Promise<AxiosLikeResponse<boolean>> {
+  return wrapResponse(window.api.cancelExecution(id));
 }
 
 // ============ Config API ============

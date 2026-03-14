@@ -8,7 +8,14 @@
           实时更新中
         </el-tag>
       </div>
-      <el-button @click="$router.back()">返回</el-button>
+      <div class="header-actions">
+        <el-popconfirm v-if="isRunning" title="确定取消此执行？" @confirm="handleCancel">
+          <template #reference>
+            <el-button type="warning" :loading="cancelling">取消执行</el-button>
+          </template>
+        </el-popconfirm>
+        <el-button @click="$router.back()">返回</el-button>
+      </div>
     </div>
 
     <template v-if="execution">
@@ -98,7 +105,8 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
-import { subscribeExecutionProgress, type ExecutionProgressEvent } from '@/api/index'
+import { subscribeExecutionProgress, cancelExecution, type ExecutionProgressEvent } from '@/api/index'
+import { ElMessage } from 'element-plus'
 import type { ExecutionData, StepExecutionData } from '@/api/executions'
 import type { StepEvent } from '../../main/types'
 import StepEventViewer from '@/components/StepEventViewer.vue'
@@ -116,7 +124,21 @@ let tickTimer: ReturnType<typeof setInterval> | null = null
 /** 实时收集的事件（按 stepIndex 分组），用于运行中的步骤 */
 const liveEvents = ref<Map<number, StepEvent[]>>(new Map())
 
-const isRunning = computed(() => execution.value?.status === 'running')
+const isRunning = computed(() => execution.value?.status === 'running' || execution.value?.status === 'pending')
+const cancelling = ref(false)
+
+async function handleCancel() {
+  if (!execution.value) return
+  cancelling.value = true
+  try {
+    await cancelExecution(execution.value.id)
+    ElMessage.success('已请求取消')
+  } catch (e: unknown) {
+    ElMessage.error('取消失败: ' + (e instanceof Error ? e.message : String(e)))
+  } finally {
+    cancelling.value = false
+  }
+}
 
 /** 控制步骤折叠面板展开状态 */
 const expandedStepIds = ref<string[]>([])
@@ -233,7 +255,7 @@ function updateStepFromEvent(event: ExecutionProgressEvent) {
     step.error_message = event.errorMessage
   }
 
-  if (event.status === 'success' || event.status === 'failed') {
+  if (event.status === 'success' || event.status === 'failed' || event.status === 'cancelled') {
     step.finished_at = new Date().toISOString()
   }
 }
@@ -250,7 +272,7 @@ function updateExecutionStatus(event: ExecutionProgressEvent) {
     const steps = execution.value.step_executions
     if (steps && steps.length > 0) {
       const allCompleted = steps.every(
-        s => s.status === 'success' || s.status === 'failed'
+        s => s.status === 'success' || s.status === 'failed' || s.status === 'cancelled'
       )
       if (allCompleted) {
         // 清空实时事件，从数据库加载完整数据
@@ -288,6 +310,7 @@ function formatDurationLive(start?: string, end?: string) {
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-header h2 { margin: 0; }
 .header-left { display: flex; align-items: center; gap: 12px; }
+.header-actions { display: flex; gap: 8px; }
 .live-indicator { display: flex; align-items: center; gap: 6px; }
 .live-dot {
   width: 8px;

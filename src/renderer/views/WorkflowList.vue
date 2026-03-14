@@ -32,9 +32,10 @@
       <el-table-column label="更新时间" width="180">
         <template #default="{ row }">{{ formatDate(row.updated_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="$router.push(`/workflows/${row.id}`)">编辑</el-button>
+          <el-button size="small" @click="handleClone(row)">克隆</el-button>
           <el-button size="small" type="success" @click="handleRun(row)" :loading="runningId === row.id">运行</el-button>
           <el-popconfirm title="确定删除此工作流？" @confirm="handleDelete(row)">
             <template #reference>
@@ -114,6 +115,15 @@ async function executeRun(id: string, inputs?: Record<string, unknown>) {
     ElMessage.error('触发失败: ' + extractErrorMessage(e))
   } finally {
     runningId.value = null
+  }
+}
+
+async function handleClone(row: WorkflowData) {
+  try {
+    await store.clone(row.id!)
+    ElMessage.success('克隆成功')
+  } catch (e: unknown) {
+    ElMessage.error('克隆失败: ' + extractErrorMessage(e))
   }
 }
 

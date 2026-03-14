@@ -36,6 +36,9 @@ import { TemplateEngine } from './execution/domain/service/TemplateEngine';
 import { PipelineOrchestrator } from './execution/domain/service/PipelineOrchestrator';
 import { ExecutePipelineUseCase } from './execution/application/ExecutePipelineUseCase';
 import { QueryExecutionUseCase } from './execution/application/QueryExecutionUseCase';
+import { CancelExecutionUseCase } from './execution/application/CancelExecutionUseCase';
+import { CancellationRegistry } from './execution/domain/service/CancellationRegistry';
+import { RuleValidator } from './execution/domain/service/RuleValidator';
 
 // Scheduling context
 import { NodeCronScheduler } from './scheduling/infrastructure/NodeCronScheduler';
@@ -81,11 +84,14 @@ export function bootstrap(): AppContext {
   const progressNotifier = new ElectronProgressNotifier();
   const outputProcessor = new OutputHandler();
   const templateEngine = new TemplateEngine();
+  const cancellationRegistry = new CancellationRegistry();
+  const ruleValidator = new RuleValidator();
   const pipelineOrchestrator = new PipelineOrchestrator(
-    executionRepo, stepExecutor, configMergeService, progressNotifier, outputProcessor, templateEngine
+    executionRepo, stepExecutor, configMergeService, progressNotifier, outputProcessor, templateEngine, cancellationRegistry, ruleValidator
   );
   const executePipelineUseCase = new ExecutePipelineUseCase(pipelineOrchestrator);
   const queryExecutionUseCase = new QueryExecutionUseCase(executionRepo);
+  const cancelExecutionUseCase = new CancelExecutionUseCase(executionRepo, cancellationRegistry);
 
   // === Scheduling Context ===
   const scheduler = new NodeCronScheduler();
@@ -101,7 +107,7 @@ export function bootstrap(): AppContext {
 
   // === IPC Handlers ===
   const workflowIpcHandler = new WorkflowIpcHandler(workflowAppService);
-  const executionIpcHandler = new ExecutionIpcHandler(queryExecutionUseCase);
+  const executionIpcHandler = new ExecutionIpcHandler(queryExecutionUseCase, cancelExecutionUseCase);
   const skillIpcHandler = new SkillIpcHandler(skillAppService);
   const configIpcHandler = new ConfigIpcHandler(globalConfigAppService);
 
