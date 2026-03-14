@@ -70,6 +70,14 @@ async function fetchRunning() {
   try {
     const res = await listExecutions({ status: 'running', limit: 50 })
     runningExecutions.value = res.data
+    // 自动选中最新的运行中执行
+    if (!selectedId.value && res.data.length > 0) {
+      selectExecution(res.data[0])
+    }
+    // 当前选中的执行已结束时，自动切换到下一个
+    if (selectedId.value && !res.data.find(e => e.id === selectedId.value) && res.data.length > 0) {
+      selectExecution(res.data[0])
+    }
   } catch (e) {
     console.error('Failed to fetch running executions', e)
   }

@@ -2,9 +2,40 @@
   <div class="execution-list">
     <div class="page-header">
       <h2>执行历史</h2>
-      <el-button @click="loadPage(currentPage)" :loading="store.loading">
+      <el-button @click="handleSearch" :loading="store.loading">
         <el-icon><Refresh /></el-icon> 刷新
       </el-button>
+    </div>
+
+    <div class="filter-bar">
+      <el-select
+        v-model="filter.workflowId"
+        placeholder="全部工作流"
+        clearable
+        filterable
+        style="width: 200px"
+        @change="handleSearch"
+      >
+        <el-option
+          v-for="w in workflows"
+          :key="w.id"
+          :label="w.name"
+          :value="w.id"
+        />
+      </el-select>
+
+      <el-select
+        v-model="filter.status"
+        placeholder="全部状态"
+        clearable
+        style="width: 140px"
+        @change="handleSearch"
+      >
+        <el-option label="待执行" value="pending" />
+        <el-option label="运行中" value="running" />
+        <el-option label="成功" value="success" />
+        <el-option label="失败" value="failed" />
+      </el-select>
     </div>
 
     <el-table :data="store.executions" v-loading="store.loading" stripe @row-click="handleRowClick" style="cursor: pointer; width: 100%">
@@ -50,12 +81,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
 import { Refresh } from '@element-plus/icons-vue'
 import { statusType, statusLabel } from '@/utils/statusUtils'
 import { formatDate, formatDuration } from '@/utils/dateUtils'
+import { listWorkflows, type WorkflowData } from '@/api/workflows'
 
 const store = useExecutionStore()
 const router = useRouter()
@@ -63,12 +95,41 @@ const router = useRouter()
 const pageSize = 20
 const currentPage = ref(1)
 const totalEstimate = ref(0)
+const workflows = ref<WorkflowData[]>([])
+
+const filter = reactive({
+  workflowId: '' as string,
+  status: '' as string,
+})
+
+async function loadWorkflows() {
+  try {
+    const res = await listWorkflows()
+    workflows.value = res.data
+  } catch {
+    // 工作流列表加载失败不影响主功能
+  }
+}
+
+function handleSearch() {
+  currentPage.value = 1
+  loadPage(1)
+}
 
 async function loadPage(page: number) {
   currentPage.value = page
   const offset = (page - 1) * pageSize
-  await store.fetchExecutions({ limit: pageSize, offset })
-  // 估算总数：如果返回满页，假设还有更多
+  const params: Record<string, unknown> = { limit: pageSize, offset }
+
+  if (filter.workflowId) {
+    params.workflow_id = filter.workflowId
+  }
+  if (filter.status) {
+    params.status = filter.status
+  }
+
+  await store.fetchExecutions(params as any)
+
   if (store.executions.length === pageSize) {
     totalEstimate.value = Math.max(totalEstimate.value, page * pageSize + 1)
   } else {
@@ -76,14 +137,18 @@ async function loadPage(page: number) {
   }
 }
 
-onMounted(() => { loadPage(1) })
+onMounted(() => {
+  loadWorkflows()
+  loadPage(1)
+})
 
 function handleRowClick(row: { id: string }) { router.push(`/executions/${row.id}`) }
 </script>
 
 <style scoped>
 .execution-list { padding: 20px; }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .page-header h2 { margin: 0; }
+.filter-bar { display: flex; gap: 12px; margin-bottom: 16px; }
 .pagination-wrapper { display: flex; justify-content: center; margin-top: 16px; }
 </style>

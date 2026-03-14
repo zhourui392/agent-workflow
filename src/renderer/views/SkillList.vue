@@ -68,6 +68,7 @@
 <script setup lang="ts">
 import { onMounted, ref, reactive } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { showError } from '@/utils/errorUtils'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import {
   listSkills,
@@ -171,8 +172,8 @@ async function handleSubmit() {
 
     dialogVisible.value = false
     fetchSkills()
-  } catch (e: any) {
-    ElMessage.error('操作失败: ' + (e.message || e))
+  } catch (e: unknown) {
+    showError(isEdit.value ? '更新 Skill' : '创建 Skill', e)
   } finally {
     submitting.value = false
   }
@@ -186,9 +187,9 @@ async function handleDelete(row: SkillData) {
     await deleteSkill(row.id)
     ElMessage.success('删除成功')
     fetchSkills()
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e !== 'cancel') {
-      ElMessage.error('删除失败: ' + (e.message || e))
+      showError('删除 Skill', e)
     }
   }
 }
@@ -197,9 +198,9 @@ async function handleToggleEnabled(row: SkillData, enabled: boolean) {
   try {
     await setSkillEnabled(row.id, enabled)
     ElMessage.success(enabled ? '已启用' : '已禁用')
-  } catch (e: any) {
+  } catch (e: unknown) {
     row.enabled = !enabled
-    ElMessage.error('操作失败: ' + (e.message || e))
+    showError('切换 Skill 状态', e)
   }
 }
 

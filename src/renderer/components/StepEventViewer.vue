@@ -8,14 +8,17 @@
 
     <!-- 有事件时结构化展示 -->
     <template v-else>
+      <!-- 操作栏 -->
+      <div class="event-toolbar" v-if="turns.length > 0">
+        <el-button size="small" text @click="expandAll">全部展开</el-button>
+        <el-button size="small" text @click="collapseAll">全部折叠</el-button>
+      </div>
+
       <!-- 初始化信息 -->
       <div v-if="initEvent" class="event-init">
         <span class="init-icon">&#9881;</span>
         <span class="init-label">模型: {{ initEvent.model }}</span>
         <span class="init-label">工具: {{ initEvent.tools.length }}个</span>
-        <span v-if="initEvent.mcpServers.length" class="init-label">
-          MCP: {{ initEvent.mcpServers.map(s => s.name).join(', ') }}
-        </span>
       </div>
 
       <!-- 按 Turn 分组展示 -->
@@ -113,6 +116,26 @@ function toggleExpand(key: string) {
 
 function isExpanded(key: string): boolean {
   return expandedKeys.value.has(key)
+}
+
+function expandAll() {
+  if (!props.events) return
+  const keys = new Set<string>()
+  for (const turn of turns.value) {
+    for (let idx = 0; idx < turn.items.length; idx++) {
+      const item = turn.items[idx]
+      if (item.type === 'tool_call') {
+        keys.add(`${turn.index}-call-${idx}`)
+      } else if (item.type === 'tool_result') {
+        keys.add(`${turn.index}-result-${idx}`)
+      }
+    }
+  }
+  expandedKeys.value = keys
+}
+
+function collapseAll() {
+  expandedKeys.value = new Set()
 }
 
 /** 初始化事件 */
@@ -217,6 +240,13 @@ function renderMarkdown(text: string): string {
 .step-event-viewer {
   font-size: 13px;
   line-height: 1.5;
+}
+
+.event-toolbar {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
 .empty-hint {

@@ -35,7 +35,15 @@
       </el-card>
 
       <el-card class="steps-card">
-        <template #header>步骤详情</template>
+        <template #header>
+          <div class="steps-header">
+            <span>步骤详情</span>
+            <div class="steps-toolbar" v-if="execution.step_executions?.length">
+              <el-button size="small" text @click="expandAllSteps">全部展开</el-button>
+              <el-button size="small" text @click="collapseAllSteps">全部折叠</el-button>
+            </div>
+          </div>
+        </template>
         <el-timeline>
           <el-timeline-item
             v-for="step in execution.step_executions"
@@ -44,7 +52,7 @@
             :hollow="step.status === 'pending'"
             size="large"
           >
-            <el-collapse :model-value="step.status === 'running' ? [step.id] : []">
+            <el-collapse :model-value="expandedStepIds" @change="handleStepCollapseChange">
               <el-collapse-item :name="step.id">
                 <template #title>
                   <div class="step-title">
@@ -110,6 +118,22 @@ const liveEvents = ref<Map<number, StepEvent[]>>(new Map())
 
 const isRunning = computed(() => execution.value?.status === 'running')
 
+/** 控制步骤折叠面板展开状态 */
+const expandedStepIds = ref<string[]>([])
+
+function handleStepCollapseChange(activeNames: string[] | string) {
+  expandedStepIds.value = Array.isArray(activeNames) ? activeNames : [activeNames]
+}
+
+function expandAllSteps() {
+  if (!execution.value?.step_executions) return
+  expandedStepIds.value = execution.value.step_executions.map(s => s.id)
+}
+
+function collapseAllSteps() {
+  expandedStepIds.value = []
+}
+
 /**
  * 获取步骤的事件列表（优先使用数据库中的历史事件，运行中使用实时收集的事件）
  */
@@ -164,7 +188,11 @@ function handleProgressEvent(event: ExecutionProgressEvent) {
   }
 
   // 确保步骤占位存在
-  ensureStepExists(event.stepIndex)
+  const step = ensureStepExists(event.stepIndex)
+  // 自动展开运行中的步骤
+  if (!expandedStepIds.value.includes(step.id)) {
+    expandedStepIds.value = [...expandedStepIds.value, step.id]
+  }
 
   // 收集实时流式事件
   if (event.event) {
@@ -274,6 +302,8 @@ function formatDurationLive(start?: string, end?: string) {
 }
 .summary-card { margin-bottom: 20px; }
 .steps-card { margin-bottom: 20px; }
+.steps-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.steps-toolbar { display: flex; gap: 4px; }
 .step-title { display: flex; align-items: center; gap: 10px; }
 .step-name { font-weight: bold; }
 .step-meta { font-size: 12px; color: #909399; }
