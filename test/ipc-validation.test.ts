@@ -11,7 +11,6 @@ import {
   CreateWorkflowSchema,
   UpdateWorkflowSchema,
   ExecutionListParamsSchema,
-  CreateMcpServerSchema,
   CreateSkillSchema,
   UpdateConfigSchema,
   RunWorkflowInputsSchema,
@@ -65,7 +64,6 @@ describe('CreateWorkflowSchema', () => {
         onFailure: 'retry' as const,
         retryConfig: { maxAttempts: 3, delayMs: 1000 },
         validation: { prompt: 'Validate output' },
-        mcpServerIds: ['id1'],
         skillIds: ['id2']
       }]
     };
@@ -171,28 +169,6 @@ describe('ExecutionListParamsSchema', () => {
 
   it('should reject limit over 1000', () => {
     expect(() => validateInput(ExecutionListParamsSchema, { limit: 5000 }))
-      .toThrow();
-  });
-});
-
-describe('CreateMcpServerSchema', () => {
-  it('should accept valid MCP server', () => {
-    const result = validateInput(CreateMcpServerSchema, {
-      name: 'test-server',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server']
-    });
-    expect(result.name).toBe('test-server');
-    expect(result.command).toBe('npx');
-  });
-
-  it('should reject without command', () => {
-    expect(() => validateInput(CreateMcpServerSchema, { name: 'test' }))
-      .toThrow();
-  });
-
-  it('should reject without name', () => {
-    expect(() => validateInput(CreateMcpServerSchema, { command: 'npx' }))
       .toThrow();
   });
 });

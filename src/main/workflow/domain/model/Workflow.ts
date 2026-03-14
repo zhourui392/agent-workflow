@@ -9,8 +9,6 @@ import type { WorkflowInput } from './WorkflowInput';
 import type { WorkflowLimits } from './WorkflowLimits';
 import type { WorkflowOutput } from './WorkflowOutput';
 import type { FailureStrategy } from './FailureStrategy';
-import type { McpServerConfig } from '../../../configuration/domain/model';
-
 export interface CreateWorkflowRequest {
   name: string;
   enabled?: boolean;
@@ -18,7 +16,6 @@ export interface CreateWorkflowRequest {
   inputs?: WorkflowInput[];
   steps: WorkflowStep[];
   rules?: string;
-  mcpServers?: Record<string, McpServerConfig>;
   skills?: Record<string, string>;
   limits?: WorkflowLimits;
   output?: WorkflowOutput;
@@ -35,7 +32,6 @@ export class Workflow extends Entity {
   readonly inputs?: WorkflowInput[];
   readonly steps: WorkflowStep[];
   readonly rules?: string;
-  readonly mcpServers?: Record<string, McpServerConfig>;
   readonly skills?: Record<string, string>;
   readonly limits?: WorkflowLimits;
   readonly output?: WorkflowOutput;
@@ -50,7 +46,6 @@ export class Workflow extends Entity {
     inputs?: WorkflowInput[];
     steps: WorkflowStep[];
     rules?: string;
-    mcpServers?: Record<string, McpServerConfig>;
     skills?: Record<string, string>;
     limits?: WorkflowLimits;
     output?: WorkflowOutput;
@@ -66,7 +61,6 @@ export class Workflow extends Entity {
     this.inputs = props.inputs;
     this.steps = props.steps;
     this.rules = props.rules;
-    this.mcpServers = props.mcpServers;
     this.skills = props.skills;
     this.limits = props.limits;
     this.output = props.output;

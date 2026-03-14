@@ -9,7 +9,7 @@ import * as path from 'path';
 import { app } from 'electron';
 import * as yaml from 'yaml';
 import log from 'electron-log';
-import type { GlobalConfig, McpServerConfig } from '../domain/model';
+import type { GlobalConfig } from '../domain/model';
 
 function getGlobalConfigPath(): string {
   if (app.isPackaged) {
@@ -46,7 +46,6 @@ function ensureConfigDirs(): void {
   const dirs = [
     configPath,
     path.join(configPath, 'rules'),
-    path.join(configPath, 'mcp'),
     path.join(configPath, 'skills')
   ];
 
@@ -75,12 +74,6 @@ export class DiskGlobalConfigRepository {
       config.allowedTools = settings.allowed_tools;
     }
 
-    const mcpPath = path.join(configPath, 'mcp', 'servers.yaml');
-    const mcpConfig = parseYamlFile<Record<string, McpServerConfig>>(mcpPath);
-    if (mcpConfig) {
-      config.mcpServers = mcpConfig;
-    }
-
     const skillsDir = path.join(configPath, 'skills');
     if (fs.existsSync(skillsDir)) {
       config.skills = {};
@@ -100,7 +93,6 @@ export class DiskGlobalConfigRepository {
   updateConfig(data: {
     systemPrompt?: string;
     defaultModel?: string;
-    mcpServers?: Record<string, McpServerConfig>;
   }): void {
     ensureConfigDirs();
     const configPath = getGlobalConfigPath();
@@ -111,7 +103,7 @@ export class DiskGlobalConfigRepository {
       log.info('Updated system prompt');
     }
 
-    if (data.defaultModel !== undefined || data.mcpServers === undefined) {
+    if (data.defaultModel !== undefined) {
       const settingsPath = path.join(configPath, 'settings.yaml');
       let settings: Record<string, unknown> = {};
 
@@ -131,10 +123,5 @@ export class DiskGlobalConfigRepository {
       log.info('Updated settings.yaml');
     }
 
-    if (data.mcpServers !== undefined) {
-      const mcpPath = path.join(configPath, 'mcp', 'servers.yaml');
-      fs.writeFileSync(mcpPath, yaml.stringify(data.mcpServers), 'utf-8');
-      log.info('Updated MCP servers config');
-    }
   }
 }

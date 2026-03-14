@@ -36,7 +36,6 @@
           <StepEditor
             :step="step"
             :index="index"
-            :mcpServers="mcpServerList"
             :skills="skillList"
             :disableRemove="form.steps.length <= 1"
             @update:step="form.steps[index] = $event"
@@ -101,7 +100,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { listAllMcpServers, type McpServerData } from '@/api/mcpServers'
 import { listAllSkills, type SkillData } from '@/api/skills'
 import StepEditor, { type StepFormData } from '@/components/StepEditor.vue'
 
@@ -112,7 +110,6 @@ const isEdit = computed(() => route.name === 'WorkflowEdit')
 const loading = ref(false)
 const saving = ref(false)
 const configLoading = ref(false)
-const mcpServerList = ref<McpServerData[]>([])
 const skillList = ref<SkillData[]>([])
 
 const form = reactive({
@@ -135,7 +132,6 @@ function createEmptyStep(): StepFormData {
     max_turns: 30,
     validation_enabled: false,
     validation_prompt: '',
-    mcp_server_ids: [],
     skill_ids: []
   }
 }
@@ -186,11 +182,7 @@ async function handleSave() {
 async function loadConfigOptions() {
   configLoading.value = true
   try {
-    const [mcpRes, skillRes] = await Promise.all([
-      listAllMcpServers(),
-      listAllSkills()
-    ])
-    mcpServerList.value = mcpRes.data
+    const skillRes = await listAllSkills()
     skillList.value = skillRes.data
   } catch (e: unknown) {
     console.error('Failed to load config options:', e)
@@ -215,7 +207,6 @@ onMounted(async () => {
               ...s,
               validation_enabled: !!s.validation_prompt,
               validation_prompt: s.validation_prompt || '',
-              mcp_server_ids: s.mcp_server_ids || [],
               skill_ids: s.skill_ids || []
             }))
           : [createEmptyStep()]

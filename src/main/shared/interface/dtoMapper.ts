@@ -12,13 +12,11 @@
 import type { Workflow } from '../../workflow/domain/model';
 import type { Execution } from '../../execution/domain/model';
 import type { StepExecution } from '../../execution/domain/model';
-import type { McpServer } from '../../configuration/domain/model';
 import type { Skill } from '../../configuration/domain/model';
 import type {
   WorkflowDTO,
   ExecutionDTO,
   StepExecutionDTO,
-  McpServerDTO,
   SkillDTO
 } from '../../types';
 
@@ -31,7 +29,6 @@ export function workflowToDTO(w: Workflow): WorkflowDTO {
     inputs: w.inputs,
     steps: w.steps,
     rules: w.rules,
-    mcpServers: w.mcpServers,
     skills: w.skills,
     limits: w.limits,
     output: w.output,
@@ -76,20 +73,6 @@ export function executionToDTO(e: Execution): ExecutionDTO {
     totalTokens: e.totalTokens,
     errorMessage: e.errorMessage,
     stepExecutions: e.stepExecutions?.map(stepExecutionToDTO)
-  };
-}
-
-export function mcpServerToDTO(s: McpServer): McpServerDTO {
-  return {
-    id: s.id,
-    name: s.name,
-    description: s.description,
-    command: s.command,
-    args: s.args,
-    env: s.env,
-    enabled: s.enabled,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt
   };
 }
 

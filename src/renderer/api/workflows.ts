@@ -26,7 +26,6 @@ export interface StepConfig {
   name: string;
   prompt: string;
   tools?: string[];
-  mcp_servers?: Record<string, unknown>;
   rules?: Record<string, unknown>;
   model?: string;
   max_turns?: number;
@@ -36,7 +35,6 @@ export interface StepConfig {
     delayMs?: number;
   };
   validation_prompt?: string;
-  mcp_server_ids?: string[];
   skill_ids?: string[];
 }
 
@@ -49,7 +47,6 @@ export interface WorkflowData {
   inputs?: Record<string, unknown>;
   steps: StepConfig[];
   rules?: string | null;
-  mcp_servers?: Record<string, unknown>;
   skills?: Record<string, string>;
   limits?: Record<string, unknown> | null;
   output?: Record<string, unknown>;
@@ -74,11 +71,9 @@ function workflowToData(workflow: WorkflowDTO): WorkflowData {
       onFailure: step.onFailure,
       retryConfig: step.retryConfig,
       validation_prompt: step.validation?.prompt || '',
-      mcp_server_ids: step.mcpServerIds,
       skill_ids: step.skillIds
     })),
     rules: workflow.rules || null,
-    mcp_servers: workflow.mcpServers,
     skills: workflow.skills,
     limits: workflow.limits as Record<string, unknown> | null,
     output: workflow.output as Record<string, unknown> | undefined,
@@ -100,7 +95,6 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     validation: step.validation_prompt
       ? { prompt: step.validation_prompt }
       : undefined,
-    mcpServerIds: step.mcp_server_ids,
     skillIds: step.skill_ids
   }));
 
@@ -111,7 +105,6 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     inputs: data.inputs?.items as WorkflowInput[] | undefined,
     steps,
     rules: data.rules || undefined,
-    mcpServers: data.mcp_servers as Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined,
     skills: data.skills,
     limits: data.limits ? { ...data.limits } as WorkflowLimits : undefined,
     output: data.output ? { ...data.output } as WorkflowOutput : undefined,

@@ -65,7 +65,6 @@ export interface WorkflowStepRef {
   validation?: {
     prompt: string;
   };
-  mcpServerIds?: string[];
   skillIds?: string[];
 }
 
@@ -84,7 +83,6 @@ export interface WorkflowRef {
   };
   output?: any;
   rules?: string;
-  mcpServers?: Record<string, any>;
   skills?: Record<string, string>;
   workingDirectory?: string;
 }
@@ -159,7 +157,6 @@ export class PipelineOrchestrator {
       const globalConfig = this.configMergeService.loadGlobalConfig();
       const workflowConfigRef: WorkflowConfigRef = {
         rules: workflow.rules,
-        mcpServers: workflow.mcpServers,
         skills: workflow.skills,
         limits: workflow.limits,
         workingDirectory: workflow.workingDirectory
@@ -234,7 +231,6 @@ export class PipelineOrchestrator {
     // 3. 构建步骤级配置
     const workflowConfigRef: WorkflowConfigRef = {
       rules: workflow.rules,
-      mcpServers: workflow.mcpServers,
       skills: workflow.skills,
       limits: workflow.limits,
       workingDirectory: workflow.workingDirectory
@@ -242,7 +238,6 @@ export class PipelineOrchestrator {
     const stepConfigRef: StepConfigRef = {
       model: step.model,
       maxTurns: step.maxTurns,
-      mcpServerIds: step.mcpServerIds,
       skillIds: step.skillIds
     };
     const stepConfig = this.configMergeService.buildStepMergedConfig(

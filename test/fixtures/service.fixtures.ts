@@ -58,7 +58,7 @@ export function createMockOutputProcessor(): OutputProcessor {
  * - mergeWorkflowConfig → { systemPrompt: 'merged prompt', model: 'claude-3' }
  * - buildStepMergedConfig → { systemPrompt: 'merged prompt', model: 'claude-3', hasSkills: false }
  * - cleanupStepSkills → void
- * - validateConfigReferences → { valid: true, missingMcpIds: [], missingSkillIds: [] }
+ * - validateConfigReferences → { valid: true, missingSkillIds: [] }
  * - buildAllowedTools → []
  * - handleDanglingReferences → void
  */
@@ -68,7 +68,7 @@ export function createMockConfigMergeService(): ConfigMergeService {
     mergeWorkflowConfig: vi.fn(() => ({ systemPrompt: 'merged prompt', model: 'claude-3' })),
     buildStepMergedConfig: vi.fn(() => ({ systemPrompt: 'merged prompt', model: 'claude-3', hasSkills: false })),
     cleanupStepSkills: vi.fn(),
-    validateConfigReferences: vi.fn(() => ({ valid: true, missingMcpIds: [], missingSkillIds: [] })),
+    validateConfigReferences: vi.fn(() => ({ valid: true, missingSkillIds: [] })),
     buildAllowedTools: vi.fn(() => []),
     handleDanglingReferences: vi.fn()
   };

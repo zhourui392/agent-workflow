@@ -14,11 +14,7 @@ import type {
   UpdateWorkflowRequest,
   ExecutionListParams,
   ExecutionProgressEvent,
-  McpServerConfig,
-  McpServerDTO,
   SkillDTO,
-  CreateMcpServerInput,
-  UpdateMcpServerInput,
   CreateSkillInput,
   UpdateSkillInput
 } from '../main/types';
@@ -45,17 +41,7 @@ export interface ElectronAPI {
   updateConfig: (data: {
     systemPrompt?: string;
     defaultModel?: string;
-    mcpServers?: Record<string, McpServerConfig>;
   }) => Promise<{ success: boolean }>;
-
-  // MCP Servers
-  getMcpServers: () => Promise<McpServerDTO[]>;
-  getAllMcpServers: () => Promise<McpServerDTO[]>;
-  getMcpServer: (id: string) => Promise<McpServerDTO | null>;
-  createMcpServer: (data: CreateMcpServerInput) => Promise<McpServerDTO>;
-  updateMcpServer: (id: string, data: UpdateMcpServerInput) => Promise<McpServerDTO | null>;
-  deleteMcpServer: (id: string) => Promise<boolean>;
-  setMcpServerEnabled: (id: string, enabled: boolean) => Promise<McpServerDTO | null>;
 
   // Skills
   getSkills: () => Promise<SkillDTO[]>;
@@ -87,15 +73,6 @@ const api: ElectronAPI = {
   // Config
   getConfig: () => ipcRenderer.invoke('config:get'),
   updateConfig: (data) => ipcRenderer.invoke('config:update', data),
-
-  // MCP Servers
-  getMcpServers: () => ipcRenderer.invoke('mcp-servers:list'),
-  getAllMcpServers: () => ipcRenderer.invoke('mcp-servers:list-all'),
-  getMcpServer: (id) => ipcRenderer.invoke('mcp-servers:get', id),
-  createMcpServer: (data) => ipcRenderer.invoke('mcp-servers:create', data),
-  updateMcpServer: (id, data) => ipcRenderer.invoke('mcp-servers:update', id, data),
-  deleteMcpServer: (id) => ipcRenderer.invoke('mcp-servers:delete', id),
-  setMcpServerEnabled: (id, enabled) => ipcRenderer.invoke('mcp-servers:set-enabled', id, enabled),
 
   // Skills
   getSkills: () => ipcRenderer.invoke('skills:list'),

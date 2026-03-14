@@ -14,8 +14,6 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:core-legacy": "npx ts-node test/test-core.ts",
-    "test:config-legacy": "npx ts-node test/test-config.ts",
     "test:pipeline-legacy": "npx ts-node test/test-pipeline.ts"
   },
   "dependencies": {

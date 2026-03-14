@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-AI 驱动的多步骤工作流自动化平台（Electron 桌面应用）。用户通过 UI 配置工作流，每个步骤调用 Claude Agent SDK（@anthropic-ai/claude-code）执行。支持 cron 定时调度、手动触发、模板变量，以及多层配置合并（Claude CLI 全局配置 + 应用磁盘配置 + 工作流配置 + 步骤级按需引用）。
+AI 驱动的多步骤工作流自动化平台（Electron 桌面应用）。用户通过 UI 配置工作流，每个步骤调用 Claude Agent SDK（@anthropic-ai/claude-code）执行。支持 cron 定时调度、手动触发、模板变量，以及多层配置合并（Claude CLI 全局配置 + 应用磁盘配置 + 工作流/步骤级配置）。
 
 ## 常用命令
 
@@ -52,12 +52,12 @@ src/main/
     interface/                          # ExecutionIpcHandler
 
   configuration/                        # 配置限界上下文
-    domain/model/                       # McpServer/Skill 实体, GlobalConfig/MergedConfig/StepMergedConfig 值对象
-    domain/repository/                  # McpServerRepository, SkillRepository 接口
-    domain/service/                     # ConfigMergeService（四层合并规则）
-    application/                        # McpServer/Skill/GlobalConfig ApplicationService
-    infrastructure/                     # Sqlite*Repository, CliConfigLoader, DiskGlobalConfigRepository, SkillFileWriter, GlobalConfigCache
-    interface/                          # McpServer/Skill/Config IpcHandler
+    domain/model/                       # Skill 实体, GlobalConfig/MergedConfig/StepMergedConfig 值对象
+    domain/repository/                  # SkillRepository 接口
+    domain/service/                     # ConfigMergeService（三层合并规则）
+    application/                        # Skill/GlobalConfig ApplicationService
+    infrastructure/                     # SqliteSkillRepository, CliConfigLoader, DiskGlobalConfigRepository, SkillFileWriter, GlobalConfigCache
+    interface/                          # Skill/Config IpcHandler
 
   scheduling/                           # 调度限界上下文
     domain/service/                     # SchedulerService 接口
@@ -68,7 +68,7 @@ src/main/
 
 src/renderer/                           # 前端渲染进程（Vue 3）
 src/preload/                            # Electron preload 脚本
-global_config/                          # 应用全局配置（rules/, mcp/, skills/）
+global_config/                          # 应用全局配置（rules/, skills/）
 ```
 
 ### DDD 分层规则
@@ -88,11 +88,11 @@ CronSyncUseCase             → WorkflowRepository, PipelinePort
 
 ## 关键设计决策
 
-- **配置合并策略**: rules=拼接, allowedTools=取交集, MCP=按需加载取并集, skills=同名覆盖
+- **配置合并策略**: rules=拼接, allowedTools=取交集, skills=同名覆盖
 - **执行模型**: 主进程异步执行，IPC 事件实时推送进度到渲染进程
 - **模板变量**: `{{today}}`, `{{yesterday}}`, `{{now}}`, `{{inputs.xxx}}`, `{{steps.<name>.output}}`
 - **步骤失败策略**: stop（停止）/ skip（跳过）/ retry（重试）
-- **全局配置存储在磁盘**: `global_config/` (rules/, mcp/, skills/)
+- **全局配置存储在磁盘**: `global_config/` (rules/, skills/)
 - **数据库**: SQLite (better-sqlite3 同步)，路径 `%APPDATA%/agent-workflow/agent_workflow.db`（macOS: `~/Library/Application Support/agent-workflow/`）
 - **嵌套会话保护**: 主进程启动时清除 `CLAUDECODE` 环境变量，防止从 Claude Code 终端启动时子进程被拒绝
 - **IPC 数据序列化**: `contextBridge` 在 preload 函数执行前就对参数做 structured clone，因此 `toPlain`（JSON 序列化）必须放在渲染进程侧（`src/renderer/api/index.ts`），不能放在 preload 中。Vue reactive Proxy 无法被 structured clone，必须在跨 contextBridge 之前剥离
@@ -132,7 +132,7 @@ test/
   fixtures/                    # 可复用的测试夹具（mock 工厂 + 数据工厂）
     workflow.fixtures.ts       # createTestWorkflow(), createMockWorkflowRepository()
     execution.fixtures.ts      # createTestExecution(), createMockExecutionRepository()
-    configuration.fixtures.ts  # createTestMcpServer(), createMockSkillRepository(), ...
+    configuration.fixtures.ts  # createMockSkillRepository(), ...
     service.fixtures.ts        # createMockStepExecutor(), createMockConfigMergeService(), ...
     index.ts                   # 统一导出
   helpers/

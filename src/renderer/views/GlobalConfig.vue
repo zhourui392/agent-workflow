@@ -19,26 +19,6 @@
       <el-card class="section-card">
         <template #header>
           <div class="section-header">
-            <span>MCP 服务</span>
-            <span class="config-source">来自 Claude CLI (~/.claude.json)</span>
-          </div>
-        </template>
-        <div v-if="mcpServers.length === 0" class="empty-hint">
-          暂无 MCP 服务配置，请使用 Claude CLI 配置 MCP 服务
-        </div>
-        <div v-else class="mcp-list">
-          <div v-for="server in mcpServers" :key="server.id" class="mcp-item">
-            <span class="mcp-name">{{ server.name }}</span>
-            <span class="mcp-command">{{ server.command }}</span>
-            <el-tag v-if="server.source === 'cli'" size="small" type="info">CLI</el-tag>
-          </div>
-        </div>
-        <div class="form-tip">MCP 服务在 Claude CLI 中配置，可在工作流步骤中选择使用</div>
-      </el-card>
-
-      <el-card class="section-card">
-        <template #header>
-          <div class="section-header">
             <span>Skills</span>
             <span class="config-source">来自 Claude CLI 插件</span>
           </div>
@@ -60,11 +40,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getConfig, updateConfig, getAllMcpServers, getAllSkills, type McpServerDTO, type SkillDTO } from '@/api/index'
+import { getConfig, updateConfig, getAllSkills, type SkillDTO } from '@/api/index'
 
 const loading = ref(false)
 const saving = ref(false)
-const mcpServers = ref<McpServerDTO[]>([])
 const skills = ref<SkillDTO[]>([])
 
 const form = reactive({
@@ -74,14 +53,12 @@ const form = reactive({
 async function fetchConfig() {
   loading.value = true
   try {
-    const [configRes, mcpRes, skillsRes] = await Promise.all([
+    const [configRes, skillsRes] = await Promise.all([
       getConfig(),
-      getAllMcpServers(),
       getAllSkills()
     ])
 
     form.systemPrompt = configRes.data.systemPrompt || ''
-    mcpServers.value = mcpRes.data || []
     skills.value = skillsRes.data || []
   } catch (e) {
     console.error('Failed to fetch config', e)
@@ -116,17 +93,6 @@ onMounted(fetchConfig)
 .config-source { font-size: 12px; color: #909399; font-weight: normal; }
 .empty-hint { color: #909399; text-align: center; padding: 20px; }
 .form-tip { font-size: 12px; color: #909399; margin-top: 8px; }
-.mcp-list { display: flex; flex-direction: column; gap: 8px; }
-.mcp-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: #f5f7fa;
-  border-radius: 4px;
-}
-.mcp-name { font-weight: 500; }
-.mcp-command { color: #606266; font-family: monospace; font-size: 13px; }
 .skills-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .skill-tag { margin: 0; }
 </style>

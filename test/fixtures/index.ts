@@ -22,9 +22,7 @@ export {
 
 // Configuration 相关
 export {
-  createTestMcpServer,
   createTestSkill,
-  createMockMcpServerRepository,
   createMockSkillRepository,
   createMockGlobalConfigProvider,
   createMockSkillFileWriter

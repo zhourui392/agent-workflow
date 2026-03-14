@@ -1,18 +1,13 @@
 /**
  * Claude CLI 配置加载器
  *
- * 从 ~/.claude.json 和 ~/.claude/skills/ 加载用户的 CLI 配置
+ * 从 ~/.claude/skills/ 加载用户的 CLI 配置
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import log from 'electron-log';
-import type { McpServerConfig } from '../domain/model';
-
-interface ClaudeCliConfig {
-  mcpServers?: Record<string, McpServerConfig & { type?: string }>;
-}
 
 export interface CliSkillDetail {
   name: string;
@@ -135,36 +130,6 @@ function scanAllCliSkills(): Map<string, SkillContentInternal> {
 }
 
 export class CliConfigLoader {
-  loadClaudeCliMcpServers(): Record<string, McpServerConfig> {
-    const configPath = path.join(os.homedir(), '.claude.json');
-    const content = readFileOrNull(configPath);
-
-    if (!content) return {};
-
-    try {
-      const config = JSON.parse(content) as ClaudeCliConfig;
-      if (!config.mcpServers) return {};
-
-      const result: Record<string, McpServerConfig> = {};
-
-      for (const [name, server] of Object.entries(config.mcpServers)) {
-        if (server.type === 'stdio' || !server.type) {
-          result[name] = {
-            command: server.command,
-            args: server.args,
-            env: server.env
-          };
-        }
-      }
-
-      log.debug('Loaded Claude CLI MCP servers', { count: Object.keys(result).length });
-      return result;
-    } catch (error) {
-      log.warn('Failed to parse Claude CLI config', { path: configPath, error });
-      return {};
-    }
-  }
-
   loadClaudeCliSkills(): Record<string, string> {
     const skills = scanAllCliSkills();
     log.debug('Loaded Claude CLI skills', { count: skills.size });

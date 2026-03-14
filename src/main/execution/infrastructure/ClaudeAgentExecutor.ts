@@ -12,7 +12,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
 import type { StepExecutor } from '../domain/service/PipelineOrchestrator';
-import type { MergedConfig, StepMergedConfig, McpServerConfig } from '../../configuration/domain/model';
+import type { MergedConfig, StepMergedConfig } from '../../configuration/domain/model';
 import type { StepEvent } from '../domain/model/StepEvent';
 import type { StepResult, ValidationResult } from '../domain/model/ExecutionResult';
 
@@ -58,35 +58,6 @@ function findClaudeExecutable(): string | undefined {
 
   log.debug('Claude CLI not found in known paths, relying on PATH');
   return undefined;
-}
-
-/**
- * 过滤无效的 MCP server 配置
- */
-export function getValidMcpServers(
-  mcpServers?: Record<string, McpServerConfig>
-): Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined {
-  if (!mcpServers) {
-    return undefined;
-  }
-
-  const validServers: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> = {};
-
-  for (const [name, config] of Object.entries(mcpServers)) {
-    if (config && typeof config === 'object' && 'command' in config && config.command) {
-      validServers[name] = {
-        command: config.command,
-        args: config.args,
-        env: config.env
-      };
-    }
-  }
-
-  if (Object.keys(validServers).length === 0) {
-    return undefined;
-  }
-
-  return validServers;
 }
 
 /**
@@ -193,7 +164,6 @@ interface SdkStreamMessage {
     output_tokens: number;
   };
   tools?: string[];
-  mcp_servers?: { name: string; status: string }[];
   model?: string;
   total_cost_usd?: number;
   duration_ms?: number;
@@ -210,12 +180,10 @@ function buildQueryOptions(
   const stepConfig = config as StepMergedConfig;
   const skillsDir = 'skillsDir' in stepConfig ? stepConfig.skillsDir : undefined;
   const claudePath = findClaudeExecutable();
-  const validMcpServers = getValidMcpServers(config.mcpServers);
 
   const options: Record<string, unknown> = {
     customSystemPrompt: config.systemPrompt,
     allowedTools: config.allowedTools,
-    mcpServers: validMcpServers,
     maxTurns: config.maxTurns || 30,
     permissionMode: 'acceptEdits',
     cwd: config.workingDirectory || process.cwd(),
@@ -252,7 +220,6 @@ function processStreamMessage(
     onEvent?.({
       type: 'init',
       tools: msg.tools || [],
-      mcpServers: msg.mcp_servers || [],
       model: msg.model || ''
     });
     return;

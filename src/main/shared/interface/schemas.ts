@@ -28,15 +28,8 @@ const StepSchema = z.object({
   validation: z.object({
     prompt: z.string().min(1)
   }).optional(),
-  mcpServerIds: z.array(z.string()).optional(),
   skillIds: z.array(z.string()).optional()
 });
-
-const McpServerConfigSchema = z.record(z.string(), z.object({
-  command: z.string().min(1),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional()
-}));
 
 /** 接受 null 并转换为 undefined，保持输出类型不含 null */
 function nullableToOptional<T extends z.ZodTypeAny>(schema: T) {
@@ -80,7 +73,6 @@ export const CreateWorkflowSchema = z.object({
   })).optional(),
   steps: z.array(StepSchema).min(1, '至少需要一个步骤'),
   rules: z.string().optional(),
-  mcpServers: McpServerConfigSchema.optional(),
   skills: z.record(z.string(), z.string()).optional(),
   limits: LimitsSchema,
   output: OutputSchema,
@@ -101,19 +93,6 @@ export const ExecutionListParamsSchema = z.object({
   offset: z.number().int().min(0).optional()
 }).optional();
 
-// ========== MCP 服务 ==========
-
-export const CreateMcpServerSchema = z.object({
-  name: z.string().min(1, 'MCP 服务名称不能为空').max(200),
-  description: z.string().optional(),
-  command: z.string().min(1, '命令不能为空'),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string(), z.string()).optional(),
-  enabled: z.boolean().optional()
-});
-
-export const UpdateMcpServerSchema = CreateMcpServerSchema.partial();
-
 // ========== Skills ==========
 
 export const CreateSkillSchema = z.object({
@@ -130,8 +109,7 @@ export const UpdateSkillSchema = CreateSkillSchema.partial();
 
 export const UpdateConfigSchema = z.object({
   systemPrompt: z.string().optional(),
-  defaultModel: z.string().optional(),
-  mcpServers: McpServerConfigSchema.optional()
+  defaultModel: z.string().optional()
 });
 
 // ========== 校验辅助函数 ==========

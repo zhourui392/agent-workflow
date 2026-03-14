@@ -12,8 +12,6 @@ import type { WorkflowStep } from '../domain/model/WorkflowStep';
 import type { WorkflowInput } from '../domain/model/WorkflowInput';
 import type { WorkflowLimits } from '../domain/model/WorkflowLimits';
 import type { WorkflowOutput } from '../domain/model/WorkflowOutput';
-import type { McpServerConfig } from '../../configuration/domain/model';
-
 function rowToWorkflow(row: Record<string, unknown>): Workflow {
   return new Workflow({
     id: row.id as string,
@@ -23,7 +21,6 @@ function rowToWorkflow(row: Record<string, unknown>): Workflow {
     inputs: safeJsonParse<WorkflowInput[] | undefined>(row.inputs as string, undefined, 'workflow.inputs'),
     steps: safeJsonParse<WorkflowStep[]>(row.steps as string, [], 'workflow.steps'),
     rules: row.rules as string | undefined,
-    mcpServers: safeJsonParse<Record<string, McpServerConfig> | undefined>(row.mcp_servers as string, undefined, 'workflow.mcpServers'),
     skills: safeJsonParse<Record<string, string> | undefined>(row.skills as string, undefined, 'workflow.skills'),
     limits: safeJsonParse<WorkflowLimits | undefined>(row.limits as string, undefined, 'workflow.limits'),
     output: safeJsonParse<WorkflowOutput | undefined>(row.output as string, undefined, 'workflow.output'),
@@ -61,8 +58,8 @@ export class SqliteWorkflowRepository implements WorkflowRepository {
     this.db.prepare(`
       INSERT INTO workflows (
         id, name, enabled, schedule, inputs, steps, rules,
-        mcp_servers, skills, limits, output, working_directory, on_failure, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        skills, limits, output, working_directory, on_failure, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.name,
@@ -71,7 +68,6 @@ export class SqliteWorkflowRepository implements WorkflowRepository {
       data.inputs ? JSON.stringify(data.inputs) : null,
       JSON.stringify(data.steps),
       data.rules || null,
-      data.mcpServers ? JSON.stringify(data.mcpServers) : null,
       data.skills ? JSON.stringify(data.skills) : null,
       data.limits ? JSON.stringify(data.limits) : null,
       data.output ? JSON.stringify(data.output) : null,
@@ -97,7 +93,6 @@ export class SqliteWorkflowRepository implements WorkflowRepository {
     if (data.inputs !== undefined) { fields.push('inputs = ?'); values.push(data.inputs ? JSON.stringify(data.inputs) : null); }
     if (data.steps !== undefined) { fields.push('steps = ?'); values.push(JSON.stringify(data.steps)); }
     if (data.rules !== undefined) { fields.push('rules = ?'); values.push(data.rules || null); }
-    if (data.mcpServers !== undefined) { fields.push('mcp_servers = ?'); values.push(data.mcpServers ? JSON.stringify(data.mcpServers) : null); }
     if (data.skills !== undefined) { fields.push('skills = ?'); values.push(data.skills ? JSON.stringify(data.skills) : null); }
     if (data.limits !== undefined) { fields.push('limits = ?'); values.push(data.limits ? JSON.stringify(data.limits) : null); }
     if (data.output !== undefined) { fields.push('output = ?'); values.push(data.output ? JSON.stringify(data.output) : null); }

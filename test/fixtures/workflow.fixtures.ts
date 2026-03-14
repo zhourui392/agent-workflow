@@ -23,7 +23,6 @@ export function createTestWorkflow(overrides: Partial<{
   inputs: Array<{ name: string; type?: string; required?: boolean; default?: string }>;
   steps: WorkflowStep[];
   rules: string;
-  mcpServers: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>;
   skills: Record<string, string>;
   limits: { maxTokens?: number; maxTurns?: number; timeoutMs?: number };
   output: unknown;

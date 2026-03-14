@@ -16,11 +16,7 @@ import type {
   UpdateWorkflowRequest,
   ExecutionListParams,
   ExecutionProgressEvent,
-  McpServerConfig,
-  McpServerDTO,
   SkillDTO,
-  CreateMcpServerInput,
-  UpdateMcpServerInput,
   CreateSkillInput,
   UpdateSkillInput
 } from '../../main/types';
@@ -171,80 +167,8 @@ export function getConfig(): Promise<AxiosLikeResponse<GlobalConfig>> {
 export function updateConfig(data: {
   systemPrompt?: string;
   defaultModel?: string;
-  mcpServers?: Record<string, McpServerConfig>;
 }): Promise<AxiosLikeResponse<{ success: boolean }>> {
   return wrapResponse(window.api.updateConfig(toPlain(data)));
-}
-
-// ============ MCP Servers API ============
-
-/**
- * 获取 MCP 服务列表（仅数据库）
- */
-export function getMcpServers(): Promise<AxiosLikeResponse<McpServerDTO[]>> {
-  return wrapResponse(window.api.getMcpServers());
-}
-
-/**
- * 获取所有 MCP 服务（数据库 + Claude CLI）
- */
-export function getAllMcpServers(): Promise<AxiosLikeResponse<McpServerDTO[]>> {
-  return wrapResponse(window.api.getAllMcpServers());
-}
-
-/**
- * 获取单个 MCP 服务
- *
- * @param id MCP 服务 ID
- */
-export function getMcpServer(id: string): Promise<AxiosLikeResponse<McpServerDTO | null>> {
-  return wrapResponse(window.api.getMcpServer(id));
-}
-
-/**
- * 创建 MCP 服务
- *
- * @param data 创建数据
- */
-export function createMcpServer(
-  data: CreateMcpServerInput
-): Promise<AxiosLikeResponse<McpServerDTO>> {
-  return wrapResponse(window.api.createMcpServer(toPlain(data)));
-}
-
-/**
- * 更新 MCP 服务
- *
- * @param id MCP 服务 ID
- * @param data 更新数据
- */
-export function updateMcpServer(
-  id: string,
-  data: UpdateMcpServerInput
-): Promise<AxiosLikeResponse<McpServerDTO | null>> {
-  return wrapResponse(window.api.updateMcpServer(id, toPlain(data)));
-}
-
-/**
- * 删除 MCP 服务
- *
- * @param id MCP 服务 ID
- */
-export function deleteMcpServer(id: string): Promise<AxiosLikeResponse<boolean>> {
-  return wrapResponse(window.api.deleteMcpServer(id));
-}
-
-/**
- * 设置 MCP 服务启用状态
- *
- * @param id MCP 服务 ID
- * @param enabled 是否启用
- */
-export function setMcpServerEnabled(
-  id: string,
-  enabled: boolean
-): Promise<AxiosLikeResponse<McpServerDTO | null>> {
-  return wrapResponse(window.api.setMcpServerEnabled(id, enabled));
 }
 
 // ============ Skills API ============
@@ -345,13 +269,9 @@ export type {
   WorkflowInput,
   WorkflowLimits,
   WorkflowOutput,
-  McpServerConfig,
   ExecutionStatus,
   TriggerType,
-  McpServerDTO,
   SkillDTO,
-  CreateMcpServerInput,
-  UpdateMcpServerInput,
   CreateSkillInput,
   UpdateSkillInput
 } from '../../main/types';

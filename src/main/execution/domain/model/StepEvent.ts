@@ -21,7 +21,6 @@ export type StepEventType =
 export interface InitEvent {
   type: 'init';
   tools: string[];
-  mcpServers: { name: string; status: string }[];
   model: string;
 }
 

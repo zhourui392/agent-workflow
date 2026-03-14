@@ -24,28 +24,6 @@
       <el-input :model-value="step.validation_prompt" @update:model-value="updateField('validation_prompt', $event)" type="textarea" :rows="3"
         placeholder="描述期望的输出标准，如：输出必须包含JSON格式的分析结果，且包含 summary 和 details 字段" />
     </el-form-item>
-    <el-form-item label="MCP 服务">
-      <el-select
-        :model-value="step.mcp_server_ids"
-        @update:model-value="updateField('mcp_server_ids', $event)"
-        multiple
-        filterable
-        placeholder="选择此步骤使用的 MCP 服务"
-        style="width: 100%"
-      >
-        <el-option
-          v-for="mcp in mcpServers"
-          :key="mcp.id"
-          :label="mcp.name"
-          :value="mcp.id"
-        >
-          <span>{{ mcp.name }}</span>
-          <span v-if="mcp.source === 'cli'" class="cli-tag">CLI</span>
-          <span v-if="mcp.description" class="option-desc">{{ mcp.description }}</span>
-        </el-option>
-      </el-select>
-      <div class="form-tip">选择此步骤需要调用的 MCP 服务（如数据库、API 等）</div>
-    </el-form-item>
     <el-form-item label="Skills">
       <el-select
         :model-value="step.skill_ids"
@@ -73,7 +51,6 @@
 
 <script setup lang="ts">
 import { Delete } from '@element-plus/icons-vue'
-import type { McpServerData } from '@/api/mcpServers'
 import type { SkillData } from '@/api/skills'
 
 /**
@@ -85,14 +62,12 @@ export interface StepFormData {
   max_turns: number
   validation_enabled: boolean
   validation_prompt: string
-  mcp_server_ids: string[]
   skill_ids: string[]
 }
 
 const props = defineProps<{
   step: StepFormData
   index: number
-  mcpServers: McpServerData[]
   skills: SkillData[]
   disableRemove: boolean
 }>()

@@ -18,7 +18,6 @@ export function initializeTables(database: Database.Database): void {
       inputs TEXT,
       steps TEXT NOT NULL,
       rules TEXT,
-      mcp_servers TEXT,
       skills TEXT,
       limits TEXT,
       output TEXT,
@@ -56,18 +55,6 @@ export function initializeTables(database: Database.Database): void {
       FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS mcp_servers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT,
-      command TEXT NOT NULL,
-      args TEXT,
-      env TEXT,
-      enabled INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS skills (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
@@ -82,7 +69,6 @@ export function initializeTables(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON executions(workflow_id);
     CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
     CREATE INDEX IF NOT EXISTS idx_step_executions_execution_id ON step_executions(execution_id);
-    CREATE INDEX IF NOT EXISTS idx_mcp_servers_enabled ON mcp_servers(enabled);
     CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(enabled);
     CREATE INDEX IF NOT EXISTS idx_workflows_enabled_schedule ON workflows(enabled, schedule);
     CREATE INDEX IF NOT EXISTS idx_step_executions_exec_step ON step_executions(execution_id, step_index);

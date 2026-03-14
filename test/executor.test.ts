@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { extractText, truncate, getValidMcpServers, extractToolResults } from '../src/main/execution/infrastructure/ClaudeAgentExecutor'
+import { extractText, truncate, extractToolResults } from '../src/main/execution/infrastructure/ClaudeAgentExecutor'
 
 // ========== extractText ==========
 
@@ -79,62 +79,6 @@ describe('truncate', () => {
 
   it('截断长度为0', () => {
     expect(truncate('hello', 0)).toBe('...')
-  })
-})
-
-// ========== getValidMcpServers ==========
-
-describe('getValidMcpServers', () => {
-  it('undefined 输入返回 undefined', () => {
-    expect(getValidMcpServers(undefined)).toBeUndefined()
-  })
-
-  it('空对象返回 undefined', () => {
-    expect(getValidMcpServers({})).toBeUndefined()
-  })
-
-  it('过滤无 command 的配置', () => {
-    const servers = {
-      valid: { command: 'node', args: ['server.js'] },
-      invalid: {} as any
-    }
-    const result = getValidMcpServers(servers)
-    expect(result).toEqual({
-      valid: { command: 'node', args: ['server.js'], env: undefined }
-    })
-  })
-
-  it('保留有效配置的 args 和 env', () => {
-    const servers = {
-      myServer: {
-        command: 'python',
-        args: ['-m', 'server'],
-        env: { API_KEY: 'secret' }
-      }
-    }
-    const result = getValidMcpServers(servers)
-    expect(result).toEqual({
-      myServer: {
-        command: 'python',
-        args: ['-m', 'server'],
-        env: { API_KEY: 'secret' }
-      }
-    })
-  })
-
-  it('全部无效时返回 undefined', () => {
-    const servers = {
-      bad1: { args: ['a'] } as any,
-      bad2: null as any
-    }
-    expect(getValidMcpServers(servers)).toBeUndefined()
-  })
-
-  it('command 为空字符串时视为无效', () => {
-    const servers = {
-      empty: { command: '' }
-    }
-    expect(getValidMcpServers(servers)).toBeUndefined()
   })
 })
 

@@ -5,7 +5,7 @@
  */
 
 import log from 'electron-log';
-import type { McpServerConfig, GlobalConfig } from '../domain/model';
+import type { GlobalConfig } from '../domain/model';
 import type { GlobalConfigProvider } from '../domain/service/ConfigMergeService';
 import type { CliConfigLoader } from './CliConfigLoader';
 import type { DiskGlobalConfigRepository } from './DiskGlobalConfigRepository';
@@ -20,10 +20,6 @@ export class GlobalConfigCacheImpl implements GlobalConfigProvider {
     private readonly cliConfigLoader: CliConfigLoader,
     private readonly diskConfigRepo: DiskGlobalConfigRepository
   ) {}
-
-  loadCliMcpServers(): Record<string, McpServerConfig> {
-    return this.cliConfigLoader.loadClaudeCliMcpServers();
-  }
 
   loadCliSkills(): Record<string, string> {
     return this.cliConfigLoader.loadClaudeCliSkills();

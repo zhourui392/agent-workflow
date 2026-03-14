@@ -4,8 +4,6 @@ export {
   UpdateWorkflowSchema,
   RunWorkflowInputsSchema,
   ExecutionListParamsSchema,
-  CreateMcpServerSchema,
-  UpdateMcpServerSchema,
   CreateSkillSchema,
   UpdateSkillSchema,
   UpdateConfigSchema,

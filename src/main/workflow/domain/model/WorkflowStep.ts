@@ -16,6 +16,5 @@ export interface WorkflowStep {
   validation?: {
     prompt: string;
   };
-  mcpServerIds?: string[];
   skillIds?: string[];
 }

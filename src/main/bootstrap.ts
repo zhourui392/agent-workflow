@@ -14,14 +14,12 @@ import log from 'electron-log';
 import { getDatabase, closeDatabase } from './shared/infrastructure';
 
 // Configuration context
-import { SqliteMcpServerRepository } from './configuration/infrastructure/SqliteMcpServerRepository';
 import { SqliteSkillRepository } from './configuration/infrastructure/SqliteSkillRepository';
 import { DiskGlobalConfigRepository } from './configuration/infrastructure/DiskGlobalConfigRepository';
 import { CliConfigLoader } from './configuration/infrastructure/CliConfigLoader';
 import { SkillFileWriterImpl } from './configuration/infrastructure/SkillFileWriter';
 import { GlobalConfigCacheImpl } from './configuration/infrastructure/GlobalConfigCache';
 import { ConfigMergeService } from './configuration/domain/service/ConfigMergeService';
-import { McpServerApplicationService } from './configuration/application/McpServerApplicationService';
 import { SkillApplicationService } from './configuration/application/SkillApplicationService';
 import { GlobalConfigApplicationService } from './configuration/application/GlobalConfigApplicationService';
 
@@ -46,7 +44,6 @@ import { CronSyncUseCase } from './scheduling/application/CronSyncUseCase';
 // IPC handlers (Interface layer)
 import { WorkflowIpcHandler } from './workflow/interface/WorkflowIpcHandler';
 import { ExecutionIpcHandler } from './execution/interface/ExecutionIpcHandler';
-import { McpServerIpcHandler } from './configuration/interface/McpServerIpcHandler';
 import { SkillIpcHandler } from './configuration/interface/SkillIpcHandler';
 import { ConfigIpcHandler } from './configuration/interface/ConfigIpcHandler';
 
@@ -67,16 +64,14 @@ export function bootstrap(): AppContext {
   const db = getDatabase();
 
   // === Configuration Context ===
-  const mcpServerRepo = new SqliteMcpServerRepository(db);
   const skillRepo = new SqliteSkillRepository(db);
   const cliConfigLoader = new CliConfigLoader();
   const diskConfigRepo = new DiskGlobalConfigRepository();
   const skillFileWriter = new SkillFileWriterImpl();
   const globalConfigCache = new GlobalConfigCacheImpl(cliConfigLoader, diskConfigRepo);
   const configMergeService = new ConfigMergeService(
-    mcpServerRepo, skillRepo, globalConfigCache, skillFileWriter
+    skillRepo, globalConfigCache, skillFileWriter
   );
-  const mcpServerAppService = new McpServerApplicationService(mcpServerRepo, cliConfigLoader);
   const skillAppService = new SkillApplicationService(skillRepo, cliConfigLoader);
   const globalConfigAppService = new GlobalConfigApplicationService(diskConfigRepo, globalConfigCache);
 
@@ -107,7 +102,6 @@ export function bootstrap(): AppContext {
   // === IPC Handlers ===
   const workflowIpcHandler = new WorkflowIpcHandler(workflowAppService);
   const executionIpcHandler = new ExecutionIpcHandler(queryExecutionUseCase);
-  const mcpServerIpcHandler = new McpServerIpcHandler(mcpServerAppService);
   const skillIpcHandler = new SkillIpcHandler(skillAppService);
   const configIpcHandler = new ConfigIpcHandler(globalConfigAppService);
 
@@ -117,7 +111,6 @@ export function bootstrap(): AppContext {
     registerIpc: () => {
       workflowIpcHandler.register();
       executionIpcHandler.register();
-      mcpServerIpcHandler.register();
       skillIpcHandler.register();
       configIpcHandler.register();
       log.info('IPC handlers registered');

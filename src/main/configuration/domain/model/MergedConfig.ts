@@ -1,13 +1,11 @@
 /**
  * 合并后的配置（值对象）
  */
-import type { McpServerConfig } from './McpServerConfig';
 
 export interface MergedConfig {
   systemPrompt?: string;
   model?: string;
   allowedTools?: string[];
-  mcpServers?: Record<string, McpServerConfig>;
   skills?: Record<string, string>;
   maxTurns?: number;
   timeoutMs?: number;

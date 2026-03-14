@@ -6,84 +6,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { McpServerApplicationService } from '../../src/main/configuration/application/McpServerApplicationService';
 import { SkillApplicationService } from '../../src/main/configuration/application/SkillApplicationService';
 import { GlobalConfigApplicationService } from '../../src/main/configuration/application/GlobalConfigApplicationService';
 import type { CliConfigLoader } from '../../src/main/configuration/infrastructure/CliConfigLoader';
 import type { DiskGlobalConfigRepository } from '../../src/main/configuration/infrastructure/DiskGlobalConfigRepository';
 import type { GlobalConfigCacheImpl } from '../../src/main/configuration/infrastructure/GlobalConfigCache';
 import {
-  createMockMcpServerRepository,
   createMockSkillRepository,
-  createTestMcpServer,
   createTestSkill
 } from '../fixtures';
-
-// ═══════════════════════════════════════════════════════════════════
-// McpServerApplicationService
-// ═══════════════════════════════════════════════════════════════════
-
-describe('McpServerApplicationService', () => {
-  let repo: ReturnType<typeof createMockMcpServerRepository>;
-  let cliConfigLoader: CliConfigLoader;
-  let service: McpServerApplicationService;
-
-  beforeEach(() => {
-    repo = createMockMcpServerRepository();
-    cliConfigLoader = {
-      loadClaudeCliMcpServers: vi.fn(() => ({})),
-      loadClaudeCliSkills: vi.fn(() => ({})),
-      loadClaudeCliSkillsWithDetails: vi.fn(() => []),
-    } as unknown as CliConfigLoader;
-    service = new McpServerApplicationService(repo, cliConfigLoader);
-  });
-
-  describe('listAll', () => {
-    it('merges DB servers with CLI servers, deduplicates by name', () => {
-      const dbServer = createTestMcpServer({ name: 'shared-server' });
-      (repo.findAll as ReturnType<typeof vi.fn>).mockReturnValue([dbServer]);
-      (cliConfigLoader.loadClaudeCliMcpServers as ReturnType<typeof vi.fn>).mockReturnValue({
-        'shared-server': { command: 'npx shared' },       // duplicate — should be skipped
-        'cli-only-server': { command: 'npx cli-only', args: ['--flag'] },
-      });
-
-      const result = service.listAll();
-
-      // DB server kept, CLI duplicate skipped, CLI-only added
-      expect(result).toHaveLength(2);
-      expect(result[0]).toBe(dbServer);
-      expect(result[1]).toMatchObject({
-        id: 'cli:cli-only-server',
-        name: 'cli-only-server',
-        command: 'npx cli-only',
-        args: ['--flag'],
-        source: 'cli',
-        enabled: true,
-      });
-    });
-
-    it('returns only DB servers when CLI has no servers', () => {
-      const dbServer = createTestMcpServer();
-      (repo.findAll as ReturnType<typeof vi.fn>).mockReturnValue([dbServer]);
-
-      const result = service.listAll();
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toBe(dbServer);
-    });
-
-    it('returns only CLI servers when DB is empty', () => {
-      (cliConfigLoader.loadClaudeCliMcpServers as ReturnType<typeof vi.fn>).mockReturnValue({
-        'cli-server': { command: 'npx cli' },
-      });
-
-      const result = service.listAll();
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ name: 'cli-server', source: 'cli' });
-    });
-  });
-});
 
 // ═══════════════════════════════════════════════════════════════════
 // SkillApplicationService
@@ -97,7 +28,6 @@ describe('SkillApplicationService', () => {
   beforeEach(() => {
     repo = createMockSkillRepository();
     cliConfigLoader = {
-      loadClaudeCliMcpServers: vi.fn(() => ({})),
       loadClaudeCliSkills: vi.fn(() => ({})),
       loadClaudeCliSkillsWithDetails: vi.fn(() => []),
     } as unknown as CliConfigLoader;
@@ -171,7 +101,6 @@ describe('GlobalConfigApplicationService', () => {
 
     configCache = {
       invalidate: vi.fn(),
-      loadCliMcpServers: vi.fn(() => ({})),
       loadCliSkills: vi.fn(() => ({})),
       loadDiskConfig: vi.fn(() => ({})),
     } as unknown as GlobalConfigCacheImpl;

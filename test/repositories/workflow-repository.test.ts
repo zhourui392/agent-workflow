@@ -117,7 +117,6 @@ describe('SqliteWorkflowRepository', () => {
             prompt: 'Run build for {{inputs.env}}',
             model: 'claude-sonnet-4-20250514',
             maxTurns: 5,
-            mcpServerIds: ['mcp-1'],
             skillIds: ['skill-1'],
             onFailure: 'retry',
             retryConfig: { maxAttempts: 3, delayMs: 1000 },
@@ -125,9 +124,6 @@ describe('SqliteWorkflowRepository', () => {
           }
         ],
         rules: 'Always use TypeScript',
-        mcpServers: {
-          'my-server': { command: 'npx', args: ['server'], env: { PORT: '3000' } }
-        },
         skills: { 'code-review': '/path/to/skill' },
         limits: { maxTokens: 100000, maxTurns: 10, timeoutMs: 60000 },
         output: {
@@ -152,9 +148,6 @@ describe('SqliteWorkflowRepository', () => {
       expect(created.steps[0].model).toBe('claude-sonnet-4-20250514');
       expect(created.steps[0].retryConfig).toEqual({ maxAttempts: 3, delayMs: 1000 });
       expect(created.rules).toBe('Always use TypeScript');
-      expect(created.mcpServers).toEqual({
-        'my-server': { command: 'npx', args: ['server'], env: { PORT: '3000' } }
-      });
       expect(created.skills).toEqual({ 'code-review': '/path/to/skill' });
       expect(created.limits).toEqual({ maxTokens: 100000, maxTurns: 10, timeoutMs: 60000 });
       expect(created.output).toEqual({
@@ -208,21 +201,18 @@ describe('SqliteWorkflowRepository', () => {
       const newSteps = [
         { name: 'New Step', prompt: 'New prompt', model: 'opus' }
       ];
-      const newMcpServers = { 'srv': { command: 'cmd', args: ['--flag'] } };
       const newSkills = { 'my-skill': '/skill/path' };
       const newLimits = { maxTokens: 50000 };
       const newOutput = { file: { path: '/out.txt', format: 'text' as const } };
 
       const updated = repo.update(created.id, {
         steps: newSteps,
-        mcpServers: newMcpServers,
         skills: newSkills,
         limits: newLimits,
         output: newOutput
       });
 
       expect(updated!.steps).toEqual(newSteps);
-      expect(updated!.mcpServers).toEqual(newMcpServers);
       expect(updated!.skills).toEqual(newSkills);
       expect(updated!.limits).toEqual(newLimits);
       expect(updated!.output).toEqual(newOutput);

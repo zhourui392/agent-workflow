@@ -22,10 +22,10 @@ export type { StepEvent, StepEventType, InitEvent, TextEvent, ToolCallEvent, Too
 export type { StepResult, ValidationResult, ExecutionResult, ExecutionProgressEvent } from './execution/domain/model/ExecutionResult';
 
 // Configuration context
-export { McpServer, Skill } from './configuration/domain/model';
-export type { CreateMcpServerInput, UpdateMcpServerInput, CreateSkillInput, UpdateSkillInput, McpServerConfig, GlobalConfig, MergedConfig, StepMergedConfig } from './configuration/domain/model';
+export { Skill } from './configuration/domain/model';
+export type { CreateSkillInput, UpdateSkillInput, GlobalConfig, MergedConfig, StepMergedConfig } from './configuration/domain/model';
 export { SkillWriteError, ConfigReferenceError } from './configuration/domain/model';
-export type { ReferenceValidationResult, McpServerStartResult } from './configuration/domain/model';
+export type { ReferenceValidationResult } from './configuration/domain/model';
 
 // ========== IPC DTO 接口 ==========
 // IPC 返回的 plain object 类型，解决 class getter 在 structured clone 中丢失的问题。
@@ -37,8 +37,6 @@ import type { WorkflowOutput } from './workflow/domain/model/WorkflowOutput';
 import type { FailureStrategy } from './workflow/domain/model/FailureStrategy';
 import type { ExecutionStatus, TriggerType } from './execution/domain/model/ExecutionStatus';
 import type { StepEvent } from './execution/domain/model/StepEvent';
-import type { McpServerConfig } from './configuration/domain/model';
-
 export interface WorkflowDTO {
   id: string;
   name: string;
@@ -47,7 +45,6 @@ export interface WorkflowDTO {
   inputs?: WorkflowInput[];
   steps: WorkflowStep[];
   rules?: string;
-  mcpServers?: Record<string, McpServerConfig>;
   skills?: Record<string, string>;
   limits?: WorkflowLimits;
   output?: WorkflowOutput;
@@ -88,18 +85,6 @@ export interface ExecutionDTO {
   totalTokens: number;
   errorMessage?: string;
   stepExecutions?: StepExecutionDTO[];
-}
-
-export interface McpServerDTO {
-  id: string;
-  name: string;
-  description?: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  enabled: boolean;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface SkillDTO {
