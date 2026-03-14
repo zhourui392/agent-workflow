@@ -8,7 +8,8 @@
 // Workflow context
 export { Workflow } from './workflow/domain/model';
 export type { CreateWorkflowRequest, UpdateWorkflowRequest } from './workflow/domain/model';
-export type { WorkflowStep } from './workflow/domain/model/WorkflowStep';
+export type { WorkflowStep, AgentStep, SubWorkflowStep, ForEachConfig } from './workflow/domain/model/WorkflowStep';
+export { isSubWorkflowStep, isAgentStep } from './workflow/domain/model/WorkflowStep';
 export type { WorkflowInput } from './workflow/domain/model/WorkflowInput';
 export type { WorkflowLimits } from './workflow/domain/model/WorkflowLimits';
 export type { WorkflowOutput } from './workflow/domain/model/WorkflowOutput';
@@ -88,6 +89,9 @@ export interface ExecutionDTO {
   totalTokens: number;
   errorMessage?: string;
   stepExecutions?: StepExecutionDTO[];
+  parentExecutionId?: string;
+  parentStepIndex?: number;
+  iterationIndex?: number;
 }
 
 export interface SkillDTO {

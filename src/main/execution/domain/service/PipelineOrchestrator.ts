@@ -49,12 +49,20 @@ export interface OutputProcessor {
   process(output: any, result: ExecutionResult, inputs: Record<string, unknown>): Promise<void>;
 }
 
+/**
+ * 工作流加载器接口（基础设施层实现，根据 ID 加载工作流定义）
+ */
+export interface WorkflowLoader {
+  loadWorkflow(workflowId: string): WorkflowRef | null;
+}
+
 // ========== 工作流引用接口 ==========
 
 /**
- * 工作流步骤定义（跨上下文引用，避免直接依赖 Workflow 限界上下文）
+ * Agent 步骤引用（跨上下文引用，避免直接依赖 Workflow 限界上下文）
  */
-export interface WorkflowStepRef {
+export interface AgentStepRef {
+  type?: 'agent';
   name: string;
   prompt: string;
   model?: string;
@@ -70,6 +78,27 @@ export interface WorkflowStepRef {
   };
   skillIds?: string[];
 }
+
+/**
+ * 子工作流步骤引用
+ */
+export interface SubWorkflowStepRef {
+  type: 'subWorkflow';
+  name: string;
+  workflowId: string;
+  inputMapping?: Record<string, string>;
+  forEach?: {
+    iterateOver: string;
+    itemVariable: string;
+  };
+  onFailure?: 'stop' | 'skip' | 'retry';
+  retryConfig?: {
+    maxAttempts?: number;
+    delayMs?: number;
+  };
+}
+
+export type WorkflowStepRef = AgentStepRef | SubWorkflowStepRef;
 
 /**
  * 工作流引用（跨上下文引用，仅包含流水线编排所需的字段）
@@ -121,7 +150,8 @@ export class PipelineOrchestrator {
     private readonly outputProcessor: OutputProcessor,
     private readonly templateEngine: TemplateEngine,
     private readonly cancellationRegistry?: CancellationRegistry,
-    private readonly ruleValidator?: RuleValidator
+    private readonly ruleValidator?: RuleValidator,
+    private readonly workflowLoader?: WorkflowLoader
   ) {}
 
   /**
@@ -179,9 +209,16 @@ export class PipelineOrchestrator {
         const step = workflow.steps[i];
         const onFailure = step.onFailure || workflow.onFailure;
 
-        const stepResult = await this.runStep(
-          step, i, executionId, workflow, mergedConfig, context
-        );
+        let stepResult: StepRunResult;
+        if (step.type === 'subWorkflow') {
+          stepResult = await this.runSubWorkflowStep(
+            step, i, executionId, context
+          );
+        } else {
+          stepResult = await this.runStep(
+            step, i, executionId, workflow, mergedConfig, context
+          );
+        }
 
         totalTokens += stepResult.tokensUsed;
 
@@ -221,7 +258,7 @@ export class PipelineOrchestrator {
    * 模板渲染 → 创建记录 → 构建配置 → 执行（含重试） → 验证 → 更新记录 → 广播结果
    */
   private async runStep(
-    step: WorkflowStepRef,
+    step: AgentStepRef,
     stepIndex: number,
     executionId: string,
     workflow: WorkflowRef,
@@ -371,6 +408,222 @@ export class PipelineOrchestrator {
       outputText: result.outputText,
       errorMessage: result.errorMessage
     };
+  }
+
+  /**
+   * 执行子工作流步骤（含 forEach 循环）
+   *
+   * 加载子工作流定义 → 解析输入映射 → 单次/forEach 执行 → 收集输出
+   */
+  private async runSubWorkflowStep(
+    step: SubWorkflowStepRef,
+    stepIndex: number,
+    executionId: string,
+    context: TemplateContext
+  ): Promise<StepRunResult> {
+    // 1. 创建步骤执行记录
+    this.executionRepository.updateCurrentStep(executionId, stepIndex);
+    const stepExecution = this.executionRepository.createStepExecution(
+      executionId, stepIndex, `[subWorkflow] ${step.workflowId}`
+    );
+    this.progressNotifier.broadcastStepStart(executionId, stepIndex);
+
+    // 2. 加载子工作流定义
+    if (!this.workflowLoader) {
+      return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context, 'WorkflowLoader 未注入');
+    }
+
+    const subWorkflow = this.workflowLoader.loadWorkflow(step.workflowId);
+    if (!subWorkflow) {
+      return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context, `子工作流不存在: ${step.workflowId}`);
+    }
+
+    // 3. 解析输入映射
+    const mappedInputs: Record<string, unknown> = {};
+    if (step.inputMapping) {
+      for (const [key, expr] of Object.entries(step.inputMapping)) {
+        mappedInputs[key] = this.templateEngine.render(expr, context);
+      }
+    }
+
+    try {
+      let outputText: string;
+      let totalTokens = 0;
+
+      if (step.forEach) {
+        // 4a. forEach 模式：串行遍历列表
+        const rawItems = this.templateEngine.render(step.forEach.iterateOver, context);
+        let items: unknown[];
+        try {
+          items = JSON.parse(rawItems);
+          if (!Array.isArray(items)) {
+            return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context,
+              `forEach.iterateOver 解析结果不是数组: ${typeof items}`);
+          }
+        } catch {
+          return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context,
+            `forEach.iterateOver 无法解析为 JSON 数组: ${rawItems.substring(0, 200)}`);
+        }
+
+        const iterationOutputs: string[] = [];
+        for (let i = 0; i < items.length; i++) {
+          // 检查取消
+          if (this.cancellationRegistry?.isCancellationRequested(executionId)) {
+            return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context, '用户取消');
+          }
+
+          const iterInputs = {
+            ...mappedInputs,
+            [step.forEach.itemVariable]: items[i]
+          };
+
+          const iterResult = await this.executeSubWorkflow(
+            subWorkflow, iterInputs, executionId, stepIndex, i
+          );
+          totalTokens += iterResult.tokensUsed;
+
+          if (!iterResult.success) {
+            const onFailure = step.onFailure || 'stop';
+            if (onFailure === 'stop') {
+              return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context,
+                `迭代 ${i} 失败: ${iterResult.errorMessage}`, totalTokens);
+            }
+            iterationOutputs.push('');
+          } else {
+            iterationOutputs.push(iterResult.outputText);
+          }
+        }
+        outputText = JSON.stringify(iterationOutputs);
+      } else {
+        // 4b. 单次调用
+        const result = await this.executeSubWorkflow(
+          subWorkflow, mappedInputs, executionId, stepIndex
+        );
+        totalTokens = result.tokensUsed;
+
+        if (!result.success) {
+          return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context,
+            result.errorMessage, totalTokens);
+        }
+        outputText = result.outputText;
+      }
+
+      // 5. 更新步骤执行记录
+      this.executionRepository.updateStepExecution(stepExecution.id, {
+        status: 'success',
+        outputText,
+        tokensUsed: totalTokens
+      });
+      this.executionRepository.addTokens(executionId, totalTokens);
+
+      context.steps![step.name] = { output: outputText };
+
+      this.progressNotifier.broadcastStepResult(
+        executionId, stepIndex, true, outputText, totalTokens
+      );
+
+      return { success: true, tokensUsed: totalTokens, outputText };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return this.failSubWorkflowStep(stepExecution.id, step, stepIndex, executionId, context, errorMessage);
+    }
+  }
+
+  /**
+   * 子工作流步骤失败的统一处理
+   */
+  private failSubWorkflowStep(
+    stepExecId: string,
+    step: SubWorkflowStepRef,
+    stepIndex: number,
+    executionId: string,
+    context: TemplateContext,
+    errorMessage?: string,
+    tokensUsed = 0
+  ): StepRunResult {
+    this.executionRepository.updateStepExecution(stepExecId, {
+      status: 'failed',
+      errorMessage,
+      tokensUsed
+    });
+    context.steps![step.name] = { output: '' };
+    this.progressNotifier.broadcastStepResult(executionId, stepIndex, false, '', tokensUsed, errorMessage);
+    return { success: false, tokensUsed, outputText: '', errorMessage };
+  }
+
+  /**
+   * 执行子工作流（同步等待完成）
+   *
+   * 创建子 Execution → 运行子流水线 → 返回最后步骤输出
+   */
+  private async executeSubWorkflow(
+    subWorkflow: WorkflowRef,
+    inputs: Record<string, unknown>,
+    parentExecutionId: string,
+    parentStepIndex: number,
+    iterationIndex?: number
+  ): Promise<StepRunResult> {
+    const subExecution = this.executionRepository.create(
+      subWorkflow.id, 'manual',
+      { parentExecutionId, parentStepIndex, iterationIndex }
+    );
+
+    const context: TemplateContext = { inputs, steps: {} };
+    let totalTokens = 0;
+
+    try {
+      this.executionRepository.updateStatus(subExecution.id, 'running');
+
+      const globalConfig = this.configMergeService.loadGlobalConfig();
+      const workflowConfigRef: WorkflowConfigRef = {
+        rules: subWorkflow.rules,
+        skills: subWorkflow.skills,
+        limits: subWorkflow.limits,
+        workingDirectory: subWorkflow.workingDirectory
+      };
+      const mergedConfig = this.configMergeService.mergeWorkflowConfig(globalConfig, workflowConfigRef);
+
+      let lastOutput = '';
+
+      for (let i = 0; i < subWorkflow.steps.length; i++) {
+        if (this.cancellationRegistry?.isCancellationRequested(parentExecutionId)) {
+          this.executionRepository.updateStatus(subExecution.id, 'cancelled', '父流程取消');
+          return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage: '父流程取消' };
+        }
+
+        const step = subWorkflow.steps[i];
+
+        let stepResult: StepRunResult;
+        if (step.type === 'subWorkflow') {
+          stepResult = await this.runSubWorkflowStep(step, i, subExecution.id, context);
+        } else {
+          stepResult = await this.runStep(step, i, subExecution.id, subWorkflow, mergedConfig, context);
+        }
+
+        totalTokens += stepResult.tokensUsed;
+
+        if (!stepResult.success) {
+          const onFailure = step.onFailure || subWorkflow.onFailure;
+          if (onFailure === 'skip') continue;
+          this.executionRepository.updateStatus(subExecution.id, 'failed', stepResult.errorMessage);
+          return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage: stepResult.errorMessage };
+        }
+
+        lastOutput = stepResult.outputText;
+
+        if (subWorkflow.limits?.maxTokens && totalTokens >= subWorkflow.limits.maxTokens) {
+          this.executionRepository.updateStatus(subExecution.id, 'failed', 'Token limit exceeded');
+          return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage: 'Token limit exceeded' };
+        }
+      }
+
+      this.executionRepository.updateStatus(subExecution.id, 'success');
+      return { success: true, tokensUsed: totalTokens, outputText: lastOutput };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.executionRepository.updateStatus(subExecution.id, 'failed', errorMessage);
+      return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage };
+    }
   }
 
   /**

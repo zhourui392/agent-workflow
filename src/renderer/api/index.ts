@@ -162,6 +162,15 @@ export function getExecution(
 }
 
 /**
+ * 获取子执行记录列表
+ */
+export function getChildExecutions(
+  parentExecutionId: string
+): Promise<AxiosLikeResponse<ExecutionDTO[]>> {
+  return wrapResponse(window.api.getChildExecutions(parentExecutionId));
+}
+
+/**
  * 取消执行
  *
  * @param id 执行ID
@@ -288,6 +297,9 @@ export type {
   ExecutionListParams,
   ExecutionProgressEvent,
   WorkflowStep,
+  AgentStep,
+  SubWorkflowStep,
+  ForEachConfig,
   WorkflowInput,
   WorkflowLimits,
   WorkflowOutput,

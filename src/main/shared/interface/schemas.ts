@@ -15,16 +15,19 @@ export const IdSchema = z.string().min(1, 'ID 不能为空');
 
 // ========== 工作流 ==========
 
-const StepSchema = z.object({
+const RetryConfigSchema = z.object({
+  maxAttempts: z.number().int().min(1).max(10).optional(),
+  delayMs: z.number().int().min(100).max(60000).optional()
+});
+
+const AgentStepSchema = z.object({
+  type: z.literal('agent').optional(),
   name: z.string().min(1, '步骤名称不能为空'),
   prompt: z.string().min(1, '步骤提示词不能为空'),
   model: z.string().optional(),
   maxTurns: z.number().int().positive().optional(),
   onFailure: z.enum(['stop', 'skip', 'retry']).optional(),
-  retryConfig: z.object({
-    maxAttempts: z.number().int().min(1).max(10).optional(),
-    delayMs: z.number().int().min(100).max(60000).optional()
-  }).optional(),
+  retryConfig: RetryConfigSchema.optional(),
   validation: z.object({
     prompt: z.string().min(1).optional(),
     rules: z.array(z.object({
@@ -35,6 +38,22 @@ const StepSchema = z.object({
   }).optional(),
   skillIds: z.array(z.string()).optional()
 });
+
+const SubWorkflowStepSchema = z.object({
+  type: z.literal('subWorkflow'),
+  name: z.string().min(1, '步骤名称不能为空'),
+  workflowId: z.string().min(1, '子工作流 ID 不能为空'),
+  inputMapping: z.record(z.string(), z.string()).optional(),
+  forEach: z.object({
+    iterateOver: z.string().min(1, 'iterateOver 不能为空'),
+    itemVariable: z.string().min(1, 'itemVariable 不能为空')
+  }).optional(),
+  onFailure: z.enum(['stop', 'skip', 'retry']).optional(),
+  retryConfig: RetryConfigSchema.optional()
+});
+
+/** 步骤 schema：支持 agent 步骤（默认）和 subWorkflow 步骤 */
+const StepSchema = z.union([SubWorkflowStepSchema, AgentStepSchema]);
 
 /** 接受 null 并转换为 undefined，保持输出类型不含 null */
 function nullableToOptional<T extends z.ZodTypeAny>(schema: T) {

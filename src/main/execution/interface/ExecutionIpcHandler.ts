@@ -33,5 +33,10 @@ export class ExecutionIpcHandler {
     ipcMain.handle('executions:cancel', (_, id: unknown) => {
       return this.cancelUseCase.cancel(validateInput(IdSchema, id));
     });
+
+    ipcMain.handle('executions:children', (_, parentId: unknown) => {
+      return this.queryUseCase.getChildExecutions(validateInput(IdSchema, parentId))
+        .map(executionToDTO);
+    });
   }
 }

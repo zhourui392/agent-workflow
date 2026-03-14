@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type Database from 'better-sqlite3';
 import { Execution, StepExecution } from '../domain/model';
 import type { ExecutionListParams } from '../domain/model';
-import type { ExecutionRepository } from '../domain/repository/ExecutionRepository';
+import type { ExecutionRepository, SubExecutionParams } from '../domain/repository/ExecutionRepository';
 import type { ExecutionStatus, TriggerType } from '../domain/model/ExecutionStatus';
 import type { StepEvent } from '../domain/model/StepEvent';
 
@@ -30,7 +30,10 @@ function rowToExecution(row: Record<string, unknown>): Execution {
     currentStep: row.current_step as number,
     totalSteps: row.total_steps as number | undefined,
     totalTokens: row.total_tokens as number,
-    errorMessage: row.error_message as string | undefined
+    errorMessage: row.error_message as string | undefined,
+    parentExecutionId: row.parent_execution_id as string | undefined,
+    parentStepIndex: row.parent_step_index as number | undefined,
+    iterationIndex: row.iteration_index as number | undefined
   });
 }
 
@@ -161,17 +164,32 @@ export class SqliteExecutionRepository implements ExecutionRepository {
     return execution;
   }
 
-  create(workflowId: string, triggerType: TriggerType): Execution {
+  create(workflowId: string, triggerType: TriggerType, subParams?: SubExecutionParams): Execution {
     const id = uuidv4();
     const now = new Date().toISOString();
 
     const stmt = this.db.prepare(`
-      INSERT INTO executions (id, workflow_id, trigger_type, status, started_at)
-      VALUES (?, ?, ?, 'pending', ?)
+      INSERT INTO executions (id, workflow_id, trigger_type, status, started_at, parent_execution_id, parent_step_index, iteration_index)
+      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
     `);
-    stmt.run(id, workflowId, triggerType, now);
+    stmt.run(
+      id, workflowId, triggerType, now,
+      subParams?.parentExecutionId ?? null,
+      subParams?.parentStepIndex ?? null,
+      subParams?.iterationIndex ?? null
+    );
 
     return this.findById(id)!;
+  }
+
+  findByParentExecutionId(parentExecutionId: string): Execution[] {
+    const rows = this.db.prepare(`
+      SELECT e.*, w.name AS workflow_name, json_array_length(w.steps) AS total_steps
+      FROM executions e LEFT JOIN workflows w ON e.workflow_id = w.id
+      WHERE e.parent_execution_id = ?
+      ORDER BY e.iteration_index ASC, e.started_at ASC
+    `).all(parentExecutionId);
+    return rows.map(row => rowToExecution(row as Record<string, unknown>));
   }
 
   updateStatus(id: string, status: ExecutionStatus, errorMessage?: string): void {

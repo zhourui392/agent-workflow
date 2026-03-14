@@ -91,6 +91,7 @@
             :disableRemove="form.steps.length <= 1"
             :workflow-inputs="form.inputs"
             :prior-steps="form.steps.slice(0, index)"
+            :available-workflows="otherWorkflows"
             @update:step="form.steps[index] = $event"
             @remove="removeStep(index)"
           />
@@ -168,6 +169,7 @@ import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { listAllSkills, type SkillData } from '@/api/skills'
+import { getWorkflows, type WorkflowDTO } from '@/api/index'
 import StepEditor, { type StepFormData } from '@/components/StepEditor.vue'
 
 const route = useRoute()
@@ -178,6 +180,10 @@ const loading = ref(false)
 const saving = ref(false)
 const configLoading = ref(false)
 const skillList = ref<SkillData[]>([])
+const allWorkflows = ref<WorkflowDTO[]>([])
+const otherWorkflows = computed(() =>
+  allWorkflows.value.filter(wf => wf.id !== form.id)
+)
 
 const form = reactive({
   id: undefined as string | undefined,
@@ -234,7 +240,10 @@ function removeStep(index: number) { form.steps.splice(index, 1) }
 
 async function handleSave() {
   if (!form.name.trim()) { ElMessage.warning('请输入工作流名称'); return }
-  if (!form.steps.some(s => s.prompt.trim())) { ElMessage.warning('至少需要一个有效步骤'); return }
+  const hasValidStep = form.steps.some(s =>
+    (s.step_type === 'subWorkflow' && s.workflow_id) || (s.prompt && s.prompt.trim())
+  )
+  if (!hasValidStep) { ElMessage.warning('至少需要一个有效步骤'); return }
   saving.value = true
   try {
     const rawForm = toRaw(form)
@@ -246,7 +255,26 @@ async function handleSave() {
       enabled: rawForm.enabled,
       schedule: rawForm.schedule || null,
       inputs: rawForm.inputs.length > 0 ? { items: rawForm.inputs.map(i => toRaw(i)) } : undefined,
-      steps: rawForm.steps.map(s => ({ ...toRaw(s) })),
+      steps: rawForm.steps.map(s => {
+        const raw = toRaw(s)
+        if (raw.step_type === 'subWorkflow') {
+          return {
+            type: 'subWorkflow' as const,
+            name: raw.name,
+            workflowId: raw.workflow_id,
+            inputMapping: raw.input_mapping && Object.keys(raw.input_mapping).length > 0 ? raw.input_mapping : undefined,
+            forEach: raw.for_each_enabled ? {
+              iterateOver: raw.for_each_iterate_over || '',
+              itemVariable: raw.for_each_item_variable || ''
+            } : undefined
+          }
+        }
+        // Agent step: map form fields to API format, strip internal fields
+        const { step_type: _st, workflow_id: _wid, input_mapping: _im,
+          for_each_enabled: _fe, for_each_iterate_over: _fio,
+          for_each_item_variable: _fiv, ...agentFields } = raw
+        return agentFields
+      }),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
       limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : undefined,
       on_failure: rawForm.on_failure,
@@ -264,8 +292,12 @@ async function handleSave() {
 async function loadConfigOptions() {
   configLoading.value = true
   try {
-    const skillRes = await listAllSkills()
+    const [skillRes, wfRes] = await Promise.all([
+      listAllSkills(),
+      getWorkflows()
+    ])
     skillList.value = skillRes.data
+    allWorkflows.value = wfRes.data
   } catch (e: unknown) {
     console.error('Failed to load config options:', e)
   } finally {
@@ -285,13 +317,34 @@ onMounted(async () => {
         form.working_directory = data.working_directory || ''
         form.enabled = data.enabled ?? true; form.schedule = data.schedule || ''
         form.steps = data.steps?.length
-          ? data.steps.map((s: Record<string, unknown>) => ({
-              ...s,
-              validation_enabled: !!s.validation_prompt || (Array.isArray(s.validation_rules) && s.validation_rules.length > 0),
-              validation_prompt: s.validation_prompt || '',
-              validation_rules: (s.validation_rules as any[]) || [],
-              skill_ids: s.skill_ids || []
-            }))
+          ? data.steps.map((s: Record<string, unknown>) => {
+              if (s.type === 'subWorkflow') {
+                const forEach = s.forEach as { iterateOver?: string; itemVariable?: string } | undefined
+                return {
+                  name: String(s.name || ''),
+                  prompt: '',
+                  max_turns: 30,
+                  validation_enabled: false,
+                  validation_prompt: '',
+                  validation_rules: [],
+                  skill_ids: [],
+                  step_type: 'subWorkflow' as const,
+                  workflow_id: String(s.workflowId || ''),
+                  input_mapping: (s.inputMapping as Record<string, string>) || {},
+                  for_each_enabled: !!forEach,
+                  for_each_iterate_over: forEach?.iterateOver || '',
+                  for_each_item_variable: forEach?.itemVariable || ''
+                }
+              }
+              return {
+                ...s,
+                step_type: 'agent' as const,
+                validation_enabled: !!s.validation_prompt || (Array.isArray(s.validation_rules) && s.validation_rules.length > 0),
+                validation_prompt: s.validation_prompt || '',
+                validation_rules: (s.validation_rules as any[]) || [],
+                skill_ids: s.skill_ids || []
+              }
+            })
           : [createEmptyStep()]
         form.inputs = Array.isArray(data.inputs?.items)
           ? data.inputs.items.map((i: Record<string, unknown>) => ({

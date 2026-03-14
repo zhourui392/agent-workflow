@@ -39,6 +39,7 @@ import { QueryExecutionUseCase } from './execution/application/QueryExecutionUse
 import { CancelExecutionUseCase } from './execution/application/CancelExecutionUseCase';
 import { CancellationRegistry } from './execution/domain/service/CancellationRegistry';
 import { RuleValidator } from './execution/domain/service/RuleValidator';
+import { WorkflowLoaderAdapter } from './execution/infrastructure/WorkflowLoaderAdapter';
 
 // Scheduling context
 import { NodeCronScheduler } from './scheduling/infrastructure/NodeCronScheduler';
@@ -86,8 +87,12 @@ export function bootstrap(): AppContext {
   const templateEngine = new TemplateEngine();
   const cancellationRegistry = new CancellationRegistry();
   const ruleValidator = new RuleValidator();
+  // === Workflow Context (early init for WorkflowLoader) ===
+  const workflowRepo = new SqliteWorkflowRepository(db);
+  const workflowLoader = new WorkflowLoaderAdapter(workflowRepo);
+
   const pipelineOrchestrator = new PipelineOrchestrator(
-    executionRepo, stepExecutor, configMergeService, progressNotifier, outputProcessor, templateEngine, cancellationRegistry, ruleValidator
+    executionRepo, stepExecutor, configMergeService, progressNotifier, outputProcessor, templateEngine, cancellationRegistry, ruleValidator, workflowLoader
   );
   const executePipelineUseCase = new ExecutePipelineUseCase(pipelineOrchestrator);
   const queryExecutionUseCase = new QueryExecutionUseCase(executionRepo);
@@ -100,7 +105,6 @@ export function bootstrap(): AppContext {
   );
 
   // === Workflow Context ===
-  const workflowRepo = new SqliteWorkflowRepository(db);
   const workflowAppService = new WorkflowApplicationService(
     workflowRepo, scheduler, executePipelineUseCase
   );

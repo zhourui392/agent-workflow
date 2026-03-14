@@ -88,6 +88,29 @@
                     <h4>验证结果</h4>
                     <pre class="code-block" :class="step.validation_status === 'passed' ? 'validation-pass' : 'validation-fail'">{{ step.validation_output }}</pre>
                   </div>
+                  <!-- 子执行列表（子工作流步骤） -->
+                  <div v-if="childExecutionsMap.get(step.step_index)?.length" class="step-section">
+                    <h4>子执行记录</h4>
+                    <el-table :data="childExecutionsMap.get(step.step_index)" size="small" border>
+                      <el-table-column label="#" width="60">
+                        <template #default="{ row }">{{ row.iteration_index != null ? row.iteration_index : '-' }}</template>
+                      </el-table-column>
+                      <el-table-column label="状态" width="100">
+                        <template #default="{ row }">
+                          <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="Tokens" width="100" prop="total_tokens" />
+                      <el-table-column label="耗时" width="120">
+                        <template #default="{ row }">{{ formatDurationLive(row.started_at, row.finished_at) }}</template>
+                      </el-table-column>
+                      <el-table-column label="" width="80">
+                        <template #default="{ row }">
+                          <el-button size="small" text type="primary" @click="$router.push(`/executions/${row.id}`)">详情</el-button>
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
                   <div v-if="step.error_message" class="step-section">
                     <el-alert :title="step.error_message" type="error" :closable="false" />
                   </div>
@@ -105,7 +128,7 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
-import { subscribeExecutionProgress, cancelExecution, type ExecutionProgressEvent } from '@/api/index'
+import { subscribeExecutionProgress, cancelExecution, getChildExecutions, type ExecutionProgressEvent, type ExecutionDTO } from '@/api/index'
 import { ElMessage } from 'element-plus'
 import type { ExecutionData, StepExecutionData } from '@/api/executions'
 import type { StepEvent } from '../../main/types'
@@ -123,6 +146,9 @@ let tickTimer: ReturnType<typeof setInterval> | null = null
 
 /** 实时收集的事件（按 stepIndex 分组），用于运行中的步骤 */
 const liveEvents = ref<Map<number, StepEvent[]>>(new Map())
+
+/** 子执行记录（按 parentStepIndex 分组） */
+const childExecutionsMap = ref<Map<number, ExecutionDTO[]>>(new Map())
 
 const isRunning = computed(() => execution.value?.status === 'running' || execution.value?.status === 'pending')
 const cancelling = ref(false)
@@ -169,6 +195,23 @@ function getStepEvents(step: StepExecutionData): StepEvent[] | undefined {
 async function fetchExecutionData() {
   const id = route.params.id as string
   execution.value = await store.fetchExecution(id) || null
+  await fetchChildExecutions()
+}
+
+async function fetchChildExecutions() {
+  if (!execution.value) return
+  try {
+    const res = await getChildExecutions(execution.value.id)
+    const map = new Map<number, ExecutionDTO[]>()
+    for (const child of res.data) {
+      const stepIdx = child.parentStepIndex ?? -1
+      if (!map.has(stepIdx)) map.set(stepIdx, [])
+      map.get(stepIdx)!.push(child)
+    }
+    childExecutionsMap.value = map
+  } catch {
+    // ignore - child executions are optional
+  }
 }
 
 /**

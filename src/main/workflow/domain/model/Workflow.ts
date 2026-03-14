@@ -5,6 +5,7 @@
  */
 import { Entity } from '../../../shared/domain';
 import type { WorkflowStep } from './WorkflowStep';
+import { isSubWorkflowStep, isAgentStep } from './WorkflowStep';
 import type { WorkflowInput } from './WorkflowInput';
 import type { WorkflowLimits } from './WorkflowLimits';
 import type { WorkflowOutput } from './WorkflowOutput';
@@ -151,8 +152,22 @@ export class Workflow extends Entity {
     }
 
     for (const step of this.steps) {
-      if (!step.prompt || step.prompt.trim().length === 0) {
-        errors.push(`步骤 "${step.name}" 的提示词不能为空`);
+      if (isSubWorkflowStep(step)) {
+        if (!step.workflowId || step.workflowId.trim().length === 0) {
+          errors.push(`步骤 "${step.name}" 的 workflowId 不能为空`);
+        }
+        if (step.forEach) {
+          if (!step.forEach.iterateOver || step.forEach.iterateOver.trim().length === 0) {
+            errors.push(`步骤 "${step.name}" 的 forEach.iterateOver 不能为空`);
+          }
+          if (!step.forEach.itemVariable || step.forEach.itemVariable.trim().length === 0) {
+            errors.push(`步骤 "${step.name}" 的 forEach.itemVariable 不能为空`);
+          }
+        }
+      } else if (isAgentStep(step)) {
+        if (!step.prompt || step.prompt.trim().length === 0) {
+          errors.push(`步骤 "${step.name}" 的提示词不能为空`);
+        }
       }
     }
 

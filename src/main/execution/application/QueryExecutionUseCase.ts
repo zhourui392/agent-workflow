@@ -18,4 +18,8 @@ export class QueryExecutionUseCase {
   get(id: string): Execution | null {
     return this.repo.findByIdWithSteps(id);
   }
+
+  getChildExecutions(parentExecutionId: string): Execution[] {
+    return this.repo.findByParentExecutionId(parentExecutionId);
+  }
 }

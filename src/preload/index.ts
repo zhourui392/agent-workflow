@@ -36,6 +36,7 @@ export interface ElectronAPI {
   // Executions
   getExecutions: (params?: ExecutionListParams) => Promise<ExecutionDTO[]>;
   getExecution: (id: string) => Promise<ExecutionDTO | null>;
+  getChildExecutions: (parentExecutionId: string) => Promise<ExecutionDTO[]>;
 
   // Executions (actions)
   cancelExecution: (id: string) => Promise<boolean>;
@@ -74,6 +75,7 @@ const api: ElectronAPI = {
   // Executions
   getExecutions: (params) => ipcRenderer.invoke('executions:list', params),
   getExecution: (id) => ipcRenderer.invoke('executions:get', id),
+  getChildExecutions: (parentId) => ipcRenderer.invoke('executions:children', parentId),
   cancelExecution: (id) => ipcRenderer.invoke('executions:cancel', id),
 
   // Config

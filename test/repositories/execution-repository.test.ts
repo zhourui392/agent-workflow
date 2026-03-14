@@ -77,6 +77,54 @@ describe('SqliteExecutionRepository', () => {
       expect(exec.workflowName).toBe('Test Workflow');
       expect(exec.totalSteps).toBe(3);
     });
+
+    it('创建子执行记录，带 parentExecutionId 和 iterationIndex', () => {
+      const parent = repo.create(workflowId, 'manual');
+      const child = repo.create(workflowId, 'manual', {
+        parentExecutionId: parent.id,
+        parentStepIndex: 1,
+        iterationIndex: 0
+      });
+
+      expect(child.parentExecutionId).toBe(parent.id);
+      expect(child.parentStepIndex).toBe(1);
+      expect(child.iterationIndex).toBe(0);
+    });
+
+    it('普通执行记录 parentExecutionId 为 undefined', () => {
+      const exec = repo.create(workflowId, 'manual');
+      expect(exec.parentExecutionId).toBeUndefined();
+      expect(exec.iterationIndex).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // findByParentExecutionId
+  // ===========================================================================
+  describe('findByParentExecutionId', () => {
+    it('返回所有子执行记录', () => {
+      const parent = repo.create(workflowId, 'manual');
+      repo.create(workflowId, 'manual', {
+        parentExecutionId: parent.id,
+        parentStepIndex: 0,
+        iterationIndex: 0
+      });
+      repo.create(workflowId, 'manual', {
+        parentExecutionId: parent.id,
+        parentStepIndex: 0,
+        iterationIndex: 1
+      });
+
+      const children = repo.findByParentExecutionId(parent.id);
+      expect(children).toHaveLength(2);
+      expect(children[0].iterationIndex).toBe(0);
+      expect(children[1].iterationIndex).toBe(1);
+    });
+
+    it('无子执行时返回空数组', () => {
+      const exec = repo.create(workflowId, 'manual');
+      expect(repo.findByParentExecutionId(exec.id)).toEqual([]);
+    });
   });
 
   // ===========================================================================

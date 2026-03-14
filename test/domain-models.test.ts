@@ -154,6 +154,74 @@ describe('Workflow', () => {
       const wf = createTestWorkflow({ limits: { maxTokens: 1000, maxTurns: 10 } });
       expect(wf.validate()).toEqual([]);
     });
+
+    it('subWorkflow 步骤无需 prompt，校验通过', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'subWorkflow', name: 'Call Sub', workflowId: 'wf-sub-001' } as any
+        ]
+      });
+      expect(wf.validate()).toEqual([]);
+    });
+
+    it('subWorkflow 步骤缺少 workflowId 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'subWorkflow', name: 'Bad Sub' } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('workflowId'))).toBe(true);
+    });
+
+    it('subWorkflow forEach 缺少 iterateOver 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          {
+            type: 'subWorkflow', name: 'Loop', workflowId: 'wf-sub-001',
+            forEach: { itemVariable: 'item' }
+          } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('iterateOver'))).toBe(true);
+    });
+
+    it('subWorkflow forEach 缺少 itemVariable 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          {
+            type: 'subWorkflow', name: 'Loop', workflowId: 'wf-sub-001',
+            forEach: { iterateOver: '{{steps.split.output}}' }
+          } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('itemVariable'))).toBe(true);
+    });
+
+    it('subWorkflow forEach 配置完整时校验通过', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          {
+            type: 'subWorkflow', name: 'Loop', workflowId: 'wf-sub-001',
+            forEach: { iterateOver: '{{steps.split.output}}', itemVariable: 'task' }
+          } as any
+        ]
+      });
+      expect(wf.validate()).toEqual([]);
+    });
+
+    it('混合 agent 和 subWorkflow 步骤校验通过', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { name: 'Split', prompt: 'Split tasks' },
+          { type: 'subWorkflow', name: 'Execute', workflowId: 'wf-sub-001' } as any,
+          { name: 'Summary', prompt: 'Summarize results' }
+        ]
+      });
+      expect(wf.validate()).toEqual([]);
+    });
   });
 });
 

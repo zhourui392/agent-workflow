@@ -102,4 +102,18 @@ export function runMigrations(database: Database.Database): void {
   if (!stepColumnNames.includes('events_json')) {
     database.exec('ALTER TABLE step_executions ADD COLUMN events_json TEXT');
   }
+
+  // 子工作流执行支持
+  const execColumns = database.prepare("PRAGMA table_info(executions)").all() as { name: string }[];
+  const execColumnNames = execColumns.map(col => col.name);
+
+  if (!execColumnNames.includes('parent_execution_id')) {
+    database.exec('ALTER TABLE executions ADD COLUMN parent_execution_id TEXT');
+  }
+  if (!execColumnNames.includes('parent_step_index')) {
+    database.exec('ALTER TABLE executions ADD COLUMN parent_step_index INTEGER');
+  }
+  if (!execColumnNames.includes('iteration_index')) {
+    database.exec('ALTER TABLE executions ADD COLUMN iteration_index INTEGER');
+  }
 }

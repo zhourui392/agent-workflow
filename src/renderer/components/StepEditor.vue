@@ -9,85 +9,155 @@
     <el-form-item label="步骤名称">
       <el-input :model-value="step.name" @update:model-value="updateField('name', $event)" placeholder="如: analyze_code" />
     </el-form-item>
-    <el-form-item label="Prompt">
-      <PromptEditor
-        :model-value="step.prompt"
-        @update:model-value="updateField('prompt', $event)"
-        :rows="4"
-        :workflow-inputs="workflowInputs"
-        :prior-steps="priorSteps"
-      />
+    <el-form-item label="步骤类型">
+      <el-radio-group :model-value="step.step_type || 'agent'" @update:model-value="onStepTypeChange($event as 'agent' | 'subWorkflow')">
+        <el-radio-button value="agent">Agent 步骤</el-radio-button>
+        <el-radio-button value="subWorkflow">子工作流</el-radio-button>
+      </el-radio-group>
     </el-form-item>
-    <el-form-item label="最大轮次">
-      <el-input-number :model-value="step.max_turns" @update:model-value="updateField('max_turns', $event)" :min="1" :max="100" />
-    </el-form-item>
-    <el-form-item label="输出验证">
-      <el-switch :model-value="step.validation_enabled" @update:model-value="updateField('validation_enabled', $event)" />
-      <span class="form-tip" style="margin-left: 8px;">启用后将通过 LLM 验证步骤输出是否符合预期</span>
-    </el-form-item>
-    <el-form-item v-if="step.validation_enabled" label="验证提示词">
-      <el-input :model-value="step.validation_prompt" @update:model-value="updateField('validation_prompt', $event)" type="textarea" :rows="3"
-        placeholder="描述期望的输出标准，如：输出必须包含JSON格式的分析结果，且包含 summary 和 details 字段" />
-    </el-form-item>
-    <el-form-item v-if="step.validation_enabled" label="验证规则">
-      <div class="validation-rules">
-        <div v-for="(rule, rIdx) in step.validation_rules" :key="rIdx" class="rule-row">
-          <el-select :model-value="rule.type" @update:model-value="updateRule(rIdx, 'type', $event)" size="small" style="width: 120px">
-            <el-option label="包含" value="contains" />
-            <el-option label="正则" value="regex" />
-          </el-select>
-          <el-input
-            v-if="rule.type === 'contains'"
-            :model-value="rule.value"
-            @update:model-value="updateRule(rIdx, 'value', $event)"
-            size="small"
-            placeholder="输出应包含的文本"
-            style="flex: 1"
-          />
-          <el-input
-            v-else
-            :model-value="rule.pattern"
-            @update:model-value="updateRule(rIdx, 'pattern', $event)"
-            size="small"
-            placeholder="正则表达式"
-            style="flex: 1"
-          />
-          <el-button size="small" type="danger" text @click="removeRule(rIdx)">
-            <el-icon><Delete /></el-icon>
-          </el-button>
+
+    <!-- Agent 步骤表单 -->
+    <template v-if="!step.step_type || step.step_type === 'agent'">
+      <el-form-item label="Prompt">
+        <PromptEditor
+          :model-value="step.prompt"
+          @update:model-value="updateField('prompt', $event)"
+          :rows="4"
+          :workflow-inputs="workflowInputs"
+          :prior-steps="priorSteps"
+        />
+      </el-form-item>
+      <el-form-item label="最大轮次">
+        <el-input-number :model-value="step.max_turns" @update:model-value="updateField('max_turns', $event)" :min="1" :max="100" />
+      </el-form-item>
+      <el-form-item label="输出验证">
+        <el-switch :model-value="step.validation_enabled" @update:model-value="updateField('validation_enabled', $event)" />
+        <span class="form-tip" style="margin-left: 8px;">启用后将通过 LLM 验证步骤输出是否符合预期</span>
+      </el-form-item>
+      <el-form-item v-if="step.validation_enabled" label="验证提示词">
+        <el-input :model-value="step.validation_prompt" @update:model-value="updateField('validation_prompt', $event)" type="textarea" :rows="3"
+          placeholder="描述期望的输出标准，如：输出必须包含JSON格式的分析结果，且包含 summary 和 details 字段" />
+      </el-form-item>
+      <el-form-item v-if="step.validation_enabled" label="验证规则">
+        <div class="validation-rules">
+          <div v-for="(rule, rIdx) in step.validation_rules" :key="rIdx" class="rule-row">
+            <el-select :model-value="rule.type" @update:model-value="updateRule(rIdx, 'type', $event)" size="small" style="width: 120px">
+              <el-option label="包含" value="contains" />
+              <el-option label="正则" value="regex" />
+            </el-select>
+            <el-input
+              v-if="rule.type === 'contains'"
+              :model-value="rule.value"
+              @update:model-value="updateRule(rIdx, 'value', $event)"
+              size="small"
+              placeholder="输出应包含的文本"
+              style="flex: 1"
+            />
+            <el-input
+              v-else
+              :model-value="rule.pattern"
+              @update:model-value="updateRule(rIdx, 'pattern', $event)"
+              size="small"
+              placeholder="正则表达式"
+              style="flex: 1"
+            />
+            <el-button size="small" type="danger" text @click="removeRule(rIdx)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+          <el-button size="small" @click="addRule">+ 添加规则</el-button>
+          <div class="form-tip">快速规则验证（无 LLM 调用成本），优先于验证提示词执行</div>
         </div>
-        <el-button size="small" @click="addRule">+ 添加规则</el-button>
-        <div class="form-tip">快速规则验证（无 LLM 调用成本），优先于验证提示词执行</div>
-      </div>
-    </el-form-item>
-    <el-form-item label="Skills">
-      <el-select
-        :model-value="step.skill_ids"
-        @update:model-value="updateField('skill_ids', $event)"
-        multiple
-        filterable
-        placeholder="选择此步骤使用的 Skills"
-        style="width: 100%"
-      >
-        <el-option
-          v-for="skill in skills"
-          :key="skill.id"
-          :label="skill.name"
-          :value="skill.id"
+      </el-form-item>
+      <el-form-item label="Skills">
+        <el-select
+          :model-value="step.skill_ids"
+          @update:model-value="updateField('skill_ids', $event)"
+          multiple
+          filterable
+          placeholder="选择此步骤使用的 Skills"
+          style="width: 100%"
         >
-          <span>{{ skill.name }}</span>
-          <span v-if="skill.source === 'cli'" class="cli-tag">CLI</span>
-          <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
-        </el-option>
-      </el-select>
-      <div class="form-tip">选择此步骤需要使用的 Skills（如代码审查、测试生成等）</div>
-    </el-form-item>
+          <el-option
+            v-for="skill in skills"
+            :key="skill.id"
+            :label="skill.name"
+            :value="skill.id"
+          >
+            <span>{{ skill.name }}</span>
+            <span v-if="skill.source === 'cli'" class="cli-tag">CLI</span>
+            <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
+          </el-option>
+        </el-select>
+        <div class="form-tip">选择此步骤需要使用的 Skills（如代码审查、测试生成等）</div>
+      </el-form-item>
+    </template>
+
+    <!-- 子工作流步骤表单 -->
+    <template v-else>
+      <el-form-item label="子工作流" required>
+        <el-select
+          :model-value="step.workflow_id"
+          @update:model-value="updateField('workflow_id', $event)"
+          filterable
+          placeholder="选择要调用的工作流"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="wf in availableWorkflows"
+            :key="wf.id"
+            :label="wf.name"
+            :value="wf.id"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="输入映射">
+        <div class="input-mapping">
+          <div v-for="(val, key) in (step.input_mapping || {})" :key="key" class="mapping-row">
+            <el-input :model-value="key" disabled size="small" style="width: 140px" />
+            <span style="margin: 0 8px">=</span>
+            <el-input :model-value="val" @update:model-value="updateInputMapping(key as string, $event)" size="small" style="flex: 1"
+              placeholder="模板表达式，如 {{inputs.xxx}}" />
+            <el-button size="small" type="danger" text @click="removeInputMapping(key as string)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+          <div class="mapping-row">
+            <el-input v-model="newMappingKey" size="small" style="width: 140px" placeholder="参数名" />
+            <span style="margin: 0 8px">=</span>
+            <el-input v-model="newMappingValue" size="small" style="flex: 1" placeholder="模板表达式" />
+            <el-button size="small" type="primary" text @click="addInputMapping" :disabled="!newMappingKey">
+              <el-icon><Plus /></el-icon>
+            </el-button>
+          </div>
+          <div class="form-tip">将当前工作流的变量映射为子工作流的输入参数</div>
+        </div>
+      </el-form-item>
+      <el-form-item label="循环执行">
+        <el-switch :model-value="step.for_each_enabled" @update:model-value="onForEachToggle($event)" />
+        <span class="form-tip" style="margin-left: 8px;">对列表中每个元素执行一次子工作流</span>
+      </el-form-item>
+      <template v-if="step.for_each_enabled">
+        <el-form-item label="数据源">
+          <el-input :model-value="step.for_each_iterate_over" @update:model-value="updateField('for_each_iterate_over', $event)"
+            placeholder="模板表达式，如 {{steps.拆分.output}}" />
+          <div class="form-tip">应解析为 JSON 数组</div>
+        </el-form-item>
+        <el-form-item label="迭代变量名">
+          <el-input :model-value="step.for_each_item_variable" @update:model-value="updateField('for_each_item_variable', $event)"
+            placeholder="如: task" style="width: 200px" />
+          <div class="form-tip">子工作流可通过 {{inputs.变量名}} 引用当前迭代元素</div>
+        </el-form-item>
+      </template>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Delete } from '@element-plus/icons-vue'
+import { ref } from 'vue'
+import { Delete, Plus } from '@element-plus/icons-vue'
 import type { SkillData } from '@/api/skills'
+import type { WorkflowDTO } from '@/api/index'
 import PromptEditor from './PromptEditor.vue'
 
 /**
@@ -107,6 +177,13 @@ export interface StepFormData {
   validation_prompt: string
   validation_rules: ValidationRuleData[]
   skill_ids: string[]
+  // 子工作流字段
+  step_type?: 'agent' | 'subWorkflow'
+  workflow_id?: string
+  input_mapping?: Record<string, string>
+  for_each_enabled?: boolean
+  for_each_iterate_over?: string
+  for_each_item_variable?: string
 }
 
 const props = defineProps<{
@@ -116,6 +193,7 @@ const props = defineProps<{
   disableRemove: boolean
   workflowInputs?: { name: string }[]
   priorSteps?: { name: string }[]
+  availableWorkflows?: WorkflowDTO[]
 }>()
 
 const emit = defineEmits<{
@@ -123,14 +201,43 @@ const emit = defineEmits<{
   'remove': []
 }>()
 
-/**
- * 更新步骤的单个字段，触发整体更新事件
- *
- * @param field 字段名
- * @param value 新值
- */
+const newMappingKey = ref('')
+const newMappingValue = ref('')
+
 function updateField(field: keyof StepFormData, value: unknown) {
   emit('update:step', { ...props.step, [field]: value })
+}
+
+function onStepTypeChange(type: 'agent' | 'subWorkflow') {
+  emit('update:step', { ...props.step, step_type: type })
+}
+
+function onForEachToggle(enabled: boolean) {
+  emit('update:step', {
+    ...props.step,
+    for_each_enabled: enabled,
+    for_each_iterate_over: enabled ? props.step.for_each_iterate_over || '' : undefined,
+    for_each_item_variable: enabled ? props.step.for_each_item_variable || '' : undefined
+  })
+}
+
+function addInputMapping() {
+  if (!newMappingKey.value) return
+  const mapping = { ...(props.step.input_mapping || {}), [newMappingKey.value]: newMappingValue.value }
+  emit('update:step', { ...props.step, input_mapping: mapping })
+  newMappingKey.value = ''
+  newMappingValue.value = ''
+}
+
+function updateInputMapping(key: string, value: string) {
+  const mapping = { ...(props.step.input_mapping || {}), [key]: value }
+  emit('update:step', { ...props.step, input_mapping: mapping })
+}
+
+function removeInputMapping(key: string) {
+  const mapping = { ...(props.step.input_mapping || {}) }
+  delete mapping[key]
+  emit('update:step', { ...props.step, input_mapping: mapping })
 }
 
 function addRule() {
@@ -175,6 +282,13 @@ function updateRule(index: number, field: string, value: unknown) {
 .rule-row {
   display: flex;
   gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.input-mapping { width: 100%; }
+.mapping-row {
+  display: flex;
+  gap: 4px;
   align-items: center;
   margin-bottom: 8px;
 }

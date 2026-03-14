@@ -41,6 +41,9 @@ export class Execution extends Entity {
   private _totalTokens: number;
   private _errorMessage?: string;
   stepExecutions?: StepExecution[];
+  readonly parentExecutionId?: string;
+  readonly parentStepIndex?: number;
+  readonly iterationIndex?: number;
 
   constructor(props: {
     id: string;
@@ -56,6 +59,9 @@ export class Execution extends Entity {
     errorMessage?: string;
     stepExecutions?: StepExecution[];
     updatedAt?: string;
+    parentExecutionId?: string;
+    parentStepIndex?: number;
+    iterationIndex?: number;
   }) {
     super(props.id, props.startedAt, props.updatedAt ?? props.startedAt);
     this.workflowId = props.workflowId;
@@ -68,6 +74,9 @@ export class Execution extends Entity {
     this._totalTokens = props.totalTokens;
     this._errorMessage = props.errorMessage;
     this.stepExecutions = props.stepExecutions;
+    this.parentExecutionId = props.parentExecutionId;
+    this.parentStepIndex = props.parentStepIndex;
+    this.iterationIndex = props.iterationIndex;
   }
 
   get status(): ExecutionStatus { return this._status; }

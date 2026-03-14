@@ -11,12 +11,19 @@ import type { Execution, ExecutionListParams } from '../model';
 import type { ExecutionStatus, TriggerType } from '../model/ExecutionStatus';
 import type { StepExecution } from '../model/StepExecution';
 
+export interface SubExecutionParams {
+  parentExecutionId: string;
+  parentStepIndex: number;
+  iterationIndex?: number;
+}
+
 export interface ExecutionRepository {
   findAll(params?: ExecutionListParams): Execution[];
   findById(id: string): Execution | null;
   findByIdWithSteps(id: string): Execution | null;
+  findByParentExecutionId(parentExecutionId: string): Execution[];
   count(params?: ExecutionListParams): number;
-  create(workflowId: string, triggerType: TriggerType): Execution;
+  create(workflowId: string, triggerType: TriggerType, subParams?: SubExecutionParams): Execution;
   updateStatus(id: string, status: ExecutionStatus, errorMessage?: string): void;
   updateCurrentStep(id: string, stepIndex: number): void;
   addTokens(id: string, tokens: number): void;

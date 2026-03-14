@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'vitest';
-import type { StepExecutor, ProgressNotifier, OutputProcessor } from '../../src/main/execution/domain/service/PipelineOrchestrator';
+import type { StepExecutor, ProgressNotifier, OutputProcessor, WorkflowLoader, WorkflowRef } from '../../src/main/execution/domain/service/PipelineOrchestrator';
 import { ConfigMergeService } from '../../src/main/configuration/domain/service/ConfigMergeService';
 
 /**
@@ -73,4 +73,30 @@ export function createMockConfigMergeService(): ConfigMergeService {
     handleDanglingReferences: vi.fn()
   };
   return mock as unknown as ConfigMergeService;
+}
+
+/**
+ * 创建 WorkflowLoader 的 vi.fn() mock
+ *
+ * 默认行为：loadWorkflow → null
+ */
+export function createMockWorkflowLoader(): WorkflowLoader {
+  return {
+    loadWorkflow: vi.fn(() => null)
+  };
+}
+
+/**
+ * 创建测试用子工作流引用
+ */
+export function createTestWorkflowRef(overrides: Partial<WorkflowRef> = {}): WorkflowRef {
+  return {
+    id: 'sub-wf-001',
+    name: 'Sub Workflow',
+    steps: [
+      { name: 'Sub Step 1', prompt: 'Do sub task' }
+    ],
+    onFailure: 'stop',
+    ...overrides
+  };
 }

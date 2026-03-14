@@ -33,5 +33,7 @@ export {
   createMockStepExecutor,
   createMockProgressNotifier,
   createMockOutputProcessor,
-  createMockConfigMergeService
+  createMockConfigMergeService,
+  createMockWorkflowLoader,
+  createTestWorkflowRef
 } from './service.fixtures';

@@ -73,7 +73,10 @@ export function executionToDTO(e: Execution): ExecutionDTO {
     totalSteps: e.totalSteps,
     totalTokens: e.totalTokens,
     errorMessage: e.errorMessage,
-    stepExecutions: e.stepExecutions?.map(stepExecutionToDTO)
+    stepExecutions: e.stepExecutions?.map(stepExecutionToDTO),
+    parentExecutionId: e.parentExecutionId,
+    parentStepIndex: e.parentStepIndex,
+    iterationIndex: e.iterationIndex
   };
 }
 

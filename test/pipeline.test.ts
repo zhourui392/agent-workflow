@@ -12,13 +12,16 @@ import type { ConfigMergeService } from '../src/main/configuration/domain/servic
 import { TemplateEngine } from '../src/main/execution/domain/service/TemplateEngine';
 import { CancellationRegistry } from '../src/main/execution/domain/service/CancellationRegistry';
 import { RuleValidator } from '../src/main/execution/domain/service/RuleValidator';
+import type { WorkflowLoader } from '../src/main/execution/domain/service/PipelineOrchestrator';
 import {
   createTestWorkflow,
   createMockExecutionRepository,
   createMockStepExecutor,
   createMockProgressNotifier,
   createMockOutputProcessor,
-  createMockConfigMergeService
+  createMockConfigMergeService,
+  createMockWorkflowLoader,
+  createTestWorkflowRef
 } from './fixtures';
 
 describe('PipelineOrchestrator', () => {
@@ -234,5 +237,124 @@ describe('PipelineOrchestrator', () => {
 
     // Only first step should have executed
     expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
+  });
+
+  // ===========================================================================
+  // 子工作流执行
+  // ===========================================================================
+
+  describe('子工作流步骤', () => {
+    let workflowLoader: WorkflowLoader;
+
+    beforeEach(() => {
+      workflowLoader = createMockWorkflowLoader();
+      orchestrator = new PipelineOrchestrator(
+        execRepo, stepExecutor, configService, notifier, outputProcessor,
+        new TemplateEngine(), cancellationRegistry, new RuleValidator(), workflowLoader
+      );
+    });
+
+    it('should execute sub-workflow and capture output', async () => {
+      const subWorkflowRef = createTestWorkflowRef();
+      vi.mocked(workflowLoader.loadWorkflow).mockReturnValue(subWorkflowRef);
+
+      const workflow = createTestWorkflow({
+        steps: [
+          { type: 'subWorkflow', name: 'Call Sub', workflowId: 'sub-wf-001' } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // Sub-workflow creates its own execution
+      expect(execRepo.create).toHaveBeenCalledTimes(2); // parent + child
+      // Sub-workflow step was executed via stepExecutor
+      expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('should fail when sub-workflow not found', async () => {
+      vi.mocked(workflowLoader.loadWorkflow).mockReturnValue(null);
+
+      const workflow = createTestWorkflow({
+        steps: [
+          { type: 'subWorkflow', name: 'Missing', workflowId: 'not-exist' } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed',
+          expect.stringContaining('子工作流不存在'));
+      }, { timeout: 2000 });
+    });
+
+    it('should execute forEach iterations serially', async () => {
+      const subWorkflowRef = createTestWorkflowRef();
+      vi.mocked(workflowLoader.loadWorkflow).mockReturnValue(subWorkflowRef);
+
+      let callCount = 0;
+      vi.mocked(stepExecutor.execute).mockImplementation(async () => {
+        callCount++;
+        return { success: true, outputText: `result-${callCount}`, tokensUsed: 50 };
+      });
+
+      const workflow = createTestWorkflow({
+        steps: [
+          { name: 'Split', prompt: 'split tasks' },
+          {
+            type: 'subWorkflow', name: 'Loop', workflowId: 'sub-wf-001',
+            forEach: { iterateOver: '{{steps.Split.output}}', itemVariable: 'task' }
+          } as any
+        ]
+      });
+
+      // First step returns JSON array
+      vi.mocked(stepExecutor.execute).mockResolvedValueOnce({
+        success: true, outputText: '["task1","task2","task3"]', tokensUsed: 100
+      });
+      // Sub-workflow steps
+      vi.mocked(stepExecutor.execute)
+        .mockResolvedValueOnce({ success: true, outputText: 'done-1', tokensUsed: 50 })
+        .mockResolvedValueOnce({ success: true, outputText: 'done-2', tokensUsed: 50 })
+        .mockResolvedValueOnce({ success: true, outputText: 'done-3', tokensUsed: 50 });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // 1 parent step + 3 forEach child executions
+      expect(stepExecutor.execute).toHaveBeenCalledTimes(4);
+      // Parent + 3 child executions
+      expect(execRepo.create).toHaveBeenCalledTimes(4);
+    });
+
+    it('should pass inputMapping to sub-workflow', async () => {
+      const subWorkflowRef = createTestWorkflowRef();
+      vi.mocked(workflowLoader.loadWorkflow).mockReturnValue(subWorkflowRef);
+
+      const workflow = createTestWorkflow({
+        steps: [
+          {
+            type: 'subWorkflow', name: 'Sub', workflowId: 'sub-wf-001',
+            inputMapping: { target: '{{inputs.myParam}}' }
+          } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, { myParam: 'hello' }, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
+    });
   });
 });

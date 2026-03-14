@@ -156,6 +156,54 @@ describe('CreateWorkflowSchema', () => {
       }]
     })).toThrow();
   });
+
+  it('should accept subWorkflow step', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'subWorkflow',
+        name: 'Call Sub',
+        workflowId: 'wf-sub-001'
+      }]
+    });
+    expect(result.steps[0]).toHaveProperty('type', 'subWorkflow');
+    expect(result.steps[0]).toHaveProperty('workflowId', 'wf-sub-001');
+  });
+
+  it('should accept subWorkflow step with forEach', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'subWorkflow',
+        name: 'Loop',
+        workflowId: 'wf-sub-001',
+        forEach: { iterateOver: '{{steps.split.output}}', itemVariable: 'task' },
+        inputMapping: { data: '{{inputs.source}}' }
+      }]
+    });
+    expect(result.steps[0]).toHaveProperty('forEach');
+  });
+
+  it('should reject subWorkflow step without workflowId', () => {
+    expect(() => validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'subWorkflow',
+        name: 'Bad'
+      }]
+    })).toThrow();
+  });
+
+  it('should accept mixed agent and subWorkflow steps', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [
+        { name: 'Agent Step', prompt: 'Do it' },
+        { type: 'subWorkflow', name: 'Sub Step', workflowId: 'wf-001' }
+      ]
+    });
+    expect(result.steps).toHaveLength(2);
+  });
 });
 
 describe('UpdateWorkflowSchema', () => {
