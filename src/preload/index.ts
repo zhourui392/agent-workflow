@@ -21,7 +21,7 @@ import type {
   UpdateMcpServerInput,
   CreateSkillInput,
   UpdateSkillInput
-} from '../main/store/models';
+} from '../main/types';
 
 /**
  * API接口定义

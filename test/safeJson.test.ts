@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { safeJsonParse } from '../src/main/utils/safeJson';
+import { safeJsonParse } from '../src/main/shared/infrastructure/safeJson';
 
 describe('safeJsonParse', () => {
   it('should parse valid JSON', () => {

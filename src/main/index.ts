@@ -11,11 +11,10 @@ delete process.env.CLAUDECODE;
 import { app, BrowserWindow, shell } from 'electron';
 import * as path from 'path';
 import log from 'electron-log';
-import { getDatabase, closeDatabase } from './store/database';
-import { registerAllHandlers } from './ipc';
-import { syncAllWorkflows, stopAll as stopAllCronJobs } from './scheduler/cronManager';
+import { bootstrap, type AppContext } from './bootstrap';
 
 let mainWindow: BrowserWindow | null = null;
+let appContext: AppContext | null = null;
 
 /**
  * 配置日志
@@ -72,14 +71,9 @@ function createWindow(): void {
 async function initialize(): Promise<void> {
   setupLogging();
 
-  getDatabase();
-  log.info('Database initialized');
-
-  registerAllHandlers();
-  log.info('IPC handlers registered');
-
-  syncAllWorkflows();
-  log.info('Cron jobs synced');
+  appContext = bootstrap();
+  appContext.registerIpc();
+  appContext.syncCron();
 }
 
 /**
@@ -87,8 +81,7 @@ async function initialize(): Promise<void> {
  */
 function cleanup(): void {
   log.info('Application shutting down...');
-  stopAllCronJobs();
-  closeDatabase();
+  appContext?.cleanup();
 }
 
 app.whenReady().then(async () => {

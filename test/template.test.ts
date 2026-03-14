@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderTemplate, extractVariables, validateTemplate } from '../src/main/core/template'
+import { TemplateEngine } from '../src/main/execution/domain/service/TemplateEngine'
+
+const engine = new TemplateEngine()
+const renderTemplate = engine.render.bind(engine)
+const extractVariables = engine.extractVariables.bind(engine)
+const validateTemplate = engine.validate.bind(engine)
 
 describe('renderTemplate', () => {
   beforeEach(() => {

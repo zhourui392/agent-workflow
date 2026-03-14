@@ -6,186 +6,114 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PipelineOrchestrator } from '../src/main/execution/domain/service/PipelineOrchestrator';
+import type { StepExecutor, ProgressNotifier, OutputProcessor } from '../src/main/execution/domain/service/PipelineOrchestrator';
+import type { ExecutionRepository } from '../src/main/execution/domain/repository/ExecutionRepository';
+import type { ConfigMergeService } from '../src/main/configuration/domain/service/ConfigMergeService';
+import { TemplateEngine } from '../src/main/execution/domain/service/TemplateEngine';
+import {
+  createTestWorkflow,
+  createMockExecutionRepository,
+  createMockStepExecutor,
+  createMockProgressNotifier,
+  createMockOutputProcessor,
+  createMockConfigMergeService
+} from './fixtures';
 
-// Mock dependencies before imports
-vi.mock('../src/main/store/repositories', () => ({
-  executionRepository: {
-    create: vi.fn(() => ({ id: 'exec-001', workflowId: 'wf-001' })),
-    updateStatus: vi.fn(),
-    updateCurrentStep: vi.fn(),
-    createStepExecution: vi.fn(() => ({ id: 'step-exec-001' })),
-    updateStepExecution: vi.fn(),
-    addTokens: vi.fn()
-  }
-}));
+describe('PipelineOrchestrator', () => {
+  let execRepo: ExecutionRepository;
+  let stepExecutor: StepExecutor;
+  let configService: ConfigMergeService;
+  let notifier: ProgressNotifier;
+  let outputProcessor: OutputProcessor;
+  let orchestrator: PipelineOrchestrator;
 
-vi.mock('../src/main/core/config/globalConfigCache', () => ({
-  getCachedGlobalConfig: vi.fn(() => ({
-    systemPrompt: 'global prompt'
-  }))
-}));
-
-vi.mock('../src/main/core/config/configMerger', () => ({
-  mergeConfig: vi.fn((_global, _workflow) => ({
-    systemPrompt: 'merged prompt',
-    model: 'claude-3'
-  })),
-  buildStepMergedConfig: vi.fn((_merged, _wf, _step, _execId, _idx) => ({
-    systemPrompt: 'merged prompt',
-    model: 'claude-3',
-    hasSkills: false
-  })),
-  cleanupStepSkills: vi.fn()
-}));
-
-vi.mock('../src/main/core/executor', () => ({
-  executeStep: vi.fn(async () => ({
-    success: true,
-    outputText: 'step output',
-    tokensUsed: 100
-  })),
-  executeStepWithTimeout: vi.fn(async () => ({
-    success: true,
-    outputText: 'step output',
-    tokensUsed: 100
-  })),
-  validateStepOutput: vi.fn(async () => ({
-    passed: true,
-    output: 'ok',
-    tokensUsed: 10
-  }))
-}));
-
-vi.mock('../src/main/core/outputHandler', () => ({
-  handleOutput: vi.fn(async () => {})
-}));
-
-import { executePipeline } from '../src/main/core/pipeline';
-import { executionRepository } from '../src/main/store/repositories';
-import { executeStep } from '../src/main/core/executor';
-import type { Workflow } from '../src/main/store/models';
-
-function createTestWorkflow(overrides: Partial<Workflow> = {}): Workflow {
-  return {
-    id: 'wf-001',
-    name: 'Test Workflow',
-    enabled: true,
-    steps: [
-      { name: 'Step 1', prompt: 'Do task 1' },
-      { name: 'Step 2', prompt: 'Do task 2 with {{steps.Step 1.output}}' }
-    ],
-    onFailure: 'stop',
-    createdAt: '2026-03-14',
-    updatedAt: '2026-03-14',
-    ...overrides
-  };
-}
-
-describe('executePipeline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    execRepo = createMockExecutionRepository();
+    stepExecutor = createMockStepExecutor();
+    configService = createMockConfigMergeService();
+    notifier = createMockProgressNotifier();
+    outputProcessor = createMockOutputProcessor();
+    orchestrator = new PipelineOrchestrator(
+      execRepo, stepExecutor, configService, notifier, outputProcessor, new TemplateEngine()
+    );
   });
 
   it('should create execution and return execution ID', async () => {
     const workflow = createTestWorkflow();
-    const executionId = await executePipeline(workflow, {}, 'manual');
+    const executionId = await orchestrator.execute(workflow, {}, 'manual');
     expect(executionId).toBe('exec-001');
-    expect(executionRepository.create).toHaveBeenCalledWith('wf-001', 'manual');
+    expect(execRepo.create).toHaveBeenCalledWith('wf-001', 'manual');
   });
 
   it('should execute all steps in order', async () => {
     const workflow = createTestWorkflow();
-    await executePipeline(workflow, {}, 'manual');
-
-    // Wait for async pipeline to finish
+    await orchestrator.execute(workflow, {}, 'manual');
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(executionRepository.updateStatus).toHaveBeenCalledWith('exec-001', 'running');
-    expect(executionRepository.createStepExecution).toHaveBeenCalledTimes(2);
-    expect(executeStep).toHaveBeenCalledTimes(2);
+    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'running');
+    expect(execRepo.createStepExecution).toHaveBeenCalledTimes(2);
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(2);
   });
 
   it('should stop pipeline when step fails with onFailure=stop', async () => {
-    vi.mocked(executeStep).mockResolvedValueOnce({
-      success: false,
-      outputText: '',
-      tokensUsed: 50,
-      errorMessage: 'step failed'
+    vi.mocked(stepExecutor.execute).mockResolvedValueOnce({
+      success: false, outputText: '', tokensUsed: 50, errorMessage: 'step failed'
     });
 
     const workflow = createTestWorkflow({ onFailure: 'stop' });
-    await executePipeline(workflow, {}, 'manual');
+    await orchestrator.execute(workflow, {}, 'manual');
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Only first step executed
-    expect(executeStep).toHaveBeenCalledTimes(1);
-    expect(executionRepository.updateStatus).toHaveBeenCalledWith(
-      'exec-001', 'failed', 'step failed'
-    );
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
+    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'step failed');
   });
 
   it('should skip failed step with onFailure=skip', async () => {
-    vi.mocked(executeStep)
-      .mockResolvedValueOnce({
-        success: false,
-        outputText: '',
-        tokensUsed: 50,
-        errorMessage: 'step failed'
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        outputText: 'step 2 output',
-        tokensUsed: 100
-      });
+    vi.mocked(stepExecutor.execute)
+      .mockResolvedValueOnce({ success: false, outputText: '', tokensUsed: 50, errorMessage: 'step failed' })
+      .mockResolvedValueOnce({ success: true, outputText: 'step 2 output', tokensUsed: 100 });
 
     const workflow = createTestWorkflow({ onFailure: 'skip' });
-    await executePipeline(workflow, {}, 'manual');
+    await orchestrator.execute(workflow, {}, 'manual');
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Both steps executed
-    expect(executeStep).toHaveBeenCalledTimes(2);
-    expect(executionRepository.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(2);
+    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
   });
 
   it('should stop pipeline when token limit exceeded', async () => {
-    vi.mocked(executeStep).mockResolvedValue({
-      success: true,
-      outputText: 'output',
-      tokensUsed: 600
+    vi.mocked(stepExecutor.execute).mockResolvedValue({
+      success: true, outputText: 'output', tokensUsed: 600
     });
 
-    const workflow = createTestWorkflow({
-      limits: { maxTokens: 1000 }
-    });
-    await executePipeline(workflow, {}, 'manual');
+    const workflow = createTestWorkflow({ limits: { maxTokens: 1000 } });
+    await orchestrator.execute(workflow, {}, 'manual');
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(executionRepository.updateStatus).toHaveBeenCalledWith(
-      'exec-001', 'failed', 'Token limit exceeded'
-    );
+    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'Token limit exceeded');
   });
 
   it('should mark execution as success when all steps pass', async () => {
     const workflow = createTestWorkflow({
       steps: [{ name: 'Single Step', prompt: 'Do it' }]
     });
-    await executePipeline(workflow, {}, 'scheduled');
+    await orchestrator.execute(workflow, {}, 'scheduled');
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(executionRepository.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
   });
 
   it('should handle unexpected errors gracefully', async () => {
-    vi.mocked(executeStep).mockRejectedValueOnce(new Error('SDK crash'));
+    vi.mocked(stepExecutor.execute).mockRejectedValueOnce(new Error('SDK crash'));
 
     const workflow = createTestWorkflow({
       steps: [{ name: 'Crash Step', prompt: 'Crash' }]
     });
-    await executePipeline(workflow, {}, 'manual');
+    await orchestrator.execute(workflow, {}, 'manual');
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(executionRepository.updateStatus).toHaveBeenCalledWith(
-      'exec-001', 'failed', 'SDK crash'
-    );
+    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'SDK crash');
   });
 });

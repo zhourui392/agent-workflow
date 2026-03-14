@@ -15,23 +15,29 @@ AI驱动的多步骤工作流自动化平台 (Electron桌面应用)。通过 UI 
 
 ## 目录结构
 
+后端采用 **DDD 四层架构**（Interface → Application → Domain → Infrastructure），按限界上下文划分：
+
 ```
 agent-workflow/
 ├── src/
-│   ├── main/                  # Electron主进程
-│   │   ├── index.ts           # 入口
-│   │   ├── core/              # 流水线引擎、执行器、模板、配置合并
-│   │   ├── ipc/               # IPC处理器 (workflows, executions, config)
-│   │   ├── services/          # 业务服务层
-│   │   ├── store/             # 数据层 (better-sqlite3)
-│   │   └── scheduler/         # node-cron定时任务
-│   ├── renderer/              # 前端渲染进程 (Vue)
-│   └── preload/               # IPC桥接
-├── global_config/             # 全局配置 (rules, MCP, skills)
-├── test/                      # 测试套件
-├── doc/                       # 设计文档
+│   ├── main/                        # Electron 主进程
+│   │   ├── index.ts                 # 应用入口，窗口管理
+│   │   ├── bootstrap.ts             # 组合根：依赖组装
+│   │   ├── types.ts                 # 公共类型重导出
+│   │   ├── shared/                  # 跨上下文共享（Entity 基类, database, schemas）
+│   │   ├── workflow/                # 工作流上下文（Workflow 聚合根, CRUD, IPC）
+│   │   ├── execution/              # 执行上下文（Pipeline, Executor, TemplateEngine）
+│   │   ├── configuration/          # 配置上下文（MCP/Skill/GlobalConfig, 四层合并）
+│   │   └── scheduling/             # 调度上下文（node-cron 定时任务）
+│   ├── renderer/                    # 前端渲染进程 (Vue 3)
+│   └── preload/                     # IPC 桥接
+├── global_config/                   # 全局配置 (rules, MCP, skills)
+├── test/                            # 测试套件 (Vitest, 122 tests)
+├── doc/                             # 设计文档
 └── package.json
 ```
+
+每个限界上下文内部统一按 `domain/` → `application/` → `infrastructure/` → `interface/` 分层。
 
 ## 核心功能
 

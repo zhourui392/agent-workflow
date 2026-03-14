@@ -16,7 +16,7 @@ import {
   UpdateConfigSchema,
   RunWorkflowInputsSchema,
   validateInput
-} from '../src/main/ipc/schemas';
+} from '../src/main/shared/interface/schemas';
 
 describe('IdSchema', () => {
   it('should accept non-empty string', () => {

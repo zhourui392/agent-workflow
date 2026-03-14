@@ -23,7 +23,7 @@ import type {
   UpdateMcpServerInput,
   CreateSkillInput,
   UpdateSkillInput
-} from '../../main/store/models';
+} from '../../main/types';
 
 /**
  * 模拟axios响应格式
@@ -343,4 +343,4 @@ export type {
   UpdateMcpServerInput,
   CreateSkillInput,
   UpdateSkillInput
-} from '../../main/store/models';
+} from '../../main/types';

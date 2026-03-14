@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { extractText, truncate, getValidMcpServers, extractToolResults } from '../src/main/core/executor'
+import { extractText, truncate, getValidMcpServers, extractToolResults } from '../src/main/execution/infrastructure/ClaudeAgentExecutor'
 
 // ========== extractText ==========
 

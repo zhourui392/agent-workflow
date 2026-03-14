@@ -13,7 +13,7 @@ import {
   type Execution,
   type StepExecution
 } from './index';
-import type { StepEvent } from '../../main/store/models';
+import type { StepEvent } from '../../main/types';
 
 export interface StepExecutionData {
   id: string;

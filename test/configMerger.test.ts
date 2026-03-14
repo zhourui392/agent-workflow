@@ -6,19 +6,40 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { mergeConfig, getStepConfig, buildAllowedTools, handleDanglingReferences } from '../src/main/core/config/configMerger'
-import type { GlobalConfig, MergedConfig, Workflow, McpServerConfig } from '../src/main/store/models'
-import type { ReferenceValidationResult } from '../src/main/core/errors'
+import { ConfigMergeService } from '../src/main/configuration/domain/service/ConfigMergeService'
+import type { WorkflowConfigRef } from '../src/main/configuration/domain/service/ConfigMergeService'
+import type { GlobalConfig, MergedConfig, McpServerConfig, ReferenceValidationResult } from '../src/main/configuration/domain/model'
+import {
+  createMockMcpServerRepository,
+  createMockSkillRepository,
+  createMockGlobalConfigProvider,
+  createMockSkillFileWriter
+} from './fixtures'
 
-function createWorkflow(overrides: Partial<Workflow> = {}): Workflow {
+// ConfigMergeService with fixture-based mock dependencies
+const service = new ConfigMergeService(
+  createMockMcpServerRepository() as any,
+  createMockSkillRepository() as any,
+  createMockGlobalConfigProvider(),
+  createMockSkillFileWriter()
+)
+
+const mergeConfig = (global: GlobalConfig, workflow: WorkflowConfigRef) => service.mergeWorkflowConfig(global, workflow)
+const buildAllowedTools = (base: string[] | undefined, mcpServers: Record<string, McpServerConfig>, hasSkills: boolean) => service.buildAllowedTools(base, mcpServers, hasSkills)
+const handleDanglingReferences = (result: ReferenceValidationResult, onWarning?: (msg: string) => void) => service.handleDanglingReferences(result, onWarning)
+
+function getStepConfig(mergedConfig: MergedConfig, stepModel?: string, stepMaxTurns?: number): MergedConfig {
+  if (!stepModel && !stepMaxTurns) return mergedConfig
+  return { ...mergedConfig, ...(stepModel && { model: stepModel }), ...(stepMaxTurns && { maxTurns: stepMaxTurns }) }
+}
+
+function createWorkflow(overrides: Partial<WorkflowConfigRef & { id: string; name: string; enabled: boolean; steps: unknown[]; onFailure: string }> = {}): WorkflowConfigRef {
   return {
-    id: 'wf-1',
-    name: 'Test Workflow',
-    enabled: true,
-    steps: [],
-    onFailure: 'stop',
-    createdAt: '2026-03-14T00:00:00Z',
-    updatedAt: '2026-03-14T00:00:00Z',
+    rules: overrides.rules,
+    mcpServers: overrides.mcpServers,
+    skills: overrides.skills,
+    limits: overrides.limits,
+    workingDirectory: overrides.workingDirectory,
     ...overrides
   }
 }

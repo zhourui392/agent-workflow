@@ -92,7 +92,7 @@ import type {
   ToolResultEvent,
   ResultEvent,
   ErrorEvent
-} from '../../main/store/models'
+} from '../../main/types'
 import { getToolIcon } from '@/utils/toolIconUtils'
 import { formatDurationMs } from '@/utils/dateUtils'
 
