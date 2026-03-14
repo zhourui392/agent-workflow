@@ -10,8 +10,8 @@
 import {
   getExecutions,
   getExecution as getExecutionById,
-  type Execution,
-  type StepExecution
+  type ExecutionDTO,
+  type StepExecutionDTO
 } from './index';
 import type { StepEvent } from '../../main/types';
 
@@ -48,7 +48,7 @@ export interface ExecutionData {
   step_executions?: StepExecutionData[];
 }
 
-function stepExecutionToData(step: StepExecution): StepExecutionData {
+function stepExecutionToData(step: StepExecutionDTO): StepExecutionData {
   return {
     id: step.id,
     execution_id: step.executionId,
@@ -68,7 +68,7 @@ function stepExecutionToData(step: StepExecution): StepExecutionData {
   };
 }
 
-function executionToData(execution: Execution): ExecutionData {
+function executionToData(execution: ExecutionDTO): ExecutionData {
   return {
     id: execution.id,
     workflow_id: execution.workflowId,

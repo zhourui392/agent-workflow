@@ -15,7 +15,7 @@ import {
   deleteWorkflow as deleteWorkflowApi,
   toggleWorkflow as toggleWorkflowApi,
   runWorkflow as runWorkflowApi,
-  type Workflow,
+  type WorkflowDTO,
   type WorkflowStep,
   type WorkflowInput,
   type WorkflowLimits,
@@ -59,7 +59,7 @@ export interface WorkflowData {
   updated_at?: string;
 }
 
-function workflowToData(workflow: Workflow): WorkflowData {
+function workflowToData(workflow: WorkflowDTO): WorkflowData {
   return {
     id: workflow.id,
     name: workflow.name,

@@ -9,16 +9,16 @@
  */
 
 import type {
-  Workflow,
-  Execution,
+  WorkflowDTO,
+  ExecutionDTO,
   GlobalConfig,
   CreateWorkflowRequest,
   UpdateWorkflowRequest,
   ExecutionListParams,
   ExecutionProgressEvent,
   McpServerConfig,
-  McpServer,
-  Skill,
+  McpServerDTO,
+  SkillDTO,
   CreateMcpServerInput,
   UpdateMcpServerInput,
   CreateSkillInput,
@@ -49,7 +49,7 @@ async function wrapResponse<T>(promise: Promise<T>): Promise<AxiosLikeResponse<T
 /**
  * 获取工作流列表
  */
-export function getWorkflows(): Promise<AxiosLikeResponse<Workflow[]>> {
+export function getWorkflows(): Promise<AxiosLikeResponse<WorkflowDTO[]>> {
   return wrapResponse(window.api.getWorkflows());
 }
 
@@ -58,7 +58,7 @@ export function getWorkflows(): Promise<AxiosLikeResponse<Workflow[]>> {
  *
  * @param id 工作流ID
  */
-export function getWorkflow(id: string): Promise<AxiosLikeResponse<Workflow | null>> {
+export function getWorkflow(id: string): Promise<AxiosLikeResponse<WorkflowDTO | null>> {
   return wrapResponse(window.api.getWorkflow(id));
 }
 
@@ -69,7 +69,7 @@ export function getWorkflow(id: string): Promise<AxiosLikeResponse<Workflow | nu
  */
 export function createWorkflow(
   data: CreateWorkflowRequest
-): Promise<AxiosLikeResponse<Workflow>> {
+): Promise<AxiosLikeResponse<WorkflowDTO>> {
   return wrapResponse(window.api.createWorkflow(data));
 }
 
@@ -82,7 +82,7 @@ export function createWorkflow(
 export function updateWorkflow(
   id: string,
   data: UpdateWorkflowRequest
-): Promise<AxiosLikeResponse<Workflow | null>> {
+): Promise<AxiosLikeResponse<WorkflowDTO | null>> {
   return wrapResponse(window.api.updateWorkflow(id, data));
 }
 
@@ -102,7 +102,7 @@ export function deleteWorkflow(id: string): Promise<AxiosLikeResponse<boolean>> 
  */
 export function toggleWorkflow(
   id: string
-): Promise<AxiosLikeResponse<Workflow | null>> {
+): Promise<AxiosLikeResponse<WorkflowDTO | null>> {
   return wrapResponse(window.api.toggleWorkflow(id));
 }
 
@@ -128,7 +128,7 @@ export function runWorkflow(
  */
 export function getExecutions(
   params?: ExecutionListParams
-): Promise<AxiosLikeResponse<Execution[]>> {
+): Promise<AxiosLikeResponse<ExecutionDTO[]>> {
   return wrapResponse(window.api.getExecutions(params));
 }
 
@@ -139,7 +139,7 @@ export function getExecutions(
  */
 export function getExecution(
   id: string
-): Promise<AxiosLikeResponse<Execution | null>> {
+): Promise<AxiosLikeResponse<ExecutionDTO | null>> {
   return wrapResponse(window.api.getExecution(id));
 }
 
@@ -170,14 +170,14 @@ export function updateConfig(data: {
 /**
  * 获取 MCP 服务列表（仅数据库）
  */
-export function getMcpServers(): Promise<AxiosLikeResponse<McpServer[]>> {
+export function getMcpServers(): Promise<AxiosLikeResponse<McpServerDTO[]>> {
   return wrapResponse(window.api.getMcpServers());
 }
 
 /**
  * 获取所有 MCP 服务（数据库 + Claude CLI）
  */
-export function getAllMcpServers(): Promise<AxiosLikeResponse<McpServer[]>> {
+export function getAllMcpServers(): Promise<AxiosLikeResponse<McpServerDTO[]>> {
   return wrapResponse(window.api.getAllMcpServers());
 }
 
@@ -186,7 +186,7 @@ export function getAllMcpServers(): Promise<AxiosLikeResponse<McpServer[]>> {
  *
  * @param id MCP 服务 ID
  */
-export function getMcpServer(id: string): Promise<AxiosLikeResponse<McpServer | null>> {
+export function getMcpServer(id: string): Promise<AxiosLikeResponse<McpServerDTO | null>> {
   return wrapResponse(window.api.getMcpServer(id));
 }
 
@@ -197,7 +197,7 @@ export function getMcpServer(id: string): Promise<AxiosLikeResponse<McpServer | 
  */
 export function createMcpServer(
   data: CreateMcpServerInput
-): Promise<AxiosLikeResponse<McpServer>> {
+): Promise<AxiosLikeResponse<McpServerDTO>> {
   return wrapResponse(window.api.createMcpServer(data));
 }
 
@@ -210,7 +210,7 @@ export function createMcpServer(
 export function updateMcpServer(
   id: string,
   data: UpdateMcpServerInput
-): Promise<AxiosLikeResponse<McpServer | null>> {
+): Promise<AxiosLikeResponse<McpServerDTO | null>> {
   return wrapResponse(window.api.updateMcpServer(id, data));
 }
 
@@ -232,7 +232,7 @@ export function deleteMcpServer(id: string): Promise<AxiosLikeResponse<boolean>>
 export function setMcpServerEnabled(
   id: string,
   enabled: boolean
-): Promise<AxiosLikeResponse<McpServer | null>> {
+): Promise<AxiosLikeResponse<McpServerDTO | null>> {
   return wrapResponse(window.api.setMcpServerEnabled(id, enabled));
 }
 
@@ -241,14 +241,14 @@ export function setMcpServerEnabled(
 /**
  * 获取 Skill 列表（仅数据库）
  */
-export function getSkills(): Promise<AxiosLikeResponse<Skill[]>> {
+export function getSkills(): Promise<AxiosLikeResponse<SkillDTO[]>> {
   return wrapResponse(window.api.getSkills());
 }
 
 /**
  * 获取所有 Skill（数据库 + Claude CLI）
  */
-export function getAllSkills(): Promise<AxiosLikeResponse<Skill[]>> {
+export function getAllSkills(): Promise<AxiosLikeResponse<SkillDTO[]>> {
   return wrapResponse(window.api.getAllSkills());
 }
 
@@ -257,7 +257,7 @@ export function getAllSkills(): Promise<AxiosLikeResponse<Skill[]>> {
  *
  * @param id Skill ID
  */
-export function getSkill(id: string): Promise<AxiosLikeResponse<Skill | null>> {
+export function getSkill(id: string): Promise<AxiosLikeResponse<SkillDTO | null>> {
   return wrapResponse(window.api.getSkill(id));
 }
 
@@ -266,7 +266,7 @@ export function getSkill(id: string): Promise<AxiosLikeResponse<Skill | null>> {
  *
  * @param data 创建数据
  */
-export function createSkill(data: CreateSkillInput): Promise<AxiosLikeResponse<Skill>> {
+export function createSkill(data: CreateSkillInput): Promise<AxiosLikeResponse<SkillDTO>> {
   return wrapResponse(window.api.createSkill(data));
 }
 
@@ -279,7 +279,7 @@ export function createSkill(data: CreateSkillInput): Promise<AxiosLikeResponse<S
 export function updateSkill(
   id: string,
   data: UpdateSkillInput
-): Promise<AxiosLikeResponse<Skill | null>> {
+): Promise<AxiosLikeResponse<SkillDTO | null>> {
   return wrapResponse(window.api.updateSkill(id, data));
 }
 
@@ -301,7 +301,7 @@ export function deleteSkill(id: string): Promise<AxiosLikeResponse<boolean>> {
 export function setSkillEnabled(
   id: string,
   enabled: boolean
-): Promise<AxiosLikeResponse<Skill | null>> {
+): Promise<AxiosLikeResponse<SkillDTO | null>> {
   return wrapResponse(window.api.setSkillEnabled(id, enabled));
 }
 
@@ -322,9 +322,9 @@ export function subscribeExecutionProgress(
 // ============ Re-export types ============
 
 export type {
-  Workflow,
-  Execution,
-  StepExecution,
+  WorkflowDTO,
+  ExecutionDTO,
+  StepExecutionDTO,
   GlobalConfig,
   CreateWorkflowRequest,
   UpdateWorkflowRequest,
@@ -337,8 +337,8 @@ export type {
   McpServerConfig,
   ExecutionStatus,
   TriggerType,
-  McpServer,
-  Skill,
+  McpServerDTO,
+  SkillDTO,
   CreateMcpServerInput,
   UpdateMcpServerInput,
   CreateSkillInput,

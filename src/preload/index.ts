@@ -7,16 +7,16 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
-  Workflow,
-  Execution,
+  WorkflowDTO,
+  ExecutionDTO,
   GlobalConfig,
   CreateWorkflowRequest,
   UpdateWorkflowRequest,
   ExecutionListParams,
   ExecutionProgressEvent,
   McpServerConfig,
-  McpServer,
-  Skill,
+  McpServerDTO,
+  SkillDTO,
   CreateMcpServerInput,
   UpdateMcpServerInput,
   CreateSkillInput,
@@ -28,17 +28,17 @@ import type {
  */
 export interface ElectronAPI {
   // Workflows
-  getWorkflows: () => Promise<Workflow[]>;
-  getWorkflow: (id: string) => Promise<Workflow | null>;
-  createWorkflow: (data: CreateWorkflowRequest) => Promise<Workflow>;
-  updateWorkflow: (id: string, data: UpdateWorkflowRequest) => Promise<Workflow | null>;
+  getWorkflows: () => Promise<WorkflowDTO[]>;
+  getWorkflow: (id: string) => Promise<WorkflowDTO | null>;
+  createWorkflow: (data: CreateWorkflowRequest) => Promise<WorkflowDTO>;
+  updateWorkflow: (id: string, data: UpdateWorkflowRequest) => Promise<WorkflowDTO | null>;
   deleteWorkflow: (id: string) => Promise<boolean>;
-  toggleWorkflow: (id: string) => Promise<Workflow | null>;
+  toggleWorkflow: (id: string) => Promise<WorkflowDTO | null>;
   runWorkflow: (id: string, inputs?: Record<string, unknown>) => Promise<string | null>;
 
   // Executions
-  getExecutions: (params?: ExecutionListParams) => Promise<Execution[]>;
-  getExecution: (id: string) => Promise<Execution | null>;
+  getExecutions: (params?: ExecutionListParams) => Promise<ExecutionDTO[]>;
+  getExecution: (id: string) => Promise<ExecutionDTO | null>;
 
   // Config
   getConfig: () => Promise<GlobalConfig>;
@@ -49,22 +49,22 @@ export interface ElectronAPI {
   }) => Promise<{ success: boolean }>;
 
   // MCP Servers
-  getMcpServers: () => Promise<McpServer[]>;
-  getAllMcpServers: () => Promise<McpServer[]>;
-  getMcpServer: (id: string) => Promise<McpServer | null>;
-  createMcpServer: (data: CreateMcpServerInput) => Promise<McpServer>;
-  updateMcpServer: (id: string, data: UpdateMcpServerInput) => Promise<McpServer | null>;
+  getMcpServers: () => Promise<McpServerDTO[]>;
+  getAllMcpServers: () => Promise<McpServerDTO[]>;
+  getMcpServer: (id: string) => Promise<McpServerDTO | null>;
+  createMcpServer: (data: CreateMcpServerInput) => Promise<McpServerDTO>;
+  updateMcpServer: (id: string, data: UpdateMcpServerInput) => Promise<McpServerDTO | null>;
   deleteMcpServer: (id: string) => Promise<boolean>;
-  setMcpServerEnabled: (id: string, enabled: boolean) => Promise<McpServer | null>;
+  setMcpServerEnabled: (id: string, enabled: boolean) => Promise<McpServerDTO | null>;
 
   // Skills
-  getSkills: () => Promise<Skill[]>;
-  getAllSkills: () => Promise<Skill[]>;
-  getSkill: (id: string) => Promise<Skill | null>;
-  createSkill: (data: CreateSkillInput) => Promise<Skill>;
-  updateSkill: (id: string, data: UpdateSkillInput) => Promise<Skill | null>;
+  getSkills: () => Promise<SkillDTO[]>;
+  getAllSkills: () => Promise<SkillDTO[]>;
+  getSkill: (id: string) => Promise<SkillDTO | null>;
+  createSkill: (data: CreateSkillInput) => Promise<SkillDTO>;
+  updateSkill: (id: string, data: UpdateSkillInput) => Promise<SkillDTO | null>;
   deleteSkill: (id: string) => Promise<boolean>;
-  setSkillEnabled: (id: string, enabled: boolean) => Promise<Skill | null>;
+  setSkillEnabled: (id: string, enabled: boolean) => Promise<SkillDTO | null>;
 
   // Real-time events
   onExecutionProgress: (callback: (data: ExecutionProgressEvent) => void) => () => void;

@@ -17,7 +17,10 @@ npm run electron:build               # 生产打包
 npm test                             # 运行测试
 ```
 
-**注意**: `electron:dev` 依赖 `concurrently`、`wait-on`，首次运行前确保已安装。Electron 原生模块（better-sqlite3）需要匹配 Electron 版本编译，可用 `npx electron-rebuild -f -w better-sqlite3` 重建。
+**注意**:
+- `electron:dev` 依赖 `concurrently`、`wait-on`，首次运行前确保已安装。
+- Electron 原生模块（better-sqlite3）需要匹配 Electron 版本编译，可用 `npx electron-rebuild -f -w better-sqlite3` 重建。
+- **启动失败排查**: 若 Electron 窗口未弹出且日志报 `Could not locate the bindings file`，说明 better-sqlite3 未针对当前 Electron 版本编译，需先执行 `npx electron-rebuild -f -w better-sqlite3` 再启动。
 
 ## 架构（DDD 四层架构）
 

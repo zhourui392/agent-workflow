@@ -13,7 +13,7 @@ import {
   updateMcpServer as updateMcpServerApi,
   deleteMcpServer as deleteMcpServerApi,
   setMcpServerEnabled as setMcpServerEnabledApi,
-  type McpServer
+  type McpServerDTO
 } from './index';
 
 /**
@@ -62,7 +62,7 @@ export interface UpdateMcpServerData {
  * @param server 后端数据
  * @returns 前端数据
  */
-function serverToData(server: McpServer): McpServerData {
+function serverToData(server: McpServerDTO): McpServerData {
   return {
     id: server.id,
     name: server.name,
@@ -136,7 +136,7 @@ export async function listAllMcpServers() {
  * @param server 后端数据
  * @returns 前端数据
  */
-function serverToDataWithSource(server: McpServer & { source?: string }): McpServerData {
+function serverToDataWithSource(server: McpServerDTO & { source?: string }): McpServerData {
   return {
     id: server.id,
     name: server.name,

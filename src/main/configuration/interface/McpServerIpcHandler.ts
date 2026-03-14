@@ -10,6 +10,8 @@ import {
   UpdateMcpServerSchema,
   validateInput
 } from '../../shared/interface';
+import { mcpServerToDTO } from '../../shared/interface/dtoMapper';
+import { McpServer } from '../domain/model';
 import type { McpServerApplicationService } from '../application/McpServerApplicationService';
 
 export class McpServerIpcHandler {
@@ -17,26 +19,30 @@ export class McpServerIpcHandler {
 
   register(): void {
     ipcMain.handle('mcp-servers:list', () => {
-      return this.service.list();
+      return this.service.list().map(mcpServerToDTO);
     });
 
     ipcMain.handle('mcp-servers:list-all', () => {
-      return this.service.listAll();
+      return this.service.listAll().map(item =>
+        item instanceof McpServer ? mcpServerToDTO(item) : item
+      );
     });
 
     ipcMain.handle('mcp-servers:get', (_, id: unknown) => {
-      return this.service.get(validateInput(IdSchema, id));
+      const s = this.service.get(validateInput(IdSchema, id));
+      return s ? mcpServerToDTO(s) : null;
     });
 
     ipcMain.handle('mcp-servers:create', (_, data: unknown) => {
-      return this.service.create(validateInput(CreateMcpServerSchema, data));
+      return mcpServerToDTO(this.service.create(validateInput(CreateMcpServerSchema, data)));
     });
 
     ipcMain.handle('mcp-servers:update', (_, id: unknown, data: unknown) => {
-      return this.service.update(
+      const s = this.service.update(
         validateInput(IdSchema, id),
         validateInput(UpdateMcpServerSchema, data)
       );
+      return s ? mcpServerToDTO(s) : null;
     });
 
     ipcMain.handle('mcp-servers:delete', (_, id: unknown) => {
@@ -44,10 +50,11 @@ export class McpServerIpcHandler {
     });
 
     ipcMain.handle('mcp-servers:set-enabled', (_, id: unknown, enabled: unknown) => {
-      return this.service.setEnabled(
+      const s = this.service.setEnabled(
         validateInput(IdSchema, id),
         validateInput(z.boolean(), enabled)
       );
+      return s ? mcpServerToDTO(s) : null;
     });
   }
 }

@@ -9,6 +9,7 @@
 
 import { ipcMain } from 'electron';
 import { IdSchema, ExecutionListParamsSchema, validateInput } from '../../shared/interface';
+import { executionToDTO } from '../../shared/interface/dtoMapper';
 import type { QueryExecutionUseCase } from '../application/QueryExecutionUseCase';
 
 export class ExecutionIpcHandler {
@@ -16,11 +17,13 @@ export class ExecutionIpcHandler {
 
   register(): void {
     ipcMain.handle('executions:list', (_, params?: unknown) => {
-      return this.queryUseCase.list(validateInput(ExecutionListParamsSchema, params));
+      return this.queryUseCase.list(validateInput(ExecutionListParamsSchema, params))
+        .map(executionToDTO);
     });
 
     ipcMain.handle('executions:get', (_, id: unknown) => {
-      return this.queryUseCase.get(validateInput(IdSchema, id));
+      const e = this.queryUseCase.get(validateInput(IdSchema, id));
+      return e ? executionToDTO(e) : null;
     });
   }
 }

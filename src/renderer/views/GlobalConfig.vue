@@ -60,12 +60,12 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getConfig, updateConfig, getAllMcpServers, getAllSkills, type McpServer, type Skill } from '@/api/index'
+import { getConfig, updateConfig, getAllMcpServers, getAllSkills, type McpServerDTO, type SkillDTO } from '@/api/index'
 
 const loading = ref(false)
 const saving = ref(false)
-const mcpServers = ref<McpServer[]>([])
-const skills = ref<Skill[]>([])
+const mcpServers = ref<McpServerDTO[]>([])
+const skills = ref<SkillDTO[]>([])
 
 const form = reactive({
   systemPrompt: '',

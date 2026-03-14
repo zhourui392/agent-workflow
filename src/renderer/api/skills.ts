@@ -13,7 +13,7 @@ import {
   updateSkill as updateSkillApi,
   deleteSkill as deleteSkillApi,
   setSkillEnabled as setSkillEnabledApi,
-  type Skill
+  type SkillDTO
 } from './index';
 
 /**
@@ -59,7 +59,7 @@ export interface UpdateSkillData {
  * @param skill 后端数据
  * @returns 前端数据
  */
-function skillToData(skill: Skill): SkillData {
+function skillToData(skill: SkillDTO): SkillData {
   return {
     id: skill.id,
     name: skill.name,
@@ -130,7 +130,7 @@ export async function listAllSkills() {
  * @param skill 后端数据
  * @returns 前端数据
  */
-function skillToDataWithSource(skill: Skill & { source?: string }): SkillData {
+function skillToDataWithSource(skill: SkillDTO & { source?: string }): SkillData {
   return {
     id: skill.id,
     name: skill.name,

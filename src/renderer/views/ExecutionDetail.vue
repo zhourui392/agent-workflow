@@ -44,8 +44,8 @@
             :hollow="step.status === 'pending'"
             size="large"
           >
-            <el-collapse>
-              <el-collapse-item>
+            <el-collapse :model-value="step.status === 'running' ? [step.id] : []">
+              <el-collapse-item :name="step.id">
                 <template #title>
                   <div class="step-title">
                     <span class="step-name">{{ step.step_name }}</span>
@@ -125,10 +125,46 @@ async function fetchExecutionData() {
   execution.value = await store.fetchExecution(id) || null
 }
 
+/**
+ * 确保 step_executions 中存在指定索引的步骤，不存在则创建占位
+ */
+function ensureStepExists(stepIndex: number): StepExecutionData {
+  if (!execution.value) {
+    throw new Error('execution is null')
+  }
+  if (!execution.value.step_executions) {
+    execution.value.step_executions = []
+  }
+
+  let step = execution.value.step_executions.find(s => s.step_index === stepIndex)
+  if (!step) {
+    step = {
+      id: `live-${stepIndex}`,
+      execution_id: execution.value.id,
+      step_index: stepIndex,
+      step_name: `Step ${stepIndex + 1}`,
+      status: 'running',
+      started_at: new Date().toISOString(),
+      tokens_used: 0
+    }
+    execution.value.step_executions.push(step)
+    execution.value.step_executions.sort((a, b) => a.step_index - b.step_index)
+  }
+  return step
+}
+
 function handleProgressEvent(event: ExecutionProgressEvent) {
   if (!execution.value || event.executionId !== execution.value.id) {
     return
   }
+
+  // 确保执行状态为 running
+  if (execution.value.status === 'pending') {
+    execution.value.status = 'running'
+  }
+
+  // 确保步骤占位存在
+  ensureStepExists(event.stepIndex)
 
   // 收集实时流式事件
   if (event.event) {
@@ -150,9 +186,7 @@ function updateStepFromEvent(event: ExecutionProgressEvent) {
     return
   }
 
-  const stepIndex = event.stepIndex
-  const step = execution.value.step_executions[stepIndex]
-
+  const step = execution.value.step_executions.find(s => s.step_index === event.stepIndex)
   if (!step) {
     return
   }
@@ -184,12 +218,17 @@ function updateExecutionStatus(event: ExecutionProgressEvent) {
   execution.value.current_step = event.stepIndex
 
   if (event.status === 'success' || event.status === 'failed') {
-    const allStepsCompleted = execution.value.step_executions?.every(
-      s => s.status === 'success' || s.status === 'failed'
-    )
-
-    if (allStepsCompleted) {
-      fetchExecutionData()
+    // 仅当所有已知步骤都完成时才重新加载
+    const steps = execution.value.step_executions
+    if (steps && steps.length > 0) {
+      const allCompleted = steps.every(
+        s => s.status === 'success' || s.status === 'failed'
+      )
+      if (allCompleted) {
+        // 清空实时事件，从数据库加载完整数据
+        liveEvents.value = new Map()
+        fetchExecutionData()
+      }
     }
   }
 }
@@ -197,8 +236,9 @@ function updateExecutionStatus(event: ExecutionProgressEvent) {
 onMounted(async () => {
   loading.value = true
   try {
-    await fetchExecutionData()
+    // 先订阅事件，再加载数据，避免遗漏执行期间的事件
     unsubscribe = subscribeExecutionProgress(handleProgressEvent)
+    await fetchExecutionData()
     tickTimer = setInterval(() => { now.value = Date.now() }, 1000)
   } finally {
     loading.value = false
