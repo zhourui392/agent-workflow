@@ -369,7 +369,7 @@ export class ClaudeAgentExecutor implements StepExecutor {
       toolNameMap: new Map()
     };
 
-    log.debug(`Executing step with prompt length: ${prompt.length}`);
+    log.info(`Executing step | cwd: ${config.workingDirectory || '(not set, fallback to process.cwd: ' + process.cwd() + ')'} | prompt length: ${prompt.length}`);
 
     try {
       const { query } = await getClaudeCode();

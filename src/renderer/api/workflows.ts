@@ -113,8 +113,8 @@ function dataToCreateRequest(data: Partial<WorkflowData>) {
     rules: data.rules || undefined,
     mcpServers: data.mcp_servers as Record<string, { command: string; args?: string[]; env?: Record<string, string> }> | undefined,
     skills: data.skills,
-    limits: data.limits as WorkflowLimits | undefined,
-    output: data.output as WorkflowOutput | undefined,
+    limits: data.limits ? { ...data.limits } as WorkflowLimits : undefined,
+    output: data.output ? { ...data.output } as WorkflowOutput : undefined,
     workingDirectory: data.working_directory || undefined,
     onFailure: (data.on_failure as 'stop' | 'skip' | 'retry') || 'stop'
   };

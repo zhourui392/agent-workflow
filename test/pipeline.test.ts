@@ -8,7 +8,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PipelineOrchestrator } from '../src/main/execution/domain/service/PipelineOrchestrator';
 import type { StepExecutor, ProgressNotifier, OutputProcessor } from '../src/main/execution/domain/service/PipelineOrchestrator';
-import type { ExecutionRepository } from '../src/main/execution/domain/repository/ExecutionRepository';
 import type { ConfigMergeService } from '../src/main/configuration/domain/service/ConfigMergeService';
 import { TemplateEngine } from '../src/main/execution/domain/service/TemplateEngine';
 import {
@@ -50,7 +49,10 @@ describe('PipelineOrchestrator', () => {
   it('should execute all steps in order', async () => {
     const workflow = createTestWorkflow();
     await orchestrator.execute(workflow, {}, 'manual');
-    await new Promise(resolve => setTimeout(resolve, 100));
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    }, { timeout: 2000 });
 
     expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'running');
     expect(execRepo.createStepExecution).toHaveBeenCalledTimes(2);
@@ -64,10 +66,12 @@ describe('PipelineOrchestrator', () => {
 
     const workflow = createTestWorkflow({ onFailure: 'stop' });
     await orchestrator.execute(workflow, {}, 'manual');
-    await new Promise(resolve => setTimeout(resolve, 100));
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'step failed');
+    }, { timeout: 2000 });
 
     expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
-    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'step failed');
   });
 
   it('should skip failed step with onFailure=skip', async () => {
@@ -77,10 +81,12 @@ describe('PipelineOrchestrator', () => {
 
     const workflow = createTestWorkflow({ onFailure: 'skip' });
     await orchestrator.execute(workflow, {}, 'manual');
-    await new Promise(resolve => setTimeout(resolve, 100));
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    }, { timeout: 2000 });
 
     expect(stepExecutor.execute).toHaveBeenCalledTimes(2);
-    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
   });
 
   it('should stop pipeline when token limit exceeded', async () => {
@@ -90,9 +96,10 @@ describe('PipelineOrchestrator', () => {
 
     const workflow = createTestWorkflow({ limits: { maxTokens: 1000 } });
     await orchestrator.execute(workflow, {}, 'manual');
-    await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'Token limit exceeded');
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'Token limit exceeded');
+    }, { timeout: 2000 });
   });
 
   it('should mark execution as success when all steps pass', async () => {
@@ -100,9 +107,10 @@ describe('PipelineOrchestrator', () => {
       steps: [{ name: 'Single Step', prompt: 'Do it' }]
     });
     await orchestrator.execute(workflow, {}, 'scheduled');
-    await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    }, { timeout: 2000 });
   });
 
   it('should handle unexpected errors gracefully', async () => {
@@ -112,8 +120,9 @@ describe('PipelineOrchestrator', () => {
       steps: [{ name: 'Crash Step', prompt: 'Crash' }]
     });
     await orchestrator.execute(workflow, {}, 'manual');
-    await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'SDK crash');
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'SDK crash');
+    }, { timeout: 2000 });
   });
 });

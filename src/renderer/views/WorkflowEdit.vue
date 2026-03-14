@@ -171,7 +171,7 @@ async function handleSave() {
       schedule: rawForm.schedule || null,
       steps: rawForm.steps.map(s => ({ ...toRaw(s) })),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
-      limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : null,
+      limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : undefined,
       on_failure: rawForm.on_failure,
     }
     await store.saveWorkflow(payload)

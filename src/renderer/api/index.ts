@@ -34,6 +34,17 @@ interface AxiosLikeResponse<T> {
 }
 
 /**
+ * 深度序列化：剥离 Vue Proxy / class 实例，确保数据能通过 contextBridge structured clone
+ *
+ * contextBridge 在 preload 函数执行前就对参数做 structured clone，
+ * 因此必须在渲染进程侧（调用 window.api 之前）完成序列化。
+ */
+function toPlain<T>(obj: T): T {
+  if (obj === undefined || obj === null) return obj;
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/**
  * 包装IPC调用为axios风格响应
  *
  * @param promise IPC Promise
@@ -70,7 +81,7 @@ export function getWorkflow(id: string): Promise<AxiosLikeResponse<WorkflowDTO |
 export function createWorkflow(
   data: CreateWorkflowRequest
 ): Promise<AxiosLikeResponse<WorkflowDTO>> {
-  return wrapResponse(window.api.createWorkflow(data));
+  return wrapResponse(window.api.createWorkflow(toPlain(data)));
 }
 
 /**
@@ -83,7 +94,7 @@ export function updateWorkflow(
   id: string,
   data: UpdateWorkflowRequest
 ): Promise<AxiosLikeResponse<WorkflowDTO | null>> {
-  return wrapResponse(window.api.updateWorkflow(id, data));
+  return wrapResponse(window.api.updateWorkflow(id, toPlain(data)));
 }
 
 /**
@@ -116,7 +127,7 @@ export function runWorkflow(
   id: string,
   inputs?: Record<string, unknown>
 ): Promise<AxiosLikeResponse<string | null>> {
-  return wrapResponse(window.api.runWorkflow(id, inputs));
+  return wrapResponse(window.api.runWorkflow(id, inputs ? toPlain(inputs) : undefined));
 }
 
 // ============ Executions API ============
@@ -129,7 +140,7 @@ export function runWorkflow(
 export function getExecutions(
   params?: ExecutionListParams
 ): Promise<AxiosLikeResponse<ExecutionDTO[]>> {
-  return wrapResponse(window.api.getExecutions(params));
+  return wrapResponse(window.api.getExecutions(params ? toPlain(params) : undefined));
 }
 
 /**
@@ -162,7 +173,7 @@ export function updateConfig(data: {
   defaultModel?: string;
   mcpServers?: Record<string, McpServerConfig>;
 }): Promise<AxiosLikeResponse<{ success: boolean }>> {
-  return wrapResponse(window.api.updateConfig(data));
+  return wrapResponse(window.api.updateConfig(toPlain(data)));
 }
 
 // ============ MCP Servers API ============
@@ -198,7 +209,7 @@ export function getMcpServer(id: string): Promise<AxiosLikeResponse<McpServerDTO
 export function createMcpServer(
   data: CreateMcpServerInput
 ): Promise<AxiosLikeResponse<McpServerDTO>> {
-  return wrapResponse(window.api.createMcpServer(data));
+  return wrapResponse(window.api.createMcpServer(toPlain(data)));
 }
 
 /**
@@ -211,7 +222,7 @@ export function updateMcpServer(
   id: string,
   data: UpdateMcpServerInput
 ): Promise<AxiosLikeResponse<McpServerDTO | null>> {
-  return wrapResponse(window.api.updateMcpServer(id, data));
+  return wrapResponse(window.api.updateMcpServer(id, toPlain(data)));
 }
 
 /**
@@ -267,7 +278,7 @@ export function getSkill(id: string): Promise<AxiosLikeResponse<SkillDTO | null>
  * @param data 创建数据
  */
 export function createSkill(data: CreateSkillInput): Promise<AxiosLikeResponse<SkillDTO>> {
-  return wrapResponse(window.api.createSkill(data));
+  return wrapResponse(window.api.createSkill(toPlain(data)));
 }
 
 /**
@@ -280,7 +291,7 @@ export function updateSkill(
   id: string,
   data: UpdateSkillInput
 ): Promise<AxiosLikeResponse<SkillDTO | null>> {
-  return wrapResponse(window.api.updateSkill(id, data));
+  return wrapResponse(window.api.updateSkill(id, toPlain(data)));
 }
 
 /**

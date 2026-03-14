@@ -125,6 +125,22 @@ describe('UpdateWorkflowSchema', () => {
     const result = validateInput(UpdateWorkflowSchema, {});
     expect(result).toEqual({});
   });
+
+  it('should accept limits: null (frontend sends null for empty limits)', () => {
+    const result = validateInput(UpdateWorkflowSchema, {
+      name: 'Test',
+      limits: null
+    });
+    expect(result.name).toBe('Test');
+  });
+
+  it('should accept output: null (frontend sends null for empty output)', () => {
+    const result = validateInput(UpdateWorkflowSchema, {
+      name: 'Test',
+      output: null
+    });
+    expect(result.name).toBe('Test');
+  });
 });
 
 describe('ExecutionListParamsSchema', () => {
@@ -231,11 +247,7 @@ describe('RunWorkflowInputsSchema', () => {
 
 describe('validateInput error messages', () => {
   it('should include field path in error message', () => {
-    try {
-      validateInput(CreateWorkflowSchema, { name: '', steps: [{ name: '', prompt: '' }] });
-    } catch (e: unknown) {
-      const msg = (e as Error).message;
-      expect(msg).toContain('输入校验失败');
-    }
+    expect(() => validateInput(CreateWorkflowSchema, { name: '', steps: [{ name: '', prompt: '' }] }))
+      .toThrow('输入校验失败');
   });
 });

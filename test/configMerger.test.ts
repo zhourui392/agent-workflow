@@ -28,11 +28,6 @@ const mergeConfig = (global: GlobalConfig, workflow: WorkflowConfigRef) => servi
 const buildAllowedTools = (base: string[] | undefined, mcpServers: Record<string, McpServerConfig>, hasSkills: boolean) => service.buildAllowedTools(base, mcpServers, hasSkills)
 const handleDanglingReferences = (result: ReferenceValidationResult, onWarning?: (msg: string) => void) => service.handleDanglingReferences(result, onWarning)
 
-function getStepConfig(mergedConfig: MergedConfig, stepModel?: string, stepMaxTurns?: number): MergedConfig {
-  if (!stepModel && !stepMaxTurns) return mergedConfig
-  return { ...mergedConfig, ...(stepModel && { model: stepModel }), ...(stepMaxTurns && { maxTurns: stepMaxTurns }) }
-}
-
 function createWorkflow(overrides: Partial<WorkflowConfigRef & { id: string; name: string; enabled: boolean; steps: unknown[]; onFailure: string }> = {}): WorkflowConfigRef {
   return {
     rules: overrides.rules,
@@ -160,46 +155,6 @@ describe('mergeConfig', () => {
 
     const merged = mergeConfig(global, workflow)
     expect(merged.allowedTools).toEqual(['Read', 'Write', 'Bash'])
-  })
-})
-
-// ========== getStepConfig ==========
-
-describe('getStepConfig', () => {
-  const baseConfig: MergedConfig = {
-    model: 'claude-sonnet-4-6',
-    maxTurns: 30,
-    systemPrompt: '基础提示'
-  }
-
-  it('无覆盖参数时返回原配置引用', () => {
-    const result = getStepConfig(baseConfig)
-    expect(result).toBe(baseConfig)
-  })
-
-  it('覆盖 model', () => {
-    const result = getStepConfig(baseConfig, 'claude-opus-4-6')
-    expect(result.model).toBe('claude-opus-4-6')
-    expect(result.maxTurns).toBe(30)
-    expect(result.systemPrompt).toBe('基础提示')
-  })
-
-  it('覆盖 maxTurns', () => {
-    const result = getStepConfig(baseConfig, undefined, 50)
-    expect(result.maxTurns).toBe(50)
-    expect(result.model).toBe('claude-sonnet-4-6')
-  })
-
-  it('同时覆盖 model 和 maxTurns', () => {
-    const result = getStepConfig(baseConfig, 'claude-opus-4-6', 50)
-    expect(result.model).toBe('claude-opus-4-6')
-    expect(result.maxTurns).toBe(50)
-  })
-
-  it('不修改原配置', () => {
-    getStepConfig(baseConfig, 'claude-opus-4-6', 50)
-    expect(baseConfig.model).toBe('claude-sonnet-4-6')
-    expect(baseConfig.maxTurns).toBe(30)
   })
 })
 

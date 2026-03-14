@@ -1,16 +1,14 @@
 /**
  * Configuration 应用服务层单元测试
  *
- * 覆盖 McpServerApplicationService、SkillApplicationService、GlobalConfigApplicationService
- * 的仓储委托与跨源合并逻辑。
+ * 仅覆盖有业务逻辑的方法：跨源合并（listAll）和缓存失效（updateConfig）。
+ * 纯仓储委托方法（list/get/create/update/setEnabled/remove）由类型系统保证正确性，不做测试。
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { McpServerApplicationService } from '../../src/main/configuration/application/McpServerApplicationService';
 import { SkillApplicationService } from '../../src/main/configuration/application/SkillApplicationService';
 import { GlobalConfigApplicationService } from '../../src/main/configuration/application/GlobalConfigApplicationService';
-import type { McpServerRepository } from '../../src/main/configuration/domain/repository/McpServerRepository';
-import type { SkillRepository } from '../../src/main/configuration/domain/repository/SkillRepository';
 import type { CliConfigLoader } from '../../src/main/configuration/infrastructure/CliConfigLoader';
 import type { DiskGlobalConfigRepository } from '../../src/main/configuration/infrastructure/DiskGlobalConfigRepository';
 import type { GlobalConfigCacheImpl } from '../../src/main/configuration/infrastructure/GlobalConfigCache';
@@ -38,60 +36,6 @@ describe('McpServerApplicationService', () => {
       loadClaudeCliSkillsWithDetails: vi.fn(() => []),
     } as unknown as CliConfigLoader;
     service = new McpServerApplicationService(repo, cliConfigLoader);
-  });
-
-  describe('list', () => {
-    it('delegates to repo.findAll', () => {
-      const servers = [createTestMcpServer()];
-      (repo.findAll as ReturnType<typeof vi.fn>).mockReturnValue(servers);
-
-      expect(service.list()).toBe(servers);
-      expect(repo.findAll).toHaveBeenCalledOnce();
-    });
-  });
-
-  describe('get', () => {
-    it('delegates to repo.findById', () => {
-      const server = createTestMcpServer();
-      (repo.findById as ReturnType<typeof vi.fn>).mockReturnValue(server);
-
-      expect(service.get('mcp-001')).toBe(server);
-      expect(repo.findById).toHaveBeenCalledWith('mcp-001');
-    });
-  });
-
-  describe('create', () => {
-    it('delegates to repo.create', () => {
-      const input = { name: 'new-server', command: 'npx new-server' };
-      service.create(input);
-
-      expect(repo.create).toHaveBeenCalledWith(input);
-    });
-  });
-
-  describe('update', () => {
-    it('delegates to repo.update', () => {
-      const data = { name: 'updated' };
-      service.update('mcp-001', data);
-
-      expect(repo.update).toHaveBeenCalledWith('mcp-001', data);
-    });
-  });
-
-  describe('setEnabled', () => {
-    it('delegates to repo.setEnabled', () => {
-      service.setEnabled('mcp-001', false);
-
-      expect(repo.setEnabled).toHaveBeenCalledWith('mcp-001', false);
-    });
-  });
-
-  describe('remove', () => {
-    it('delegates to repo.remove', () => {
-      service.remove('mcp-001');
-
-      expect(repo.remove).toHaveBeenCalledWith('mcp-001');
-    });
   });
 
   describe('listAll', () => {
@@ -158,60 +102,6 @@ describe('SkillApplicationService', () => {
       loadClaudeCliSkillsWithDetails: vi.fn(() => []),
     } as unknown as CliConfigLoader;
     service = new SkillApplicationService(repo, cliConfigLoader);
-  });
-
-  describe('list', () => {
-    it('delegates to repo.findAll', () => {
-      const skills = [createTestSkill()];
-      (repo.findAll as ReturnType<typeof vi.fn>).mockReturnValue(skills);
-
-      expect(service.list()).toBe(skills);
-      expect(repo.findAll).toHaveBeenCalledOnce();
-    });
-  });
-
-  describe('get', () => {
-    it('delegates to repo.findById', () => {
-      const skill = createTestSkill();
-      (repo.findById as ReturnType<typeof vi.fn>).mockReturnValue(skill);
-
-      expect(service.get('skill-001')).toBe(skill);
-      expect(repo.findById).toHaveBeenCalledWith('skill-001');
-    });
-  });
-
-  describe('create', () => {
-    it('delegates to repo.create', () => {
-      const input = { name: 'new-skill', content: 'skill content' };
-      service.create(input);
-
-      expect(repo.create).toHaveBeenCalledWith(input);
-    });
-  });
-
-  describe('update', () => {
-    it('delegates to repo.update', () => {
-      const data = { content: 'updated content' };
-      service.update('skill-001', data);
-
-      expect(repo.update).toHaveBeenCalledWith('skill-001', data);
-    });
-  });
-
-  describe('setEnabled', () => {
-    it('delegates to repo.setEnabled', () => {
-      service.setEnabled('skill-001', true);
-
-      expect(repo.setEnabled).toHaveBeenCalledWith('skill-001', true);
-    });
-  });
-
-  describe('remove', () => {
-    it('delegates to repo.remove', () => {
-      service.remove('skill-001');
-
-      expect(repo.remove).toHaveBeenCalledWith('skill-001');
-    });
   });
 
   describe('listAll', () => {
@@ -287,15 +177,6 @@ describe('GlobalConfigApplicationService', () => {
     } as unknown as GlobalConfigCacheImpl;
 
     service = new GlobalConfigApplicationService(diskConfigRepo, configCache);
-  });
-
-  describe('getConfig', () => {
-    it('delegates to diskConfigRepo.getConfig', () => {
-      const result = service.getConfig();
-
-      expect(diskConfigRepo.getConfig).toHaveBeenCalledOnce();
-      expect(result).toEqual({ systemPrompt: 'global prompt', defaultModel: 'claude-3' });
-    });
   });
 
   describe('updateConfig', () => {

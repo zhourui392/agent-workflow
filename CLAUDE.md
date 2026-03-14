@@ -95,6 +95,7 @@ CronSyncUseCase             → WorkflowRepository, PipelinePort
 - **全局配置存储在磁盘**: `global_config/` (rules/, mcp/, skills/)
 - **数据库**: SQLite (better-sqlite3 同步)，路径 `%APPDATA%/agent-workflow/agent_workflow.db`（macOS: `~/Library/Application Support/agent-workflow/`）
 - **嵌套会话保护**: 主进程启动时清除 `CLAUDECODE` 环境变量，防止从 Claude Code 终端启动时子进程被拒绝
+- **IPC 数据序列化**: `contextBridge` 在 preload 函数执行前就对参数做 structured clone，因此 `toPlain`（JSON 序列化）必须放在渲染进程侧（`src/renderer/api/index.ts`），不能放在 preload 中。Vue reactive Proxy 无法被 structured clone，必须在跨 contextBridge 之前剥离
 
 ## 技术栈
 

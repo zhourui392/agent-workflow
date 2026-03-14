@@ -38,13 +38,22 @@ const McpServerConfigSchema = z.record(z.string(), z.object({
   env: z.record(z.string(), z.string()).optional()
 }));
 
-const LimitsSchema = z.object({
+/** 接受 null 并转换为 undefined，保持输出类型不含 null */
+function nullableToOptional<T extends z.ZodTypeAny>(schema: T) {
+  return z.union([
+    schema,
+    z.null().transform(() => undefined as unknown as z.infer<T>)
+  ]).optional() as z.ZodOptional<z.ZodType<z.infer<T> | undefined>>;
+}
+
+const LimitsObjectSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   maxTurns: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional()
-}).optional();
+});
+const LimitsSchema = nullableToOptional(LimitsObjectSchema);
 
-const OutputSchema = z.object({
+const OutputObjectSchema = z.object({
   file: z.object({
     path: z.string().min(1),
     format: z.enum(['text', 'json', 'markdown']).optional()
@@ -55,7 +64,8 @@ const OutputSchema = z.object({
     headers: z.record(z.string(), z.string()).optional(),
     timeoutMs: z.number().int().positive().optional()
   }).optional()
-}).optional();
+});
+const OutputSchema = nullableToOptional(OutputObjectSchema);
 
 export const CreateWorkflowSchema = z.object({
   name: z.string().min(1, '工作流名称不能为空').max(200),
