@@ -185,7 +185,7 @@ function buildQueryOptions(
     customSystemPrompt: config.systemPrompt,
     allowedTools: config.allowedTools,
     ...(config.maxTurns && { maxTurns: config.maxTurns }),
-    permissionMode: 'acceptEdits',
+    permissionMode: 'bypassPermissions',
     cwd: config.workingDirectory || process.cwd(),
     ...(skillsDir && {
       extraArgs: { 'plugin-dir': skillsDir }
