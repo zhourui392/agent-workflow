@@ -32,7 +32,7 @@ agent-workflow/
 │   ├── renderer/                    # 前端渲染进程 (Vue 3)
 │   └── preload/                     # IPC 桥接
 ├── global_config/                   # 全局配置 (rules, skills)
-├── test/                            # 测试套件 (Vitest, 154 tests)
+├── test/                            # 测试套件 (Vitest, 228 tests)
 ├── doc/                             # 设计文档
 └── package.json
 ```
@@ -44,10 +44,12 @@ agent-workflow/
 - **工作流管理** — 创建/编辑多步骤工作流
 - **多步骤流水线** — 顺序执行，上下文传递
 - **定时调度** — Cron表达式配置
-- **实时进度** — IPC事件推送执行日志，支持细粒度流式事件（工具调用、工具结果、文本回复等）
+- **实时进度** — IPC事件推送执行日志，支持细粒度流式事件（工具调用、工具结果、文本回复等），执行中增量持久化到数据库
 - **Skills 管理** — 支持自定义 Skills，工作流步骤级按需引用
 - **Claude CLI 集成** — 自动读取 Claude Code CLI 全局配置（`~/.claude/skills/`、`~/.claude/plugins/` 中的 Skills）
 - **三层配置合并** — Claude CLI 全局配置 → 应用磁盘配置 → 工作流/步骤级配置
+- **子工作流 & ForEach 循环** — 步骤可引用其他工作流作为子工作流执行，支持 ForEach 遍历数组串行执行，子执行记录在父执行详情页内联分层展示
+- **数据拆分步骤** — 支持 static/template/AI 三种模式将数据拆分为数组，供后续 ForEach 步骤使用
 - **模板变量** — `{{today}}`, `{{inputs.xxx}}`, `{{steps.name.output}}`
 - **输出验证** — 每个步骤可配置验证提示词，执行完成后由 LLM 自动判定输出是否符合预期（PASS/FAIL）
 
@@ -91,6 +93,8 @@ npm run electron:build
 | `workflows:run` | 手动触发执行 |
 | `executions:list` | 执行历史 |
 | `executions:get` | 执行详情 |
+| `executions:children` | 子执行记录（含步骤详情） |
+| `executions:cancel` | 取消执行 |
 | `config:get` | 获取全局配置 |
 | `config:update` | 更新全局配置 |
 | `skills:list` | Skills 列表（仅数据库） |
@@ -163,7 +167,7 @@ npm run electron:build
 | `result` | 最终结果（含token用量、耗时、费用） |
 | `error` | 执行错误 |
 
-事件在执行过程中通过 IPC 实时推送到前端，同时持久化到数据库供历史查看。
+事件在执行过程中通过 IPC 实时推送到前端，每个 turn 结束时增量持久化到数据库，确保页面重进后执行过程不丢失。子执行（子工作流/ForEach 迭代）的事件同样支持实时推送和持久化，在父执行详情页内联展示。
 
 ## Skills 配置来源
 

@@ -49,4 +49,10 @@ export interface ExecutionProgressEvent {
   errorMessage?: string;
   /** 细粒度流式事件 */
   event?: StepEvent;
+  /** 父执行 ID（子执行事件专用，用于父页面捕获子执行进度） */
+  parentExecutionId?: string;
+  /** 父步骤索引（子执行事件专用） */
+  parentStepIndex?: number;
+  /** 迭代索引（forEach 子执行专用） */
+  iterationIndex?: number;
 }

@@ -88,28 +88,66 @@
                     <h4>验证结果</h4>
                     <pre class="code-block" :class="step.validation_status === 'passed' ? 'validation-pass' : 'validation-fail'">{{ step.validation_output }}</pre>
                   </div>
-                  <!-- 子执行列表（子工作流步骤） -->
+                  <!-- 子执行列表（子工作流步骤） — 内联分层展示 -->
                   <div v-if="childExecutionsMap.get(step.step_index)?.length" class="step-section">
                     <h4>子执行记录</h4>
-                    <el-table :data="childExecutionsMap.get(step.step_index)" size="small" border>
-                      <el-table-column label="#" width="60">
-                        <template #default="{ row }">{{ row.iteration_index != null ? row.iteration_index : '-' }}</template>
-                      </el-table-column>
-                      <el-table-column label="状态" width="100">
-                        <template #default="{ row }">
-                          <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+                    <el-collapse v-model="expandedChildIds">
+                      <el-collapse-item
+                        v-for="child in childExecutionsMap.get(step.step_index)"
+                        :key="child.id"
+                        :name="child.id"
+                      >
+                        <template #title>
+                          <div class="child-exec-title">
+                            <span class="child-iter" v-if="child.iteration_index != null">#{{ child.iteration_index }}</span>
+                            <el-tag :type="statusType(child.status)" size="small">{{ statusLabel(child.status) }}</el-tag>
+                            <span class="step-meta">{{ child.total_tokens?.toLocaleString() || 0 }} tokens</span>
+                            <span class="step-meta">{{ formatDurationLive(child.started_at, child.finished_at) }}</span>
+                          </div>
                         </template>
-                      </el-table-column>
-                      <el-table-column label="Tokens" width="100" prop="total_tokens" />
-                      <el-table-column label="耗时" width="120">
-                        <template #default="{ row }">{{ formatDurationLive(row.started_at, row.finished_at) }}</template>
-                      </el-table-column>
-                      <el-table-column label="" width="80">
-                        <template #default="{ row }">
-                          <el-button size="small" text type="primary" @click="$router.push(`/executions/${row.id}`)">详情</el-button>
-                        </template>
-                      </el-table-column>
-                    </el-table>
+                        <div class="child-exec-content">
+                          <el-timeline v-if="child.step_executions?.length">
+                            <el-timeline-item
+                              v-for="childStep in child.step_executions"
+                              :key="childStep.id"
+                              :type="timelineType(childStep.status)"
+                              :hollow="childStep.status === 'pending'"
+                            >
+                              <el-collapse v-model="expandedChildStepIds">
+                                <el-collapse-item :name="childStep.id">
+                                  <template #title>
+                                    <div class="step-title">
+                                      <span class="step-name">{{ childStep.step_name }}</span>
+                                      <el-tag :type="statusType(childStep.status)" size="small">{{ statusLabel(childStep.status) }}</el-tag>
+                                      <span class="step-meta" v-if="childStep.tokens_used">{{ childStep.tokens_used.toLocaleString() }} tokens</span>
+                                      <span class="step-meta">{{ formatDurationLive(childStep.started_at, childStep.finished_at) }}</span>
+                                    </div>
+                                  </template>
+                                  <div class="step-content">
+                                    <div v-if="childStep.prompt_rendered" class="step-section">
+                                      <h4>Prompt</h4>
+                                      <pre class="code-block">{{ childStep.prompt_rendered }}</pre>
+                                    </div>
+                                    <div class="step-section">
+                                      <h4>执行过程</h4>
+                                      <StepEventViewer :events="getChildStepEvents(childStep)" :outputText="childStep.output_text" />
+                                    </div>
+                                    <div v-if="childStep.validation_output" class="step-section">
+                                      <h4>验证结果</h4>
+                                      <pre class="code-block" :class="childStep.validation_status === 'passed' ? 'validation-pass' : 'validation-fail'">{{ childStep.validation_output }}</pre>
+                                    </div>
+                                    <div v-if="childStep.error_message" class="step-section">
+                                      <el-alert :title="childStep.error_message" type="error" :closable="false" />
+                                    </div>
+                                  </div>
+                                </el-collapse-item>
+                              </el-collapse>
+                            </el-timeline-item>
+                          </el-timeline>
+                          <div v-else class="empty-hint">暂无步骤记录</div>
+                        </div>
+                      </el-collapse-item>
+                    </el-collapse>
                   </div>
                   <div v-if="step.error_message" class="step-section">
                     <el-alert :title="step.error_message" type="error" :closable="false" />
@@ -128,7 +166,7 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExecutionStore } from '@/stores/execution'
-import { subscribeExecutionProgress, cancelExecution, getChildExecutions, type ExecutionProgressEvent, type ExecutionDTO } from '@/api/index'
+import { subscribeExecutionProgress, cancelExecution, getChildExecutions, type ExecutionProgressEvent } from '@/api/index'
 import { ElMessage } from 'element-plus'
 import type { ExecutionData, StepExecutionData } from '@/api/executions'
 import type { StepEvent } from '../../main/types'
@@ -147,8 +185,18 @@ let tickTimer: ReturnType<typeof setInterval> | null = null
 /** 实时收集的事件（按 stepIndex 分组），用于运行中的步骤 */
 const liveEvents = ref<Map<number, StepEvent[]>>(new Map())
 
-/** 子执行记录（按 parentStepIndex 分组） */
-const childExecutionsMap = ref<Map<number, ExecutionDTO[]>>(new Map())
+/** 子执行记录（按 parentStepIndex 分组，包含步骤详情） */
+const childExecutionsMap = ref<Map<number, ExecutionData[]>>(new Map())
+
+/** 子执行折叠面板展开状态 */
+const expandedChildIds = ref<string[]>([])
+const expandedChildStepIds = ref<string[]>([])
+
+/** 已知子执行 ID → parentStepIndex 映射（用于匹配无 parentExecutionId 的流式事件） */
+const knownChildExecMap = ref<Map<string, number>>(new Map())
+
+/** 子执行的实时流式事件（按 childExecId:stepIndex 分组） */
+const liveChildEvents = ref<Map<string, StepEvent[]>>(new Map())
 
 const isRunning = computed(() => execution.value?.status === 'running' || execution.value?.status === 'pending')
 const cancelling = ref(false)
@@ -183,18 +231,34 @@ function collapseAllSteps() {
 }
 
 /**
- * 获取步骤的事件列表（优先使用数据库中的历史事件，运行中使用实时收集的事件）
+ * 获取步骤的事件列表
+ *
+ * 优先返回 liveEvents（实时流式 + 页面加载时从 DB 种子化），
+ * 仅在无 liveEvents 时 fallback 到 DB 事件（已完成步骤的历史数据）。
  */
 function getStepEvents(step: StepExecutionData): StepEvent[] | undefined {
-  if (step.events && step.events.length > 0) {
-    return step.events
-  }
-  return liveEvents.value.get(step.step_index)
+  const live = liveEvents.value.get(step.step_index)
+  if (live && live.length > 0) return live
+  if (step.events && step.events.length > 0) return step.events
+  return undefined
 }
 
 async function fetchExecutionData() {
   const id = route.params.id as string
   execution.value = await store.fetchExecution(id) || null
+
+  // 将 DB 中正在运行步骤的事件种子化到 liveEvents，
+  // 这样页面重进后已有事件不丢失，新事件继续追加
+  if (execution.value?.step_executions) {
+    for (const step of execution.value.step_executions) {
+      if (step.status === 'running' && step.events && step.events.length > 0) {
+        if (!liveEvents.value.has(step.step_index)) {
+          liveEvents.value.set(step.step_index, [...step.events])
+        }
+      }
+    }
+  }
+
   await fetchChildExecutions()
 }
 
@@ -202,11 +266,55 @@ async function fetchChildExecutions() {
   if (!execution.value) return
   try {
     const res = await getChildExecutions(execution.value.id)
-    const map = new Map<number, ExecutionDTO[]>()
-    for (const child of res.data) {
-      const stepIdx = child.parentStepIndex ?? -1
+    const map = new Map<number, ExecutionData[]>()
+    for (const dto of res.data) {
+      const stepIdx = dto.parentStepIndex ?? -1
       if (!map.has(stepIdx)) map.set(stepIdx, [])
-      map.get(stepIdx)!.push(child)
+      const childData: ExecutionData = {
+        id: dto.id,
+        workflow_id: dto.workflowId,
+        workflow_name: dto.workflowName || '',
+        trigger_type: dto.triggerType,
+        status: dto.status,
+        started_at: dto.startedAt,
+        finished_at: dto.finishedAt,
+        current_step: dto.currentStep,
+        total_steps: dto.totalSteps ?? dto.stepExecutions?.length ?? 0,
+        total_tokens: dto.totalTokens,
+        error_message: dto.errorMessage,
+        iteration_index: dto.iterationIndex,
+        step_executions: dto.stepExecutions?.map(s => ({
+          id: s.id,
+          execution_id: s.executionId,
+          step_index: s.stepIndex,
+          step_name: s.stepName || `Step ${s.stepIndex + 1}`,
+          status: s.status,
+          started_at: s.startedAt,
+          finished_at: s.finishedAt,
+          prompt_rendered: s.promptRendered,
+          output_text: s.outputText,
+          tokens_used: s.tokensUsed,
+          model_used: s.modelUsed,
+          error_message: s.errorMessage,
+          validation_status: s.validationStatus,
+          validation_output: s.validationOutput,
+          events: s.events
+        }))
+      }
+      map.get(stepIdx)!.push(childData)
+      // 注册子执行 ID 以匹配后续流式事件
+      knownChildExecMap.value.set(dto.id, stepIdx)
+      // 将正在运行的子步骤事件种子化到 liveChildEvents
+      if (childData.step_executions) {
+        for (const cs of childData.step_executions) {
+          if (cs.status === 'running' && cs.events && cs.events.length > 0) {
+            const key = `${cs.execution_id}:${cs.step_index}`
+            if (!liveChildEvents.value.has(key)) {
+              liveChildEvents.value.set(key, [...cs.events])
+            }
+          }
+        }
+      }
     }
     childExecutionsMap.value = map
   } catch {
@@ -243,7 +351,21 @@ function ensureStepExists(stepIndex: number): StepExecutionData {
 }
 
 function handleProgressEvent(event: ExecutionProgressEvent) {
-  if (!execution.value || event.executionId !== execution.value.id) {
+  if (!execution.value) return
+
+  // 处理子执行事件（parentExecutionId 匹配当前执行）
+  if (event.parentExecutionId === execution.value.id) {
+    handleChildProgressEvent(event)
+    return
+  }
+
+  // 处理已知子执行的流式事件（无 parentExecutionId 但 executionId 在已知子执行列表中）
+  if (knownChildExecMap.value.has(event.executionId)) {
+    handleChildStreamEvent(event)
+    return
+  }
+
+  if (event.executionId !== execution.value.id) {
     return
   }
 
@@ -326,6 +448,134 @@ function updateExecutionStatus(event: ExecutionProgressEvent) {
   }
 }
 
+/**
+ * 处理子执行进度事件
+ *
+ * 收到子执行的状态变更后，更新 childExecutionsMap 中对应的子执行状态。
+ * 子执行完成/失败时，重新从数据库加载完整数据（含步骤详情和事件）。
+ */
+function handleChildProgressEvent(event: ExecutionProgressEvent) {
+  const stepIdx = event.parentStepIndex ?? -1
+  const children = childExecutionsMap.value.get(stepIdx)
+
+  // 注册子执行 ID 用于匹配后续流式事件
+  knownChildExecMap.value.set(event.executionId, stepIdx)
+
+  if (event.status === 'running' && !children?.find(c => c.id === event.executionId)) {
+    // 新子执行开始 — 创建占位
+    const child: ExecutionData = {
+      id: event.executionId,
+      workflow_id: '',
+      workflow_name: '',
+      trigger_type: 'manual',
+      status: 'running',
+      started_at: new Date().toISOString(),
+      total_tokens: 0,
+      iteration_index: event.iterationIndex
+    }
+    if (!childExecutionsMap.value.has(stepIdx)) {
+      childExecutionsMap.value.set(stepIdx, [])
+    }
+    childExecutionsMap.value.get(stepIdx)!.push(child)
+    childExecutionsMap.value = new Map(childExecutionsMap.value)
+    // 自动展开子执行面板
+    if (!expandedChildIds.value.includes(event.executionId)) {
+      expandedChildIds.value = [...expandedChildIds.value, event.executionId]
+    }
+    return
+  }
+
+  // 更新已有子执行状态
+  const child = children?.find(c => c.id === event.executionId)
+  if (child) {
+    child.status = event.status
+    if (event.tokensUsed) child.total_tokens = event.tokensUsed
+    if (event.errorMessage) child.error_message = event.errorMessage
+  }
+
+  // 子执行完成/失败时，重新加载完整数据（含步骤事件）
+  if (event.status === 'success' || event.status === 'failed' || event.status === 'cancelled') {
+    if (child) child.finished_at = new Date().toISOString()
+    // 清除该子执行的实时事件
+    for (const key of liveChildEvents.value.keys()) {
+      if (key.startsWith(event.executionId + ':')) {
+        liveChildEvents.value.delete(key)
+      }
+    }
+    fetchChildExecutions()
+  }
+
+  childExecutionsMap.value = new Map(childExecutionsMap.value)
+}
+
+/**
+ * 处理子执行步骤的流式事件（text、tool_call 等）
+ *
+ * 这些事件来自 runStep 内部的 broadcastStepEvent，没有 parentExecutionId，
+ * 通过 knownChildExecMap 匹配到对应的子执行。
+ */
+function handleChildStreamEvent(event: ExecutionProgressEvent) {
+  const parentStepIdx = knownChildExecMap.value.get(event.executionId)!
+  const children = childExecutionsMap.value.get(parentStepIdx)
+  const child = children?.find(c => c.id === event.executionId)
+
+  if (!child) return
+
+  // 确保子执行的步骤占位存在
+  if (!child.step_executions) child.step_executions = []
+  let childStep = child.step_executions.find(s => s.step_index === event.stepIndex)
+  if (!childStep) {
+    childStep = {
+      id: `live-child-${event.executionId}-${event.stepIndex}`,
+      execution_id: event.executionId,
+      step_index: event.stepIndex,
+      step_name: `Step ${event.stepIndex + 1}`,
+      status: 'running',
+      started_at: new Date().toISOString(),
+      tokens_used: 0
+    }
+    child.step_executions.push(childStep)
+    child.step_executions.sort((a, b) => a.step_index - b.step_index)
+  }
+
+  // 自动展开子步骤
+  if (!expandedChildStepIds.value.includes(childStep.id)) {
+    expandedChildStepIds.value = [...expandedChildStepIds.value, childStep.id]
+  }
+
+  // 收集流式事件
+  if (event.event) {
+    const key = `${event.executionId}:${event.stepIndex}`
+    if (!liveChildEvents.value.has(key)) {
+      liveChildEvents.value.set(key, [])
+    }
+    liveChildEvents.value.get(key)!.push(event.event)
+    liveChildEvents.value = new Map(liveChildEvents.value)
+  }
+
+  // 更新步骤状态
+  childStep.status = event.status
+  if (event.outputText) childStep.output_text = event.outputText
+  if (event.tokensUsed) childStep.tokens_used = event.tokensUsed
+  if (event.errorMessage) childStep.error_message = event.errorMessage
+  if (event.status === 'success' || event.status === 'failed' || event.status === 'cancelled') {
+    childStep.finished_at = new Date().toISOString()
+  }
+
+  childExecutionsMap.value = new Map(childExecutionsMap.value)
+}
+
+/**
+ * 获取子执行步骤的事件（优先 DB 数据，运行中用实时收集的事件）
+ */
+function getChildStepEvents(childStep: StepExecutionData): StepEvent[] | undefined {
+  const key = `${childStep.execution_id}:${childStep.step_index}`
+  const live = liveChildEvents.value.get(key)
+  if (live && live.length > 0) return live
+  if (childStep.events && childStep.events.length > 0) return childStep.events
+  return undefined
+}
+
 onMounted(async () => {
   loading.value = true
   try {
@@ -380,4 +630,8 @@ function formatDurationLive(start?: string, end?: string) {
 .code-block.output { background: #f0f9eb; border-color: #e1f3d8; }
 .code-block.validation-pass { background: #f0f9eb; border-color: #b3e19d; }
 .code-block.validation-fail { background: #fef0f0; border-color: #fab6b6; }
+.child-exec-title { display: flex; align-items: center; gap: 10px; }
+.child-iter { font-weight: bold; color: #409eff; min-width: 24px; }
+.child-exec-content { padding: 8px 0 0 12px; border-left: 2px solid #e4e7ed; margin-left: 4px; }
+.empty-hint { color: #909399; font-size: 13px; padding: 8px 0; }
 </style>

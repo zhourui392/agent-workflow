@@ -99,6 +99,7 @@ export function createMockExecutionRepository(): ExecutionRepository {
     findById: vi.fn(() => null),
     findByIdWithSteps: vi.fn(() => null),
     findByParentExecutionId: vi.fn(() => []),
+    findByParentExecutionIdWithSteps: vi.fn(() => []),
     count: vi.fn(() => 0),
     deleteByWorkflowId: vi.fn()
   } as unknown as ExecutionRepository;

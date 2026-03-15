@@ -98,7 +98,48 @@ export interface SubWorkflowStepRef {
   };
 }
 
-export type WorkflowStepRef = AgentStepRef | SubWorkflowStepRef;
+/**
+ * 数据拆分步骤引用
+ */
+export interface DataSplitStepRef {
+  type: 'dataSplit';
+  name: string;
+  mode: 'static' | 'template' | 'ai';
+  staticData?: string;
+  templateExpr?: string;
+  aiInput?: string;
+  aiPrompt?: string;
+  onFailure?: 'stop' | 'skip' | 'retry';
+  retryConfig?: {
+    maxAttempts?: number;
+    delayMs?: number;
+  };
+}
+
+/**
+ * ForEach 循环步骤引用
+ */
+export interface ForEachStepRef {
+  type: 'forEach';
+  name: string;
+  prompt: string;
+  iterateOver: string;
+  itemVariable: string;
+  model?: string;
+  maxTurns?: number;
+  onFailure?: 'stop' | 'skip' | 'retry';
+  retryConfig?: {
+    maxAttempts?: number;
+    delayMs?: number;
+  };
+  validation?: {
+    prompt?: string;
+    rules?: Array<{ type: 'regex' | 'contains'; pattern?: string; value?: string }>;
+  };
+  skillIds?: string[];
+}
+
+export type WorkflowStepRef = AgentStepRef | SubWorkflowStepRef | DataSplitStepRef | ForEachStepRef;
 
 /**
  * 工作流引用（跨上下文引用，仅包含流水线编排所需的字段）
@@ -214,6 +255,14 @@ export class PipelineOrchestrator {
           stepResult = await this.runSubWorkflowStep(
             step, i, executionId, context
           );
+        } else if (step.type === 'dataSplit') {
+          stepResult = await this.runDataSplitStep(
+            step, i, executionId, workflow, mergedConfig, context
+          );
+        } else if (step.type === 'forEach') {
+          stepResult = await this.runForEachStep(
+            step, i, executionId, workflow, mergedConfig, context
+          );
         } else {
           stepResult = await this.runStep(
             step, i, executionId, workflow, mergedConfig, context
@@ -298,6 +347,12 @@ export class PipelineOrchestrator {
     const onEvent = (event: StepEvent) => {
       collectedEvents.push(event);
       this.progressNotifier.broadcastStepEvent(executionId, stepIndex, event);
+      // 每个 turn 结束时增量保存事件到数据库，防止页面重进后丢失
+      if (event.type === 'turn_end') {
+        this.executionRepository.updateStepExecution(stepExecution.id, {
+          eventsJson: JSON.stringify(collectedEvents)
+        });
+      }
     };
 
     let result!: StepResult;
@@ -530,6 +585,338 @@ export class PipelineOrchestrator {
   }
 
   /**
+   * 执行 ForEach 循环步骤
+   *
+   * 解析 iterateOver 为 JSON 数组 → 串行遍历 → 每次迭代构造新 context 并调用 runStep → 收集输出
+   */
+  private async runForEachStep(
+    step: ForEachStepRef,
+    stepIndex: number,
+    executionId: string,
+    workflow: WorkflowRef,
+    mergedConfig: MergedConfig,
+    context: TemplateContext
+  ): Promise<StepRunResult> {
+    this.executionRepository.updateCurrentStep(executionId, stepIndex);
+    const stepExecution = this.executionRepository.createStepExecution(
+      executionId, stepIndex, `[forEach] ${step.name}`
+    );
+    this.progressNotifier.broadcastStepStart(executionId, stepIndex);
+
+    // 构建步骤级配置（所有迭代共用）
+    const workflowConfigRef: WorkflowConfigRef = {
+      rules: workflow.rules, skills: workflow.skills,
+      limits: workflow.limits, workingDirectory: workflow.workingDirectory
+    };
+    const stepConfigRef: StepConfigRef = {
+      model: step.model, maxTurns: step.maxTurns, skillIds: step.skillIds
+    };
+    const stepConfig = this.configMergeService.buildStepMergedConfig(
+      mergedConfig, workflowConfigRef, stepConfigRef, executionId, stepIndex
+    );
+
+    try {
+      // 1. 解析数组
+      const rawItems = this.templateEngine.render(step.iterateOver, context);
+      let items: unknown[];
+      try {
+        items = JSON.parse(rawItems);
+        if (!Array.isArray(items)) {
+          return this.failForEachStep(stepExecution.id, step, stepIndex, executionId, context,
+            `iterateOver 解析结果不是数组: ${typeof items}`);
+        }
+      } catch {
+        return this.failForEachStep(stepExecution.id, step, stepIndex, executionId, context,
+          `iterateOver 无法解析为 JSON 数组: ${rawItems.substring(0, 200)}`);
+      }
+
+      // 2. 串行遍历，每次迭代创建独立子执行
+      const iterationOutputs: string[] = [];
+      let totalTokens = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        if (this.cancellationRegistry?.isCancellationRequested(executionId)) {
+          return this.failForEachStep(stepExecution.id, step, stepIndex, executionId, context,
+            '用户取消', totalTokens);
+        }
+
+        // 构造迭代 context，渲染 prompt
+        const iterContext: TemplateContext = {
+          inputs: { ...context.inputs, [step.itemVariable]: items[i] },
+          steps: { ...context.steps }
+        };
+        const renderedPrompt = this.templateEngine.render(step.prompt, iterContext);
+
+        // 创建子执行记录（独立 Execution + StepExecution）
+        const childExec = this.executionRepository.create(
+          workflow.id, 'manual',
+          { parentExecutionId: executionId, parentStepIndex: stepIndex, iterationIndex: i }
+        );
+        this.executionRepository.updateStatus(childExec.id, 'running');
+        const childStepExec = this.executionRepository.createStepExecution(
+          childExec.id, 0, renderedPrompt
+        );
+
+        // 通知前端迭代进度（父步骤 + 子执行开始）
+        const childParentInfo = {
+          parentExecutionId: executionId, parentStepIndex: stepIndex, iterationIndex: i
+        };
+        this.progressNotifier.broadcast({
+          executionId, stepIndex, status: 'running',
+          outputText: `迭代 ${i + 1}/${items.length}: ${renderedPrompt.substring(0, 80)}`
+        });
+        this.progressNotifier.broadcast({
+          executionId: childExec.id, stepIndex: 0, status: 'running', ...childParentInfo
+        });
+
+        // 执行，事件广播到子执行
+        const collectedEvents: StepEvent[] = [];
+        const onEvent = (event: StepEvent) => {
+          collectedEvents.push(event);
+          this.progressNotifier.broadcastStepEvent(childExec.id, 0, event);
+          if (event.type === 'turn_end') {
+            this.executionRepository.updateStepExecution(childStepExec.id, {
+              eventsJson: JSON.stringify(collectedEvents)
+            });
+          }
+        };
+        const result = await this.stepExecutor.execute(renderedPrompt, stepConfig, onEvent);
+        totalTokens += result.tokensUsed;
+
+        // 更新子执行记录（含 eventsJson 持久化）
+        this.executionRepository.updateStepExecution(childStepExec.id, {
+          status: result.success ? 'success' : 'failed',
+          outputText: result.outputText,
+          tokensUsed: result.tokensUsed,
+          errorMessage: result.errorMessage,
+          eventsJson: JSON.stringify(collectedEvents)
+        });
+        this.executionRepository.addTokens(childExec.id, result.tokensUsed);
+        this.executionRepository.updateStatus(
+          childExec.id,
+          result.success ? 'success' : 'failed',
+          result.errorMessage
+        );
+        // 广播子执行完成（携带 parentInfo）
+        this.progressNotifier.broadcast({
+          executionId: childExec.id, stepIndex: 0,
+          status: result.success ? 'success' : 'failed',
+          outputText: result.outputText, tokensUsed: result.tokensUsed,
+          errorMessage: result.errorMessage, ...childParentInfo
+        });
+
+        if (!result.success) {
+          const onFailure = step.onFailure || workflow.onFailure;
+          if (onFailure === 'stop') {
+            return this.failForEachStep(stepExecution.id, step, stepIndex, executionId, context,
+              `迭代 ${i} 失败: ${result.errorMessage}`, totalTokens);
+          }
+          iterationOutputs.push('');
+        } else {
+          iterationOutputs.push(result.outputText);
+        }
+      }
+
+      // 3. 更新父 forEach 步骤记录
+      const outputText = JSON.stringify(iterationOutputs);
+      this.executionRepository.updateStepExecution(stepExecution.id, {
+        status: 'success',
+        outputText: `共 ${items.length} 次迭代完成`,
+        tokensUsed: totalTokens
+      });
+      this.executionRepository.addTokens(executionId, totalTokens);
+
+      context.steps![step.name] = { output: outputText };
+
+      this.progressNotifier.broadcastStepResult(
+        executionId, stepIndex, true, outputText, totalTokens
+      );
+
+      if (stepConfig.skillsDir) {
+        this.configMergeService.cleanupStepSkills(stepConfig.skillsDir);
+      }
+
+      return { success: true, tokensUsed: totalTokens, outputText };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return this.failForEachStep(stepExecution.id, step, stepIndex, executionId, context, errorMessage);
+    }
+  }
+
+  private failForEachStep(
+    stepExecId: string,
+    step: ForEachStepRef,
+    stepIndex: number,
+    executionId: string,
+    context: TemplateContext,
+    errorMessage?: string,
+    tokensUsed = 0
+  ): StepRunResult {
+    this.executionRepository.updateStepExecution(stepExecId, {
+      status: 'failed',
+      errorMessage,
+      tokensUsed
+    });
+    context.steps![step.name] = { output: '' };
+    this.progressNotifier.broadcastStepResult(executionId, stepIndex, false, '', tokensUsed, errorMessage);
+    return { success: false, tokensUsed, outputText: '', errorMessage };
+  }
+
+  /**
+   * 执行数据拆分步骤
+   *
+   * static 模式: 直接解析 JSON 数组
+   * template 模式: 模板渲染后解析 JSON 数组
+   * ai 模式: 调用 AI 拆分并从输出中提取 JSON 数组
+   */
+  private async runDataSplitStep(
+    step: DataSplitStepRef,
+    stepIndex: number,
+    executionId: string,
+    workflow: WorkflowRef,
+    mergedConfig: MergedConfig,
+    context: TemplateContext
+  ): Promise<StepRunResult> {
+    this.executionRepository.updateCurrentStep(executionId, stepIndex);
+    const stepExecution = this.executionRepository.createStepExecution(
+      executionId, stepIndex, `[dataSplit:${step.mode}] ${step.name}`
+    );
+    this.progressNotifier.broadcastStepStart(executionId, stepIndex);
+
+    try {
+      let outputText: string;
+      let tokensUsed = 0;
+      let eventsJson: string | undefined;
+
+      if (step.mode === 'static') {
+        const raw = step.staticData || '';
+        const array = this.parseJsonArray(raw, 'staticData');
+        outputText = JSON.stringify(array);
+      } else if (step.mode === 'template') {
+        const rendered = this.templateEngine.render(step.templateExpr || '', context);
+        const array = this.parseJsonArray(rendered, 'templateExpr');
+        outputText = JSON.stringify(array);
+      } else {
+        // ai mode
+        const renderedInput = this.templateEngine.render(step.aiInput || '', context);
+        const defaultPrompt = '请将以下内容拆分为独立的子任务列表。只输出 JSON 数组，格式为 ["任务1", "任务2", ...]，不要输出其他内容。';
+        const aiPrompt = step.aiPrompt || defaultPrompt;
+        const fullPrompt = `${aiPrompt}\n\n${renderedInput}`;
+
+        const workflowConfigRef: WorkflowConfigRef = {
+          rules: workflow.rules,
+          skills: workflow.skills,
+          limits: workflow.limits,
+          workingDirectory: workflow.workingDirectory
+        };
+        const stepConfigRef: StepConfigRef = {};
+        const stepConfig = this.configMergeService.buildStepMergedConfig(
+          mergedConfig, workflowConfigRef, stepConfigRef, executionId, stepIndex
+        );
+
+        const collectedEvents: StepEvent[] = [];
+        const onEvent = (event: StepEvent) => {
+          collectedEvents.push(event);
+          this.progressNotifier.broadcastStepEvent(executionId, stepIndex, event);
+          if (event.type === 'turn_end') {
+            this.executionRepository.updateStepExecution(stepExecution.id, {
+              eventsJson: JSON.stringify(collectedEvents)
+            });
+          }
+        };
+        const result = await this.stepExecutor.execute(fullPrompt, stepConfig, onEvent);
+        tokensUsed = result.tokensUsed;
+
+        if (!result.success) {
+          // 保存已收集的事件
+          this.executionRepository.updateStepExecution(stepExecution.id, {
+            status: 'failed',
+            errorMessage: result.errorMessage || 'AI 拆分执行失败',
+            tokensUsed,
+            eventsJson: JSON.stringify(collectedEvents)
+          });
+          if (stepConfig.skillsDir) {
+            this.configMergeService.cleanupStepSkills(stepConfig.skillsDir);
+          }
+          throw new Error(result.errorMessage || 'AI 拆分执行失败');
+        }
+
+        // Extract JSON array from AI output
+        const array = this.extractJsonArray(result.outputText);
+        outputText = JSON.stringify(array);
+        eventsJson = JSON.stringify(collectedEvents);
+
+        if (stepConfig.skillsDir) {
+          this.configMergeService.cleanupStepSkills(stepConfig.skillsDir);
+        }
+      }
+
+      this.executionRepository.updateStepExecution(stepExecution.id, {
+        status: 'success',
+        outputText,
+        tokensUsed,
+        eventsJson
+      });
+      this.executionRepository.addTokens(executionId, tokensUsed);
+
+      context.steps![step.name] = { output: outputText };
+
+      this.progressNotifier.broadcastStepResult(
+        executionId, stepIndex, true, outputText, tokensUsed
+      );
+
+      return { success: true, tokensUsed, outputText };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.executionRepository.updateStepExecution(stepExecution.id, {
+        status: 'failed',
+        errorMessage,
+        tokensUsed: 0
+      });
+      context.steps![step.name] = { output: '' };
+      this.progressNotifier.broadcastStepResult(executionId, stepIndex, false, '', 0, errorMessage);
+      return { success: false, tokensUsed: 0, outputText: '', errorMessage };
+    }
+  }
+
+  /**
+   * 解析 JSON 数组，失败时抛出描述性错误
+   */
+  private parseJsonArray(raw: string, fieldName: string): unknown[] {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(`${fieldName} 无法解析为 JSON: ${raw.substring(0, 200)}`);
+    }
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${fieldName} 解析结果不是数组: ${typeof parsed}`);
+    }
+    return parsed;
+  }
+
+  /**
+   * 从 AI 输出文本中提取 JSON 数组
+   */
+  private extractJsonArray(text: string): unknown[] {
+    // 逐个尝试从文本中每个 '[' 开始解析 JSON 数组
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] !== '[') continue;
+      // 从当前 '[' 向后找每个 ']'，尝试解析
+      for (let j = text.indexOf(']', i); j !== -1; j = text.indexOf(']', j + 1)) {
+        const candidate = text.substring(i, j + 1);
+        try {
+          const parsed = JSON.parse(candidate);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          continue;
+        }
+      }
+    }
+    throw new Error(`AI 输出中未找到 JSON 数组: ${text.substring(0, 200)}`);
+  }
+
+  /**
    * 子工作流步骤失败的统一处理
    */
   private failSubWorkflowStep(
@@ -571,8 +958,14 @@ export class PipelineOrchestrator {
     const context: TemplateContext = { inputs, steps: {} };
     let totalTokens = 0;
 
+    const parentInfo = { parentExecutionId, parentStepIndex, iterationIndex };
+
     try {
       this.executionRepository.updateStatus(subExecution.id, 'running');
+      // 通知前端子执行开始
+      this.progressNotifier.broadcast({
+        executionId: subExecution.id, stepIndex: 0, status: 'running', ...parentInfo
+      });
 
       const globalConfig = this.configMergeService.loadGlobalConfig();
       const workflowConfigRef: WorkflowConfigRef = {
@@ -588,6 +981,10 @@ export class PipelineOrchestrator {
       for (let i = 0; i < subWorkflow.steps.length; i++) {
         if (this.cancellationRegistry?.isCancellationRequested(parentExecutionId)) {
           this.executionRepository.updateStatus(subExecution.id, 'cancelled', '父流程取消');
+          this.progressNotifier.broadcast({
+            executionId: subExecution.id, stepIndex: i, status: 'cancelled',
+            errorMessage: '父流程取消', ...parentInfo
+          });
           return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage: '父流程取消' };
         }
 
@@ -596,6 +993,10 @@ export class PipelineOrchestrator {
         let stepResult: StepRunResult;
         if (step.type === 'subWorkflow') {
           stepResult = await this.runSubWorkflowStep(step, i, subExecution.id, context);
+        } else if (step.type === 'dataSplit') {
+          stepResult = await this.runDataSplitStep(step, i, subExecution.id, subWorkflow, mergedConfig, context);
+        } else if (step.type === 'forEach') {
+          stepResult = await this.runForEachStep(step, i, subExecution.id, subWorkflow, mergedConfig, context);
         } else {
           stepResult = await this.runStep(step, i, subExecution.id, subWorkflow, mergedConfig, context);
         }
@@ -606,6 +1007,10 @@ export class PipelineOrchestrator {
           const onFailure = step.onFailure || subWorkflow.onFailure;
           if (onFailure === 'skip') continue;
           this.executionRepository.updateStatus(subExecution.id, 'failed', stepResult.errorMessage);
+          this.progressNotifier.broadcast({
+            executionId: subExecution.id, stepIndex: i, status: 'failed',
+            errorMessage: stepResult.errorMessage, ...parentInfo
+          });
           return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage: stepResult.errorMessage };
         }
 
@@ -613,15 +1018,28 @@ export class PipelineOrchestrator {
 
         if (subWorkflow.limits?.maxTokens && totalTokens >= subWorkflow.limits.maxTokens) {
           this.executionRepository.updateStatus(subExecution.id, 'failed', 'Token limit exceeded');
+          this.progressNotifier.broadcast({
+            executionId: subExecution.id, stepIndex: i, status: 'failed',
+            errorMessage: 'Token limit exceeded', ...parentInfo
+          });
           return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage: 'Token limit exceeded' };
         }
       }
 
       this.executionRepository.updateStatus(subExecution.id, 'success');
+      // 通知前端子执行完成
+      this.progressNotifier.broadcast({
+        executionId: subExecution.id, stepIndex: subWorkflow.steps.length - 1,
+        status: 'success', tokensUsed: totalTokens, ...parentInfo
+      });
       return { success: true, tokensUsed: totalTokens, outputText: lastOutput };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.executionRepository.updateStatus(subExecution.id, 'failed', errorMessage);
+      this.progressNotifier.broadcast({
+        executionId: subExecution.id, stepIndex: 0, status: 'failed',
+        errorMessage, ...parentInfo
+      });
       return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage };
     }
   }

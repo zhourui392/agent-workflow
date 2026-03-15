@@ -20,6 +20,6 @@ export class QueryExecutionUseCase {
   }
 
   getChildExecutions(parentExecutionId: string): Execution[] {
-    return this.repo.findByParentExecutionId(parentExecutionId);
+    return this.repo.findByParentExecutionIdWithSteps(parentExecutionId);
   }
 }

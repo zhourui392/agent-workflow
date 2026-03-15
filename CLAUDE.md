@@ -90,6 +90,13 @@ CronSyncUseCase             → WorkflowRepository, PipelinePort
 
 - **配置合并策略**: rules=拼接, allowedTools=取交集, skills=同名覆盖
 - **执行模型**: 主进程异步执行，IPC 事件实时推送进度到渲染进程
+- **实时事件流处理（重要）**: 步骤执行过程中产生的流式事件（text、tool_call、turn_end 等）需要同时满足实时展示和持久化两个需求，修改相关代码时务必遵循以下规则：
+  - **后端 — 所有 `onEvent` 回调**必须同时做三件事：①收集到 `collectedEvents` 数组；②通过 `broadcastStepEvent` 广播到前端；③在 `turn_end` 事件时增量保存 `eventsJson` 到数据库（防止页面重进后丢失执行中的事件）。涉及 `runStep`、`runForEachStep`、`runDataSplitStep` 三个路径
+  - **后端 — 子执行广播**必须携带 `parentExecutionId`、`parentStepIndex`、`iterationIndex`，否则父页面无法捕获子执行的生命周期事件
+  - **前端 — 事件获取优先级**：`getStepEvents` / `getChildStepEvents` 必须优先返回 `liveEvents`（实时最新），仅在无 live 数据时 fallback 到 DB 事件。反过来会导致实时更新被 DB 旧数据覆盖
+  - **前端 — 页面加载种子化**：`fetchExecutionData` / `fetchChildExecutions` 加载数据后，必须将正在运行步骤的 DB 事件种子化到 `liveEvents` / `liveChildEvents`，保证页面重进后已有事件不丢失且新事件继续追加
+  - **前端 — 子执行 ID 追踪**：通过 `knownChildExecMap`（子执行 ID → parentStepIndex）匹配无 `parentExecutionId` 的流式事件（来自 `runStep` 内部的 `broadcastStepEvent`）
+  - **执行历史列表**：`findAll` / `count` 查询需排除子执行（`parent_execution_id IS NULL`），子执行只在父执行详情页内联展示
 - **模板变量**: `{{today}}`, `{{yesterday}}`, `{{now}}`, `{{inputs.xxx}}`, `{{steps.<name>.output}}`
 - **步骤失败策略**: stop（停止）/ skip（跳过）/ retry（重试）
 - **全局配置存储在磁盘**: `global_config/` (rules/, skills/)

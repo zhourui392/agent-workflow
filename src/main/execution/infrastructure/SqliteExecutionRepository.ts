@@ -72,7 +72,7 @@ export class SqliteExecutionRepository implements ExecutionRepository {
   constructor(private readonly db: Database.Database) {}
 
   findAll(params?: ExecutionListParams): Execution[] {
-    const conditions: string[] = [];
+    const conditions: string[] = ['e.parent_execution_id IS NULL'];
     const values: unknown[] = [];
 
     if (params?.workflowId) {
@@ -87,9 +87,7 @@ export class SqliteExecutionRepository implements ExecutionRepository {
     let sql = `SELECT e.*, w.name AS workflow_name,
       json_array_length(w.steps) AS total_steps
       FROM executions e LEFT JOIN workflows w ON e.workflow_id = w.id`;
-    if (conditions.length > 0) {
-      sql += ` WHERE ${conditions.join(' AND ')}`;
-    }
+    sql += ` WHERE ${conditions.join(' AND ')}`;
     sql += ' ORDER BY e.started_at DESC';
 
     if (params?.limit) {
@@ -106,7 +104,7 @@ export class SqliteExecutionRepository implements ExecutionRepository {
   }
 
   count(params?: ExecutionListParams): number {
-    const conditions: string[] = [];
+    const conditions: string[] = ['parent_execution_id IS NULL'];
     const values: unknown[] = [];
 
     if (params?.workflowId) {
@@ -119,9 +117,7 @@ export class SqliteExecutionRepository implements ExecutionRepository {
     }
 
     let sql = 'SELECT COUNT(*) AS total FROM executions';
-    if (conditions.length > 0) {
-      sql += ` WHERE ${conditions.join(' AND ')}`;
-    }
+    sql += ` WHERE ${conditions.join(' AND ')}`;
 
     const row = this.db.prepare(sql).get(...values) as { total: number };
     return row.total;
@@ -190,6 +186,17 @@ export class SqliteExecutionRepository implements ExecutionRepository {
       ORDER BY e.iteration_index ASC, e.started_at ASC
     `).all(parentExecutionId);
     return rows.map(row => rowToExecution(row as Record<string, unknown>));
+  }
+
+  findByParentExecutionIdWithSteps(parentExecutionId: string): Execution[] {
+    const children = this.findByParentExecutionId(parentExecutionId);
+    for (const child of children) {
+      const full = this.findByIdWithSteps(child.id);
+      if (full) {
+        child.stepExecutions = full.stepExecutions;
+      }
+    }
+    return children;
   }
 
   updateStatus(id: string, status: ExecutionStatus, errorMessage?: string): void {

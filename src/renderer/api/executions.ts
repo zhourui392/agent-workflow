@@ -46,6 +46,7 @@ export interface ExecutionData {
   total_tokens: number;
   error_message?: string;
   step_executions?: StepExecutionData[];
+  iteration_index?: number;
 }
 
 function stepExecutionToData(step: StepExecutionDTO): StepExecutionData {

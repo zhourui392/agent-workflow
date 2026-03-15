@@ -22,6 +22,7 @@ export interface ExecutionRepository {
   findById(id: string): Execution | null;
   findByIdWithSteps(id: string): Execution | null;
   findByParentExecutionId(parentExecutionId: string): Execution[];
+  findByParentExecutionIdWithSteps(parentExecutionId: string): Execution[];
   count(params?: ExecutionListParams): number;
   create(workflowId: string, triggerType: TriggerType, subParams?: SubExecutionParams): Execution;
   updateStatus(id: string, status: ExecutionStatus, errorMessage?: string): void;
