@@ -59,24 +59,31 @@ export interface WorkflowData {
   updated_at?: string;
 }
 
-function workflowToData(workflow: WorkflowDTO): WorkflowData {
+export function workflowToData(workflow: WorkflowDTO): WorkflowData {
   return {
     id: workflow.id,
     name: workflow.name,
     enabled: workflow.enabled,
     schedule: workflow.schedule || null,
     inputs: workflow.inputs ? { items: workflow.inputs } : undefined,
-    steps: workflow.steps.map(step => ({
-      name: step.name,
-      prompt: step.prompt,
-      model: step.model,
-      max_turns: step.maxTurns,
-      onFailure: step.onFailure,
-      retryConfig: step.retryConfig,
-      validation_prompt: step.validation?.prompt || '',
-      validation_rules: step.validation?.rules || [],
-      skill_ids: step.skillIds
-    })),
+    steps: workflow.steps.map(step => {
+      // subWorkflow/dataSplit 步骤透传，由 WorkflowEdit 在加载时解析
+      const stepType = (step as Record<string, unknown>).type;
+      if (stepType === 'subWorkflow' || stepType === 'dataSplit' || stepType === 'forEach') {
+        return step as unknown as StepConfig;
+      }
+      return {
+        name: step.name,
+        prompt: step.prompt,
+        model: step.model,
+        max_turns: step.maxTurns,
+        onFailure: step.onFailure,
+        retryConfig: step.retryConfig,
+        validation_prompt: step.validation?.prompt || '',
+        validation_rules: step.validation?.rules || [],
+        skill_ids: step.skillIds
+      };
+    }),
     rules: workflow.rules || null,
     skills: workflow.skills,
     limits: workflow.limits as Record<string, unknown> | null,
@@ -89,22 +96,30 @@ function workflowToData(workflow: WorkflowDTO): WorkflowData {
   };
 }
 
-function dataToCreateRequest(data: Partial<WorkflowData>) {
-  const steps: WorkflowStep[] = (data.steps || []).map(step => ({
-    name: step.name,
-    prompt: step.prompt,
-    model: step.model,
-    maxTurns: step.max_turns,
-    onFailure: step.onFailure,
-    retryConfig: step.retryConfig,
-    validation: (step.validation_prompt || (step.validation_rules && step.validation_rules.length > 0))
-      ? {
-          prompt: step.validation_prompt || undefined,
-          rules: step.validation_rules && step.validation_rules.length > 0 ? step.validation_rules : undefined
-        }
-      : undefined,
-    skillIds: step.skill_ids
-  }));
+export function dataToCreateRequest(data: Partial<WorkflowData>) {
+  const steps: WorkflowStep[] = (data.steps || []).map(step => {
+    // handleSave 已为 subWorkflow/dataSplit/forEach 生成正确的 API 格式，直接透传
+    const stepType = (step as Record<string, unknown>).type;
+    if (stepType === 'subWorkflow' || stepType === 'dataSplit' || stepType === 'forEach') {
+      return step as unknown as WorkflowStep;
+    }
+    // Agent 步骤：从表单字段映射到 API 字段
+    return {
+      name: step.name,
+      prompt: step.prompt,
+      model: step.model,
+      maxTurns: step.max_turns,
+      onFailure: step.onFailure,
+      retryConfig: step.retryConfig,
+      validation: (step.validation_prompt || (step.validation_rules && step.validation_rules.length > 0))
+        ? {
+            prompt: step.validation_prompt || undefined,
+            rules: step.validation_rules && step.validation_rules.length > 0 ? step.validation_rules : undefined
+          }
+        : undefined,
+      skillIds: step.skill_ids
+    };
+  });
 
   return {
     name: data.name || '',

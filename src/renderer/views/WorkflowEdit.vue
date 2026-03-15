@@ -204,7 +204,7 @@ function createEmptyStep(): StepFormData {
   return {
     name: '',
     prompt: '',
-    max_turns: 30,
+    max_turns: 500,
     validation_enabled: false,
     validation_prompt: '',
     validation_rules: [],
@@ -241,7 +241,10 @@ function removeStep(index: number) { form.steps.splice(index, 1) }
 async function handleSave() {
   if (!form.name.trim()) { ElMessage.warning('请输入工作流名称'); return }
   const hasValidStep = form.steps.some(s =>
-    (s.step_type === 'subWorkflow' && s.workflow_id) || (s.prompt && s.prompt.trim())
+    (s.step_type === 'subWorkflow' && s.workflow_id) ||
+    (s.step_type === 'dataSplit') ||
+    (s.step_type === 'forEach' && s.for_each_iterate_over && s.prompt?.trim()) ||
+    (s.prompt && s.prompt.trim())
   )
   if (!hasValidStep) { ElMessage.warning('至少需要一个有效步骤'); return }
   saving.value = true
@@ -269,10 +272,42 @@ async function handleSave() {
             } : undefined
           }
         }
+        if (raw.step_type === 'dataSplit') {
+          return {
+            type: 'dataSplit' as const,
+            name: raw.name,
+            mode: raw.data_split_mode || 'static',
+            staticData: raw.data_split_static || undefined,
+            templateExpr: raw.data_split_template || undefined,
+            aiInput: raw.data_split_ai_input || undefined,
+            aiPrompt: raw.data_split_ai_prompt || undefined,
+          }
+        }
+        if (raw.step_type === 'forEach') {
+          return {
+            type: 'forEach' as const,
+            name: raw.name,
+            prompt: raw.prompt,
+            iterateOver: raw.for_each_iterate_over || '',
+            itemVariable: raw.for_each_item_variable || '',
+            model: raw.model || undefined,
+            maxTurns: raw.max_turns,
+            validation: (raw.validation_prompt || (raw.validation_rules && raw.validation_rules.length > 0))
+              ? {
+                  prompt: raw.validation_prompt || undefined,
+                  rules: raw.validation_rules && raw.validation_rules.length > 0 ? raw.validation_rules : undefined
+                }
+              : undefined,
+            skillIds: raw.skill_ids && raw.skill_ids.length > 0 ? raw.skill_ids : undefined
+          }
+        }
         // Agent step: map form fields to API format, strip internal fields
         const { step_type: _st, workflow_id: _wid, input_mapping: _im,
           for_each_enabled: _fe, for_each_iterate_over: _fio,
-          for_each_item_variable: _fiv, ...agentFields } = raw
+          for_each_item_variable: _fiv,
+          data_split_mode: _dsm, data_split_static: _dss, data_split_template: _dst,
+          data_split_ai_input: _dsai, data_split_ai_prompt: _dsap,
+          ...agentFields } = raw
         return agentFields
       }),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
@@ -323,7 +358,7 @@ onMounted(async () => {
                 return {
                   name: String(s.name || ''),
                   prompt: '',
-                  max_turns: 30,
+                  max_turns: 500,
                   validation_enabled: false,
                   validation_prompt: '',
                   validation_rules: [],
@@ -334,6 +369,37 @@ onMounted(async () => {
                   for_each_enabled: !!forEach,
                   for_each_iterate_over: forEach?.iterateOver || '',
                   for_each_item_variable: forEach?.itemVariable || ''
+                }
+              }
+              if (s.type === 'forEach') {
+                return {
+                  name: String(s.name || ''),
+                  prompt: String(s.prompt || ''),
+                  max_turns: (s.maxTurns as number) || 500,
+                  validation_enabled: !!s.validation_prompt || (Array.isArray(s.validation_rules) && s.validation_rules.length > 0),
+                  validation_prompt: String((s.validation as Record<string, unknown>)?.prompt || ''),
+                  validation_rules: ((s.validation as Record<string, unknown>)?.rules as unknown[]) || [],
+                  skill_ids: (s.skillIds as string[]) || [],
+                  step_type: 'forEach' as const,
+                  for_each_iterate_over: String(s.iterateOver || ''),
+                  for_each_item_variable: String(s.itemVariable || '')
+                }
+              }
+              if (s.type === 'dataSplit') {
+                return {
+                  name: String(s.name || ''),
+                  prompt: '',
+                  max_turns: 500,
+                  validation_enabled: false,
+                  validation_prompt: '',
+                  validation_rules: [],
+                  skill_ids: [],
+                  step_type: 'dataSplit' as const,
+                  data_split_mode: (s.mode as 'static' | 'template' | 'ai') || 'static',
+                  data_split_static: String(s.staticData || ''),
+                  data_split_template: String(s.templateExpr || ''),
+                  data_split_ai_input: String(s.aiInput || ''),
+                  data_split_ai_prompt: String(s.aiPrompt || '')
                 }
               }
               return {

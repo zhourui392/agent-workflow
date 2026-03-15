@@ -222,6 +222,128 @@ describe('Workflow', () => {
       });
       expect(wf.validate()).toEqual([]);
     });
+
+    // ===== forEach 步骤验证 =====
+
+    it('forEach 步骤配置完整时校验通过', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          {
+            type: 'forEach', name: 'Process', prompt: 'Handle {{inputs.item}}',
+            iterateOver: '{{steps.split.output}}', itemVariable: 'item'
+          } as any
+        ]
+      });
+      expect(wf.validate()).toEqual([]);
+    });
+
+    it('forEach 步骤缺少 prompt 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          {
+            type: 'forEach', name: 'Process', prompt: '',
+            iterateOver: '{{steps.split.output}}', itemVariable: 'item'
+          } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('提示词'))).toBe(true);
+    });
+
+    it('forEach 步骤缺少 iterateOver 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          {
+            type: 'forEach', name: 'Process', prompt: 'Do it',
+            itemVariable: 'item'
+          } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('iterateOver'))).toBe(true);
+    });
+
+    it('forEach 步骤缺少 itemVariable 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          {
+            type: 'forEach', name: 'Process', prompt: 'Do it',
+            iterateOver: '{{steps.split.output}}'
+          } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('itemVariable'))).toBe(true);
+    });
+
+    // ===== dataSplit 步骤验证 =====
+
+    it('dataSplit static 模式校验通过', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'static', staticData: '["a","b"]' } as any
+        ]
+      });
+      expect(wf.validate()).toEqual([]);
+    });
+
+    it('dataSplit static 模式缺少 staticData 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'static' } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('staticData'))).toBe(true);
+    });
+
+    it('dataSplit static 模式 staticData 不是合法 JSON 数组报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'static', staticData: '{"not":"array"}' } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('JSON 数组'))).toBe(true);
+    });
+
+    it('dataSplit template 模式校验通过', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'template', templateExpr: '{{steps.fetch.output}}' } as any
+        ]
+      });
+      expect(wf.validate()).toEqual([]);
+    });
+
+    it('dataSplit template 模式缺少 templateExpr 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'template' } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('templateExpr'))).toBe(true);
+    });
+
+    it('dataSplit ai 模式校验通过', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'ai', aiInput: '需求文档内容' } as any
+        ]
+      });
+      expect(wf.validate()).toEqual([]);
+    });
+
+    it('dataSplit ai 模式缺少 aiInput 报错', () => {
+      const wf = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'ai' } as any
+        ]
+      });
+      const errors = wf.validate();
+      expect(errors.some(e => e.includes('aiInput'))).toBe(true);
+    });
   });
 });
 

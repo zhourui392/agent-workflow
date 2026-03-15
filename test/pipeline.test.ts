@@ -357,4 +357,205 @@ describe('PipelineOrchestrator', () => {
       expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ===========================================================================
+  // 数据拆分步骤
+  // ===========================================================================
+
+  describe('数据拆分步骤', () => {
+    it('should output static JSON array directly', async () => {
+      const workflow = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'static', staticData: '["a","b","c"]' } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // dataSplit 不调用 stepExecutor
+      expect(stepExecutor.execute).not.toHaveBeenCalled();
+    });
+
+    it('should resolve template expression and output array', async () => {
+      // First step outputs JSON array, second step references it via template
+      vi.mocked(stepExecutor.execute).mockResolvedValueOnce({
+        success: true, outputText: '["x","y"]', tokensUsed: 100
+      });
+
+      const workflow = createTestWorkflow({
+        steps: [
+          { name: 'Fetch', prompt: 'get list' },
+          { type: 'dataSplit', name: 'Split', mode: 'template', templateExpr: '{{steps.Fetch.output}}' } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // Only the first agent step calls executor
+      expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call AI executor for ai mode and extract JSON array', async () => {
+      vi.mocked(stepExecutor.execute).mockResolvedValueOnce({
+        success: true, outputText: '根据需求，拆分如下：\n["任务1","任务2","任务3"]', tokensUsed: 200
+      });
+
+      const workflow = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'ai', aiInput: '需求文档内容' } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('should fail when static data is not valid JSON array', async () => {
+      const workflow = createTestWorkflow({
+        steps: [
+          { type: 'dataSplit', name: 'Split', mode: 'static', staticData: 'not json' } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed',
+          expect.stringContaining('JSON'));
+      }, { timeout: 2000 });
+    });
+
+    it('should fail when template resolves to non-array', async () => {
+      vi.mocked(stepExecutor.execute).mockResolvedValueOnce({
+        success: true, outputText: '{"not":"array"}', tokensUsed: 100
+      });
+
+      const workflow = createTestWorkflow({
+        steps: [
+          { name: 'Fetch', prompt: 'get data' },
+          { type: 'dataSplit', name: 'Split', mode: 'template', templateExpr: '{{steps.Fetch.output}}' } as any
+        ]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed',
+          expect.stringContaining('数组'));
+      }, { timeout: 2000 });
+    });
+  });
+
+  // ===== ForEach 循环步骤 =====
+
+  it('should execute forEach step for each item in array', async () => {
+    const workflow = createTestWorkflowRef({
+      steps: [
+        {
+          type: 'forEach', name: 'Process', prompt: 'Handle {{inputs.item}}',
+          iterateOver: '["a","b","c"]', itemVariable: 'item'
+        } as any
+      ]
+    });
+
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    });
+
+    // 每个元素调用一次 stepExecutor
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(3);
+
+    // 1 次父执行 + 3 次子执行
+    expect(execRepo.create).toHaveBeenCalledTimes(4);
+    // 子执行带 parentExecutionId 和 iterationIndex
+    const createCalls = (execRepo.create as ReturnType<typeof vi.fn>).mock.calls;
+    const childCalls = createCalls.filter((c: unknown[]) => c[2]?.iterationIndex !== undefined);
+    expect(childCalls).toHaveLength(3);
+    expect(childCalls.map((c: unknown[]) => c[2].iterationIndex)).toEqual([0, 1, 2]);
+  });
+
+  it('should inject item variable into forEach prompt context', async () => {
+    const workflow = createTestWorkflowRef({
+      steps: [
+        {
+          type: 'forEach', name: 'Process', prompt: 'Do {{inputs.task}}',
+          iterateOver: '["task1","task2"]', itemVariable: 'task'
+        } as any
+      ]
+    });
+
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    });
+
+    // 验证 prompt 已被渲染为具体值
+    const calls = (stepExecutor.execute as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls[0][0]).toContain('Do task1');
+    expect(calls[1][0]).toContain('Do task2');
+  });
+
+  it('should fail forEach step when iterateOver is not valid JSON array', async () => {
+    const workflow = createTestWorkflowRef({
+      steps: [
+        {
+          type: 'forEach', name: 'Process', prompt: 'Do it',
+          iterateOver: 'not json', itemVariable: 'item'
+        } as any
+      ]
+    });
+
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith(
+        'exec-001', 'failed', expect.stringContaining('JSON')
+      );
+    });
+  });
+
+  it('should use previous step output as forEach data source', async () => {
+    const workflow = createTestWorkflowRef({
+      steps: [
+        { name: 'Fetch', prompt: 'Get data' },
+        {
+          type: 'forEach', name: 'Process', prompt: 'Handle {{inputs.item}}',
+          iterateOver: '{{steps.Fetch.output}}', itemVariable: 'item'
+        } as any
+      ]
+    });
+
+    // Mock: 第一步返回 JSON 数组，后续步骤返回普通文本
+    let callCount = 0;
+    (stepExecutor.execute as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) return { success: true, outputText: '["x","y"]', tokensUsed: 10 };
+      return { success: true, outputText: `done-${callCount}`, tokensUsed: 5 };
+    });
+
+    await orchestrator.execute(workflow, {}, 'manual');
+
+    await vi.waitFor(() => {
+      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+    });
+
+    // 1 次 Fetch + 2 次 forEach 迭代
+    expect(stepExecutor.execute).toHaveBeenCalledTimes(3);
+  });
 });

@@ -5,7 +5,7 @@
  */
 import { Entity } from '../../../shared/domain';
 import type { WorkflowStep } from './WorkflowStep';
-import { isSubWorkflowStep, isAgentStep } from './WorkflowStep';
+import { isSubWorkflowStep, isAgentStep, isDataSplitStep, isForEachStep } from './WorkflowStep';
 import type { WorkflowInput } from './WorkflowInput';
 import type { WorkflowLimits } from './WorkflowLimits';
 import type { WorkflowOutput } from './WorkflowOutput';
@@ -163,6 +163,39 @@ export class Workflow extends Entity {
           if (!step.forEach.itemVariable || step.forEach.itemVariable.trim().length === 0) {
             errors.push(`步骤 "${step.name}" 的 forEach.itemVariable 不能为空`);
           }
+        }
+      } else if (isDataSplitStep(step)) {
+        if (step.mode === 'static') {
+          if (!step.staticData || step.staticData.trim().length === 0) {
+            errors.push(`步骤 "${step.name}" 的 staticData 不能为空`);
+          } else {
+            try {
+              const parsed = JSON.parse(step.staticData);
+              if (!Array.isArray(parsed)) {
+                errors.push(`步骤 "${step.name}" 的 staticData 必须是 JSON 数组`);
+              }
+            } catch {
+              errors.push(`步骤 "${step.name}" 的 staticData 必须是合法 JSON 数组`);
+            }
+          }
+        } else if (step.mode === 'template') {
+          if (!step.templateExpr || step.templateExpr.trim().length === 0) {
+            errors.push(`步骤 "${step.name}" 的 templateExpr 不能为空`);
+          }
+        } else if (step.mode === 'ai') {
+          if (!step.aiInput || step.aiInput.trim().length === 0) {
+            errors.push(`步骤 "${step.name}" 的 aiInput 不能为空`);
+          }
+        }
+      } else if (isForEachStep(step)) {
+        if (!step.prompt || step.prompt.trim().length === 0) {
+          errors.push(`步骤 "${step.name}" 的提示词不能为空`);
+        }
+        if (!step.iterateOver || step.iterateOver.trim().length === 0) {
+          errors.push(`步骤 "${step.name}" 的 iterateOver 不能为空`);
+        }
+        if (!step.itemVariable || step.itemVariable.trim().length === 0) {
+          errors.push(`步骤 "${step.name}" 的 itemVariable 不能为空`);
         }
       } else if (isAgentStep(step)) {
         if (!step.prompt || step.prompt.trim().length === 0) {

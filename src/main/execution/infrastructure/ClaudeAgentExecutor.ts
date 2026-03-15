@@ -184,7 +184,7 @@ function buildQueryOptions(
   const options: Record<string, unknown> = {
     customSystemPrompt: config.systemPrompt,
     allowedTools: config.allowedTools,
-    maxTurns: config.maxTurns || 30,
+    ...(config.maxTurns && { maxTurns: config.maxTurns }),
     permissionMode: 'acceptEdits',
     cwd: config.workingDirectory || process.cwd(),
     ...(skillsDir && {

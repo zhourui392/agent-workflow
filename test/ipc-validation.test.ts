@@ -204,6 +204,95 @@ describe('CreateWorkflowSchema', () => {
     });
     expect(result.steps).toHaveLength(2);
   });
+
+  it('should accept forEach step', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'forEach',
+        name: 'Process Items',
+        prompt: 'Handle {{inputs.item}}',
+        iterateOver: '{{steps.split.output}}',
+        itemVariable: 'item'
+      }]
+    });
+    expect(result.steps[0]).toHaveProperty('type', 'forEach');
+    expect(result.steps[0]).toHaveProperty('iterateOver');
+  });
+
+  it('should reject forEach step without iterateOver', () => {
+    expect(() => validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'forEach',
+        name: 'Bad',
+        prompt: 'Do it',
+        itemVariable: 'item'
+      }]
+    })).toThrow();
+  });
+
+  it('should accept dataSplit step with static mode', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'dataSplit',
+        name: 'Split',
+        mode: 'static',
+        staticData: '["a","b","c"]'
+      }]
+    });
+    expect(result.steps[0]).toHaveProperty('type', 'dataSplit');
+    expect(result.steps[0]).toHaveProperty('mode', 'static');
+  });
+
+  it('should accept dataSplit step with template mode', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'dataSplit',
+        name: 'Split',
+        mode: 'template',
+        templateExpr: '{{steps.fetch.output}}'
+      }]
+    });
+    expect(result.steps[0]).toHaveProperty('mode', 'template');
+  });
+
+  it('should accept dataSplit step with ai mode', () => {
+    const result = validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'dataSplit',
+        name: 'Split',
+        mode: 'ai',
+        aiInput: '需求文档',
+        aiPrompt: '请拆分为子任务'
+      }]
+    });
+    expect(result.steps[0]).toHaveProperty('mode', 'ai');
+  });
+
+  it('should reject dataSplit step without mode', () => {
+    expect(() => validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'dataSplit',
+        name: 'Split'
+      }]
+    })).toThrow();
+  });
+
+  it('should reject dataSplit step with invalid mode', () => {
+    expect(() => validateInput(CreateWorkflowSchema, {
+      name: 'Test',
+      steps: [{
+        type: 'dataSplit',
+        name: 'Split',
+        mode: 'invalid'
+      }]
+    })).toThrow();
+  });
 });
 
 describe('UpdateWorkflowSchema', () => {

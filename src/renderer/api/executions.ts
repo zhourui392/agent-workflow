@@ -49,7 +49,7 @@ export interface ExecutionData {
   iteration_index?: number;
 }
 
-function stepExecutionToData(step: StepExecutionDTO): StepExecutionData {
+export function stepExecutionToData(step: StepExecutionDTO): StepExecutionData {
   return {
     id: step.id,
     execution_id: step.executionId,
@@ -69,7 +69,7 @@ function stepExecutionToData(step: StepExecutionDTO): StepExecutionData {
   };
 }
 
-function executionToData(execution: ExecutionDTO): ExecutionData {
+export function executionToData(execution: ExecutionDTO): ExecutionData {
   return {
     id: execution.id,
     workflow_id: execution.workflowId,

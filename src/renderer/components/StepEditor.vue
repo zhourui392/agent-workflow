@@ -10,9 +10,11 @@
       <el-input :model-value="step.name" @update:model-value="updateField('name', $event)" placeholder="如: analyze_code" />
     </el-form-item>
     <el-form-item label="步骤类型">
-      <el-radio-group :model-value="step.step_type || 'agent'" @update:model-value="onStepTypeChange($event as 'agent' | 'subWorkflow')">
+      <el-radio-group :model-value="step.step_type || 'agent'" @update:model-value="onStepTypeChange($event as StepType)">
         <el-radio-button value="agent">Agent 步骤</el-radio-button>
+        <el-radio-button value="forEach">ForEach 循环</el-radio-button>
         <el-radio-button value="subWorkflow">子工作流</el-radio-button>
+        <el-radio-button value="dataSplit">数据拆分</el-radio-button>
       </el-radio-group>
     </el-form-item>
 
@@ -28,7 +30,7 @@
         />
       </el-form-item>
       <el-form-item label="最大轮次">
-        <el-input-number :model-value="step.max_turns" @update:model-value="updateField('max_turns', $event)" :min="1" :max="100" />
+        <el-input-number :model-value="step.max_turns" @update:model-value="updateField('max_turns', $event)" :min="1" :max="9999" />
       </el-form-item>
       <el-form-item label="输出验证">
         <el-switch :model-value="step.validation_enabled" @update:model-value="updateField('validation_enabled', $event)" />
@@ -94,7 +96,7 @@
     </template>
 
     <!-- 子工作流步骤表单 -->
-    <template v-else>
+    <template v-else-if="step.step_type === 'subWorkflow'">
       <el-form-item label="子工作流" required>
         <el-select
           :model-value="step.workflow_id"
@@ -146,7 +148,98 @@
         <el-form-item label="迭代变量名">
           <el-input :model-value="step.for_each_item_variable" @update:model-value="updateField('for_each_item_variable', $event)"
             placeholder="如: task" style="width: 200px" />
-          <div class="form-tip">子工作流可通过 {{inputs.变量名}} 引用当前迭代元素</div>
+          <div class="form-tip" v-text="'子工作流可通过 {{inputs.变量名}} 引用当前迭代元素'"></div>
+        </el-form-item>
+      </template>
+    </template>
+
+    <!-- ForEach 循环步骤表单 -->
+    <template v-else-if="step.step_type === 'forEach'">
+      <el-form-item label="数据源" required>
+        <el-input :model-value="step.for_each_iterate_over" @update:model-value="updateField('for_each_iterate_over', $event)"
+          placeholder="模板表达式，如 {{steps.拆分.output}}" />
+        <div class="form-tip">应解析为 JSON 数组，每个元素将作为一次迭代的输入</div>
+      </el-form-item>
+      <el-form-item label="迭代变量名" required>
+        <el-input :model-value="step.for_each_item_variable" @update:model-value="updateField('for_each_item_variable', $event)"
+          placeholder="如: item" style="width: 200px" />
+        <div class="form-tip" v-text="'提示词中通过 {{inputs.变量名}} 引用当前迭代元素'"></div>
+      </el-form-item>
+      <el-form-item label="Prompt" required>
+        <PromptEditor
+          :model-value="step.prompt"
+          @update:model-value="updateField('prompt', $event)"
+          :rows="4"
+          :workflow-inputs="workflowInputs"
+          :prior-steps="priorSteps"
+        />
+      </el-form-item>
+      <el-form-item label="最大轮次">
+        <el-input-number :model-value="step.max_turns" @update:model-value="updateField('max_turns', $event)" :min="1" :max="9999" />
+      </el-form-item>
+      <el-form-item label="Skills">
+        <el-select
+          :model-value="step.skill_ids"
+          @update:model-value="updateField('skill_ids', $event)"
+          multiple
+          filterable
+          placeholder="选择此步骤使用的 Skills"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="skill in skills"
+            :key="skill.id"
+            :label="skill.name"
+            :value="skill.id"
+          >
+            <span>{{ skill.name }}</span>
+            <span v-if="skill.source === 'cli'" class="cli-tag">CLI</span>
+            <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
+          </el-option>
+        </el-select>
+      </el-form-item>
+    </template>
+
+    <!-- 数据拆分步骤表单 -->
+    <template v-else-if="step.step_type === 'dataSplit'">
+      <el-form-item label="拆分模式">
+        <el-radio-group :model-value="step.data_split_mode || 'static'" @update:model-value="updateField('data_split_mode', $event)">
+          <el-radio-button value="static">静态数组</el-radio-button>
+          <el-radio-button value="template">模板引用</el-radio-button>
+          <el-radio-button value="ai">AI 拆分</el-radio-button>
+        </el-radio-group>
+      </el-form-item>
+
+      <!-- 静态模式 -->
+      <el-form-item v-if="!step.data_split_mode || step.data_split_mode === 'static'" label="JSON 数组">
+        <el-input :model-value="step.data_split_static" @update:model-value="updateField('data_split_static', $event)"
+          type="textarea" :rows="3" placeholder='["任务1", "任务2", "任务3"]' />
+        <div class="form-tip">输入合法的 JSON 数组，每个元素将作为 ForEach 的迭代项</div>
+      </el-form-item>
+
+      <!-- 模板模式 -->
+      <el-form-item v-else-if="step.data_split_mode === 'template'" label="模板表达式">
+        <el-input :model-value="step.data_split_template" @update:model-value="updateField('data_split_template', $event)"
+          placeholder="如 {{steps.获取列表.output}}" />
+        <div class="form-tip">引用上游步骤输出，结果必须为 JSON 数组</div>
+      </el-form-item>
+
+      <!-- AI 模式 -->
+      <template v-else-if="step.data_split_mode === 'ai'">
+        <el-form-item label="待拆分内容">
+          <PromptEditor
+            :model-value="step.data_split_ai_input || ''"
+            @update:model-value="updateField('data_split_ai_input', $event)"
+            :rows="3"
+            :workflow-inputs="workflowInputs"
+            :prior-steps="priorSteps"
+          />
+          <div class="form-tip">支持模板表达式引用上游输出</div>
+        </el-form-item>
+        <el-form-item label="拆分提示词">
+          <el-input :model-value="step.data_split_ai_prompt" @update:model-value="updateField('data_split_ai_prompt', $event)"
+            type="textarea" :rows="2" placeholder="可选，默认自动生成拆分指令" />
+          <div class="form-tip">自定义拆分策略，留空使用默认提示词</div>
         </el-form-item>
       </template>
     </template>
@@ -159,6 +252,8 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 import type { SkillData } from '@/api/skills'
 import type { WorkflowDTO } from '@/api/index'
 import PromptEditor from './PromptEditor.vue'
+
+export type StepType = 'agent' | 'subWorkflow' | 'dataSplit' | 'forEach'
 
 /**
  * 步骤表单数据结构
@@ -177,13 +272,19 @@ export interface StepFormData {
   validation_prompt: string
   validation_rules: ValidationRuleData[]
   skill_ids: string[]
-  // 子工作流字段
-  step_type?: 'agent' | 'subWorkflow'
+  // 步骤类型
+  step_type?: StepType
   workflow_id?: string
   input_mapping?: Record<string, string>
   for_each_enabled?: boolean
   for_each_iterate_over?: string
   for_each_item_variable?: string
+  // 数据拆分字段
+  data_split_mode?: 'static' | 'template' | 'ai'
+  data_split_static?: string
+  data_split_template?: string
+  data_split_ai_input?: string
+  data_split_ai_prompt?: string
 }
 
 const props = defineProps<{
@@ -208,7 +309,7 @@ function updateField(field: keyof StepFormData, value: unknown) {
   emit('update:step', { ...props.step, [field]: value })
 }
 
-function onStepTypeChange(type: 'agent' | 'subWorkflow') {
+function onStepTypeChange(type: StepType) {
   emit('update:step', { ...props.step, step_type: type })
 }
 

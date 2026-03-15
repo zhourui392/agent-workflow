@@ -52,8 +52,41 @@ const SubWorkflowStepSchema = z.object({
   retryConfig: RetryConfigSchema.optional()
 });
 
-/** 步骤 schema：支持 agent 步骤（默认）和 subWorkflow 步骤 */
-const StepSchema = z.union([SubWorkflowStepSchema, AgentStepSchema]);
+const DataSplitStepSchema = z.object({
+  type: z.literal('dataSplit'),
+  name: z.string().min(1, '步骤名称不能为空'),
+  mode: z.enum(['static', 'template', 'ai']),
+  staticData: z.string().optional(),
+  templateExpr: z.string().optional(),
+  aiInput: z.string().optional(),
+  aiPrompt: z.string().optional(),
+  onFailure: z.enum(['stop', 'skip', 'retry']).optional(),
+  retryConfig: RetryConfigSchema.optional()
+});
+
+const ForEachStepSchema = z.object({
+  type: z.literal('forEach'),
+  name: z.string().min(1, '步骤名称不能为空'),
+  prompt: z.string().min(1, '步骤提示词不能为空'),
+  iterateOver: z.string().min(1, 'iterateOver 不能为空'),
+  itemVariable: z.string().min(1, 'itemVariable 不能为空'),
+  model: z.string().optional(),
+  maxTurns: z.number().int().positive().optional(),
+  onFailure: z.enum(['stop', 'skip', 'retry']).optional(),
+  retryConfig: RetryConfigSchema.optional(),
+  validation: z.object({
+    prompt: z.string().min(1).optional(),
+    rules: z.array(z.object({
+      type: z.enum(['regex', 'contains']),
+      pattern: z.string().optional(),
+      value: z.string().optional()
+    })).optional()
+  }).optional(),
+  skillIds: z.array(z.string()).optional()
+});
+
+/** 步骤 schema：支持 agent / subWorkflow / dataSplit / forEach 四种类型 */
+const StepSchema = z.union([SubWorkflowStepSchema, DataSplitStepSchema, ForEachStepSchema, AgentStepSchema]);
 
 /** 接受 null 并转换为 undefined，保持输出类型不含 null */
 function nullableToOptional<T extends z.ZodTypeAny>(schema: T) {
