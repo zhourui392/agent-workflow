@@ -122,13 +122,8 @@
 
       <!-- Limits -->
       <el-card class="section-card">
-        <template #header>成本控制</template>
+        <template #header>执行控制</template>
         <el-row :gutter="20">
-          <el-col :span="8">
-            <el-form-item label="Token 上限">
-              <el-input-number v-model="limitsMaxTokens" :min="0" :step="10000" />
-            </el-form-item>
-          </el-col>
           <el-col :span="8">
             <el-form-item label="超时(秒)">
               <el-input-number v-model="limitsMaxDuration" :min="0" :step="60" />
@@ -204,7 +199,7 @@ function createEmptyStep(): StepFormData {
   return {
     name: '',
     prompt: '',
-    max_turns: 500,
+    max_turns: 999,
     validation_enabled: false,
     validation_prompt: '',
     validation_rules: [],
@@ -215,10 +210,6 @@ function createEmptyStep(): StepFormData {
 const rulesSystemPrompt = computed({
   get: () => form.rules?.system_prompt || '',
   set: (val: string) => { if (!form.rules) form.rules = {}; form.rules.system_prompt = val }
-})
-const limitsMaxTokens = computed({
-  get: () => form.limits?.max_tokens || 0,
-  set: (val: number) => { if (!form.limits) form.limits = {}; form.limits.max_tokens = val || undefined }
 })
 const limitsMaxDuration = computed({
   get: () => form.limits?.max_duration || 0,
@@ -311,7 +302,7 @@ async function handleSave() {
         return agentFields
       }),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
-      limits: (rawForm.limits?.max_tokens || rawForm.limits?.max_duration) ? { ...toRaw(rawForm.limits) } : undefined,
+      limits: rawForm.limits?.max_duration ? { ...toRaw(rawForm.limits) } : undefined,
       on_failure: rawForm.on_failure,
       retry_config: rawForm.on_failure === 'retry' ? toRaw(rawForm.retry_config) : null,
     }
@@ -358,7 +349,7 @@ onMounted(async () => {
                 return {
                   name: String(s.name || ''),
                   prompt: '',
-                  max_turns: 500,
+                  max_turns: 999,
                   validation_enabled: false,
                   validation_prompt: '',
                   validation_rules: [],
@@ -375,7 +366,7 @@ onMounted(async () => {
                 return {
                   name: String(s.name || ''),
                   prompt: String(s.prompt || ''),
-                  max_turns: (s.maxTurns as number) || 500,
+                  max_turns: (s.maxTurns as number) || 999,
                   validation_enabled: !!s.validation_prompt || (Array.isArray(s.validation_rules) && s.validation_rules.length > 0),
                   validation_prompt: String((s.validation as Record<string, unknown>)?.prompt || ''),
                   validation_rules: ((s.validation as Record<string, unknown>)?.rules as unknown[]) || [],
@@ -389,7 +380,7 @@ onMounted(async () => {
                 return {
                   name: String(s.name || ''),
                   prompt: '',
-                  max_turns: 500,
+                  max_turns: 999,
                   validation_enabled: false,
                   validation_prompt: '',
                   validation_rules: [],

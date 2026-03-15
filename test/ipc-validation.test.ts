@@ -54,7 +54,7 @@ describe('CreateWorkflowSchema', () => {
       schedule: '0 9 * * 1-5',
       rules: 'some rules',
       onFailure: 'retry' as const,
-      limits: { maxTokens: 10000 },
+      limits: { maxTurns: 10 },
       workingDirectory: '/tmp',
       steps: [{
         name: 'Step 1',

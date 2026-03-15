@@ -182,7 +182,7 @@ describe('WorkflowApplicationService', () => {
         steps: [{ name: 'S1', prompt: 'do it' }],
         rules: 'some rules',
         skills: { skill1: 'content1' },
-        limits: { maxTokens: 5000 },
+        limits: { maxTurns: 10 },
         onFailure: 'retry'
       });
       (repo.findById as ReturnType<typeof vi.fn>).mockReturnValue(source);
@@ -200,7 +200,7 @@ describe('WorkflowApplicationService', () => {
           steps: [{ name: 'S1', prompt: 'do it' }],
           rules: 'some rules',
           skills: { skill1: 'content1' },
-          limits: { maxTokens: 5000 },
+          limits: { maxTurns: 10 },
           onFailure: 'retry'
         })
       );

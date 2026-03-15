@@ -39,7 +39,7 @@ function createFullFormData(): Partial<WorkflowData> {
     }],
     rules: 'Always use TypeScript',
     skills: { 'my-skill': 'content' },
-    limits: { maxTokens: 10000 },
+    limits: { maxTurns: 10 },
     output: { file: { path: '/tmp/out.json' } },
     working_directory: '/home/user/project',
     on_failure: 'stop',

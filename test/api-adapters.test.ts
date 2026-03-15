@@ -37,7 +37,7 @@ function createFullWorkflowDTO(overrides?: Partial<WorkflowDTO>): WorkflowDTO {
     ],
     rules: 'Always use TypeScript',
     skills: { 'my-skill': 'skill content' },
-    limits: { maxTokens: 10000, maxTurns: 20, timeoutMs: 60000 },
+    limits: { maxTurns: 20, timeoutMs: 60000 },
     output: {
       file: { path: '/tmp/out.json', format: 'json' },
       webhook: { url: 'https://example.com/hook', method: 'POST' }
@@ -103,7 +103,7 @@ describe('workflowToData', () => {
     expect(data.schedule).toBe('0 9 * * *');
     expect(data.rules).toBe('Always use TypeScript');
     expect(data.skills).toEqual({ 'my-skill': 'skill content' });
-    expect(data.limits).toEqual({ maxTokens: 10000, maxTurns: 20, timeoutMs: 60000 });
+    expect(data.limits).toEqual({ maxTurns: 20, timeoutMs: 60000 });
     expect(data.output).toEqual({
       file: { path: '/tmp/out.json', format: 'json' },
       webhook: { url: 'https://example.com/hook', method: 'POST' }

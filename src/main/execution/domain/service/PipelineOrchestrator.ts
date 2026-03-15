@@ -150,7 +150,6 @@ export interface WorkflowRef {
   steps: WorkflowStepRef[];
   onFailure: 'stop' | 'skip' | 'retry';
   limits?: {
-    maxTokens?: number;
     maxTurns?: number;
     timeoutMs?: number;
   };
@@ -280,10 +279,6 @@ export class PipelineOrchestrator {
           return;
         }
 
-        if (workflow.limits?.maxTokens && totalTokens >= workflow.limits.maxTokens) {
-          this.executionRepository.updateStatus(executionId, 'failed', 'Token limit exceeded');
-          return;
-        }
       }
 
       this.executionRepository.updateStatus(executionId, 'success');
@@ -1015,15 +1010,6 @@ export class PipelineOrchestrator {
         }
 
         lastOutput = stepResult.outputText;
-
-        if (subWorkflow.limits?.maxTokens && totalTokens >= subWorkflow.limits.maxTokens) {
-          this.executionRepository.updateStatus(subExecution.id, 'failed', 'Token limit exceeded');
-          this.progressNotifier.broadcast({
-            executionId: subExecution.id, stepIndex: i, status: 'failed',
-            errorMessage: 'Token limit exceeded', ...parentInfo
-          });
-          return { success: false, tokensUsed: totalTokens, outputText: '', errorMessage: 'Token limit exceeded' };
-        }
       }
 
       this.executionRepository.updateStatus(subExecution.id, 'success');

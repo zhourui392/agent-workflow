@@ -205,9 +205,6 @@ export class Workflow extends Entity {
     }
 
     if (this.limits) {
-      if (this.limits.maxTokens !== undefined && this.limits.maxTokens <= 0) {
-        errors.push('maxTokens 必须为正数');
-      }
       if (this.limits.maxTurns !== undefined && this.limits.maxTurns <= 0) {
         errors.push('maxTurns 必须为正数');
       }

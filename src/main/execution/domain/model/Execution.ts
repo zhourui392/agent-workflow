@@ -147,13 +147,6 @@ export class Execution extends Entity {
     this._totalTokens += tokens;
   }
 
-  /**
-   * 检查是否超过 token 限制
-   */
-  exceedsTokenLimit(maxTokens: number): boolean {
-    return this._totalTokens >= maxTokens;
-  }
-
   private transitionTo(target: ExecutionStatus): void {
     const allowed = VALID_TRANSITIONS[this._status];
     if (!allowed.includes(target)) {

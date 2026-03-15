@@ -145,13 +145,8 @@ describe('Workflow', () => {
       expect(errors.some(e => e.includes('提示词不能为空'))).toBe(true);
     });
 
-    it('maxTokens 非正数报错', () => {
-      const wf = createTestWorkflow({ limits: { maxTokens: 0 } });
-      expect(wf.validate()).toContain('maxTokens 必须为正数');
-    });
-
     it('limits 合法时不报错', () => {
-      const wf = createTestWorkflow({ limits: { maxTokens: 1000, maxTurns: 10 } });
+      const wf = createTestWorkflow({ limits: { maxTurns: 10 } });
       expect(wf.validate()).toEqual([]);
     });
 
@@ -488,16 +483,4 @@ describe('Execution', () => {
     });
   });
 
-  describe('exceedsTokenLimit', () => {
-    it('超过限制返回 true', () => {
-      const exec = createTestExecution({ totalTokens: 1000 });
-      expect(exec.exceedsTokenLimit(999)).toBe(true);
-      expect(exec.exceedsTokenLimit(1000)).toBe(true);
-    });
-
-    it('未超过限制返回 false', () => {
-      const exec = createTestExecution({ totalTokens: 500 });
-      expect(exec.exceedsTokenLimit(1000)).toBe(false);
-    });
-  });
 });

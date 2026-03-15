@@ -24,7 +24,7 @@ export function createTestWorkflow(overrides: Partial<{
   steps: WorkflowStep[];
   rules: string;
   skills: Record<string, string>;
-  limits: { maxTokens?: number; maxTurns?: number; timeoutMs?: number };
+  limits: { maxTurns?: number; timeoutMs?: number };
   output: unknown;
   workingDirectory: string;
   onFailure: 'stop' | 'skip' | 'retry';

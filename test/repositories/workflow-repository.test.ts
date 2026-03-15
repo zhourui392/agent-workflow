@@ -125,7 +125,7 @@ describe('SqliteWorkflowRepository', () => {
         ],
         rules: 'Always use TypeScript',
         skills: { 'code-review': '/path/to/skill' },
-        limits: { maxTokens: 100000, maxTurns: 10, timeoutMs: 60000 },
+        limits: { maxTurns: 10, timeoutMs: 60000 },
         output: {
           file: { path: '/tmp/output.md', format: 'markdown' },
           webhook: { url: 'https://example.com/hook', method: 'POST', headers: { 'X-Key': 'val' }, timeoutMs: 5000 }
@@ -149,7 +149,7 @@ describe('SqliteWorkflowRepository', () => {
       expect(created.steps[0].retryConfig).toEqual({ maxAttempts: 3, delayMs: 1000 });
       expect(created.rules).toBe('Always use TypeScript');
       expect(created.skills).toEqual({ 'code-review': '/path/to/skill' });
-      expect(created.limits).toEqual({ maxTokens: 100000, maxTurns: 10, timeoutMs: 60000 });
+      expect(created.limits).toEqual({ maxTurns: 10, timeoutMs: 60000 });
       expect(created.output).toEqual({
         file: { path: '/tmp/output.md', format: 'markdown' },
         webhook: { url: 'https://example.com/hook', method: 'POST', headers: { 'X-Key': 'val' }, timeoutMs: 5000 }
@@ -202,7 +202,7 @@ describe('SqliteWorkflowRepository', () => {
         { name: 'New Step', prompt: 'New prompt', model: 'opus' }
       ];
       const newSkills = { 'my-skill': '/skill/path' };
-      const newLimits = { maxTokens: 50000 };
+      const newLimits = { maxTurns: 20 };
       const newOutput = { file: { path: '/out.txt', format: 'text' as const } };
 
       const updated = repo.update(created.id, {

@@ -97,7 +97,6 @@ function nullableToOptional<T extends z.ZodTypeAny>(schema: T) {
 }
 
 const LimitsObjectSchema = z.object({
-  maxTokens: z.number().int().positive().optional(),
   maxTurns: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional()
 });

@@ -96,19 +96,6 @@ describe('PipelineOrchestrator', () => {
     expect(stepExecutor.execute).toHaveBeenCalledTimes(2);
   });
 
-  it('should stop pipeline when token limit exceeded', async () => {
-    vi.mocked(stepExecutor.execute).mockResolvedValue({
-      success: true, outputText: 'output', tokensUsed: 600
-    });
-
-    const workflow = createTestWorkflow({ limits: { maxTokens: 1000 } });
-    await orchestrator.execute(workflow, {}, 'manual');
-
-    await vi.waitFor(() => {
-      expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'failed', 'Token limit exceeded');
-    }, { timeout: 2000 });
-  });
-
   it('should mark execution as success when all steps pass', async () => {
     const workflow = createTestWorkflow({
       steps: [{ name: 'Single Step', prompt: 'Do it' }]
