@@ -252,7 +252,7 @@ describe('WorkflowApplicationService', () => {
       const result = await service.run('wf-001', { key: 'value' });
 
       expect(repo.findById).toHaveBeenCalledWith('wf-001');
-      expect(pipeline.execute).toHaveBeenCalledWith(wf, { key: 'value' }, 'manual');
+      expect(pipeline.execute).toHaveBeenCalledWith(wf, { key: 'value' }, 'manual', undefined);
       expect(result).toBe('exec-001');
     });
 

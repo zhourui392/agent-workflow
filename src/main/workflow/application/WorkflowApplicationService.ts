@@ -5,6 +5,7 @@
 import log from 'electron-log';
 import type { Workflow, CreateWorkflowRequest, UpdateWorkflowRequest } from '../domain/model';
 import type { WorkflowRepository } from '../domain/repository/WorkflowRepository';
+import type { RunOptions } from '../../execution/domain/model/RunOptions';
 
 /**
  * 调度服务接口（跨上下文引用，避免循环依赖）
@@ -18,7 +19,7 @@ export interface SchedulerPort {
  * 执行流水线接口（跨上下文引用）
  */
 export interface PipelinePort {
-  execute(workflow: Workflow, inputs: Record<string, unknown>, triggerType: 'manual' | 'scheduled'): Promise<string>;
+  execute(workflow: Workflow, inputs: Record<string, unknown>, triggerType: 'manual' | 'scheduled', options?: RunOptions): Promise<string>;
 }
 
 export class WorkflowApplicationService {
@@ -96,12 +97,12 @@ export class WorkflowApplicationService {
     return this.create(cloneData);
   }
 
-  async run(id: string, inputs: Record<string, unknown> = {}): Promise<string | null> {
+  async run(id: string, inputs: Record<string, unknown> = {}, options?: RunOptions): Promise<string | null> {
     const workflow = this.repo.findById(id);
     if (!workflow) return null;
 
     log.info(`Manual execution triggered for workflow: ${workflow.name}`);
-    return this.pipeline.execute(workflow, inputs, 'manual');
+    return this.pipeline.execute(workflow, inputs, 'manual', options);
   }
 
   private syncScheduler(workflow: Workflow): void {

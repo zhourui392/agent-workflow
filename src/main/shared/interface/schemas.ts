@@ -144,7 +144,17 @@ export const UpdateWorkflowSchema = CreateWorkflowSchema.partial();
 
 export const RunWorkflowInputsSchema = z.record(z.string(), z.unknown()).optional();
 
+export const RunWorkflowOptionsSchema = z.object({
+  inputs: z.record(z.string(), z.unknown()).optional(),
+  workingDirectory: z.string().optional()
+}).optional();
+
 // ========== 执行记录 ==========
+
+export const RetryExecutionSchema = z.object({
+  executionId: z.string().min(1),
+  workingDirectory: z.string().optional()
+});
 
 export const ExecutionListParamsSchema = z.object({
   workflowId: z.string().optional(),

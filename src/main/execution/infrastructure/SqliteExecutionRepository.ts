@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type Database from 'better-sqlite3';
 import { Execution, StepExecution } from '../domain/model';
 import type { ExecutionListParams } from '../domain/model';
-import type { ExecutionRepository, SubExecutionParams } from '../domain/repository/ExecutionRepository';
+import type { ExecutionRepository, CreateExecutionOptions } from '../domain/repository/ExecutionRepository';
 import type { ExecutionStatus, TriggerType } from '../domain/model/ExecutionStatus';
 import type { StepEvent } from '../domain/model/StepEvent';
 
@@ -33,7 +33,10 @@ function rowToExecution(row: Record<string, unknown>): Execution {
     errorMessage: row.error_message as string | undefined,
     parentExecutionId: row.parent_execution_id as string | undefined,
     parentStepIndex: row.parent_step_index as number | undefined,
-    iterationIndex: row.iteration_index as number | undefined
+    iterationIndex: row.iteration_index as number | undefined,
+    inputsJson: row.inputs_json as string | undefined,
+    sourceExecutionId: row.source_execution_id as string | undefined,
+    retryFromStep: row.retry_from_step as number | undefined
   });
 }
 
@@ -160,19 +163,22 @@ export class SqliteExecutionRepository implements ExecutionRepository {
     return execution;
   }
 
-  create(workflowId: string, triggerType: TriggerType, subParams?: SubExecutionParams): Execution {
+  create(workflowId: string, triggerType: TriggerType, options?: CreateExecutionOptions): Execution {
     const id = uuidv4();
     const now = new Date().toISOString();
 
     const stmt = this.db.prepare(`
-      INSERT INTO executions (id, workflow_id, trigger_type, status, started_at, parent_execution_id, parent_step_index, iteration_index)
-      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
+      INSERT INTO executions (id, workflow_id, trigger_type, status, started_at, parent_execution_id, parent_step_index, iteration_index, inputs_json, source_execution_id, retry_from_step)
+      VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       id, workflowId, triggerType, now,
-      subParams?.parentExecutionId ?? null,
-      subParams?.parentStepIndex ?? null,
-      subParams?.iterationIndex ?? null
+      options?.parentExecutionId ?? null,
+      options?.parentStepIndex ?? null,
+      options?.iterationIndex ?? null,
+      options?.inputsJson ?? null,
+      options?.sourceExecutionId ?? null,
+      options?.retryFromStep ?? null
     );
 
     return this.findById(id)!;

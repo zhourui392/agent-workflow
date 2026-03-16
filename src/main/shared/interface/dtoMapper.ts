@@ -76,7 +76,9 @@ export function executionToDTO(e: Execution): ExecutionDTO {
     stepExecutions: e.stepExecutions?.map(stepExecutionToDTO),
     parentExecutionId: e.parentExecutionId,
     parentStepIndex: e.parentStepIndex,
-    iterationIndex: e.iterationIndex
+    iterationIndex: e.iterationIndex,
+    sourceExecutionId: e.sourceExecutionId,
+    retryFromStep: e.retryFromStep
   };
 }
 

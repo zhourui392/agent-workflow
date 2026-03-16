@@ -15,6 +15,8 @@ import { RuleValidator } from '../src/main/execution/domain/service/RuleValidato
 import type { WorkflowLoader } from '../src/main/execution/domain/service/PipelineOrchestrator';
 import {
   createTestWorkflow,
+  createTestExecution,
+  createTestStepExecution,
   createMockExecutionRepository,
   createMockStepExecutor,
   createMockProgressNotifier,
@@ -50,7 +52,7 @@ describe('PipelineOrchestrator', () => {
     const workflow = createTestWorkflow();
     const executionId = await orchestrator.execute(workflow, {}, 'manual');
     expect(executionId).toBe('exec-001');
-    expect(execRepo.create).toHaveBeenCalledWith('wf-001', 'manual');
+    expect(execRepo.create).toHaveBeenCalledWith('wf-001', 'manual', expect.objectContaining({}));
   });
 
   it('should execute all steps in order', async () => {
@@ -544,5 +546,206 @@ describe('PipelineOrchestrator', () => {
 
     // 1 次 Fetch + 2 次 forEach 迭代
     expect(stepExecutor.execute).toHaveBeenCalledTimes(3);
+  });
+
+  // ===========================================================================
+  // 运行时工作空间覆盖
+  // ===========================================================================
+
+  describe('运行时工作空间覆盖', () => {
+    it('should pass RunOptions.workingDirectory to config merge', async () => {
+      const workflow = createTestWorkflow({ workingDirectory: '/default/path' });
+
+      await orchestrator.execute(workflow, {}, 'manual', { workingDirectory: '/override/path' });
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // mergeWorkflowConfig 应收到 override 的 workingDirectory
+      expect(configService.mergeWorkflowConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ workingDirectory: '/override/path' })
+      );
+    });
+
+    it('should use workflow default when no RunOptions provided', async () => {
+      const workflow = createTestWorkflow({ workingDirectory: '/default/path' });
+
+      await orchestrator.execute(workflow, {}, 'manual');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      expect(configService.mergeWorkflowConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ workingDirectory: '/default/path' })
+      );
+    });
+
+    it('should pass override workingDirectory to buildStepMergedConfig', async () => {
+      const workflow = createTestWorkflow({
+        workingDirectory: '/default/path',
+        steps: [{ name: 'Step 1', prompt: 'Do task' }]
+      });
+
+      await orchestrator.execute(workflow, {}, 'manual', { workingDirectory: '/override/path' });
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // buildStepMergedConfig 的 workflowConfigRef 也应包含 override
+      expect(configService.buildStepMergedConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ workingDirectory: '/override/path' }),
+        expect.anything(),
+        expect.anything(),
+        expect.anything()
+      );
+    });
+  });
+
+  // ===========================================================================
+  // 断点重试
+  // ===========================================================================
+
+  describe('断点重试 (retryFromFailedStep)', () => {
+    it('should skip successful steps and start from failed step', async () => {
+      const workflow = createTestWorkflow({
+        steps: [
+          { name: 'Step 1', prompt: 'Do task 1' },
+          { name: 'Step 2', prompt: 'Do task 2 with {{steps.Step 1.output}}' },
+          { name: 'Step 3', prompt: 'Do task 3' }
+        ]
+      });
+
+      // 源执行: Step 1 成功, Step 2 失败
+      const sourceExecution = createTestExecution({
+        id: 'exec-source',
+        workflowId: 'wf-001',
+        status: 'failed',
+        stepExecutions: [
+          createTestStepExecution({ id: 'se-1', executionId: 'exec-source', stepIndex: 0, status: 'success', outputText: 'result-1' }),
+          createTestStepExecution({ id: 'se-2', executionId: 'exec-source', stepIndex: 1, status: 'failed', errorMessage: 'step 2 error' })
+        ]
+      });
+
+      const retryExecId = await orchestrator.retryFromFailedStep(workflow, sourceExecution, {});
+
+      expect(retryExecId).toBe('exec-001');
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // Step 1 被跳过，Step 2 和 Step 3 被执行
+      expect(stepExecutor.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it('should seed TemplateContext with successful steps outputs', async () => {
+      const workflow = createTestWorkflow({
+        steps: [
+          { name: 'Step 1', prompt: 'Do task 1' },
+          { name: 'Step 2', prompt: 'Use {{steps.Step 1.output}}' }
+        ]
+      });
+
+      const sourceExecution = createTestExecution({
+        id: 'exec-source',
+        status: 'failed',
+        stepExecutions: [
+          createTestStepExecution({ stepIndex: 0, status: 'success', outputText: 'hello-from-step1' }),
+          createTestStepExecution({ stepIndex: 1, status: 'failed' })
+        ]
+      });
+
+      await orchestrator.retryFromFailedStep(workflow, sourceExecution, {});
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // Step 2 的 prompt 应包含 Step 1 的输出
+      const executeCalls = (stepExecutor.execute as ReturnType<typeof vi.fn>).mock.calls;
+      expect(executeCalls[0][0]).toContain('hello-from-step1');
+    });
+
+    it('should create execution with retry triggerType and sourceExecutionId', async () => {
+      const workflow = createTestWorkflow({
+        steps: [{ name: 'Step 1', prompt: 'Do it' }]
+      });
+
+      const sourceExecution = createTestExecution({
+        id: 'exec-source',
+        status: 'failed',
+        stepExecutions: [
+          createTestStepExecution({ stepIndex: 0, status: 'failed' })
+        ]
+      });
+
+      await orchestrator.retryFromFailedStep(workflow, sourceExecution, {});
+
+      expect(execRepo.create).toHaveBeenCalledWith('wf-001', 'retry', expect.objectContaining({
+        sourceExecutionId: 'exec-source',
+        retryFromStep: 0
+      }));
+    });
+
+    it('should start from step 0 when failed step index exceeds current workflow steps', async () => {
+      const workflow = createTestWorkflow({
+        steps: [{ name: 'Step 1', prompt: 'Do it' }]
+      });
+
+      // 源执行的失败步骤 index=2 超出当前工作流步骤数
+      const sourceExecution = createTestExecution({
+        id: 'exec-source',
+        status: 'failed',
+        stepExecutions: [
+          createTestStepExecution({ stepIndex: 0, status: 'success', outputText: 'r1' }),
+          createTestStepExecution({ stepIndex: 1, status: 'success', outputText: 'r2' }),
+          createTestStepExecution({ stepIndex: 2, status: 'failed' })
+        ]
+      });
+
+      await orchestrator.retryFromFailedStep(workflow, sourceExecution, {});
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      // 从 0 开始，执行唯一的 Step 1
+      expect(stepExecutor.execute).toHaveBeenCalledTimes(1);
+      expect(execRepo.create).toHaveBeenCalledWith('wf-001', 'retry', expect.objectContaining({
+        retryFromStep: 0
+      }));
+    });
+
+    it('should support RunOptions override in retry', async () => {
+      const workflow = createTestWorkflow({
+        workingDirectory: '/default',
+        steps: [{ name: 'Step 1', prompt: 'Do it' }]
+      });
+
+      const sourceExecution = createTestExecution({
+        id: 'exec-source',
+        status: 'failed',
+        stepExecutions: [
+          createTestStepExecution({ stepIndex: 0, status: 'failed' })
+        ]
+      });
+
+      await orchestrator.retryFromFailedStep(workflow, sourceExecution, {}, { workingDirectory: '/retry-override' });
+
+      await vi.waitFor(() => {
+        expect(execRepo.updateStatus).toHaveBeenCalledWith('exec-001', 'success');
+      }, { timeout: 2000 });
+
+      expect(configService.mergeWorkflowConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ workingDirectory: '/retry-override' })
+      );
+    });
   });
 });

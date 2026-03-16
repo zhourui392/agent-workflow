@@ -6,4 +6,4 @@
  */
 
 export type ExecutionStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
-export type TriggerType = 'manual' | 'scheduled';
+export type TriggerType = 'manual' | 'scheduled' | 'retry';

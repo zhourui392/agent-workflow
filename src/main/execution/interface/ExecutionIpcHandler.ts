@@ -8,15 +8,17 @@
  */
 
 import { ipcMain } from 'electron';
-import { IdSchema, ExecutionListParamsSchema, validateInput } from '../../shared/interface';
+import { IdSchema, ExecutionListParamsSchema, RetryExecutionSchema, validateInput } from '../../shared/interface';
 import { executionToDTO } from '../../shared/interface/dtoMapper';
 import type { QueryExecutionUseCase } from '../application/QueryExecutionUseCase';
 import type { CancelExecutionUseCase } from '../application/CancelExecutionUseCase';
+import type { RetryExecutionUseCase } from '../application/RetryExecutionUseCase';
 
 export class ExecutionIpcHandler {
   constructor(
     private readonly queryUseCase: QueryExecutionUseCase,
-    private readonly cancelUseCase: CancelExecutionUseCase
+    private readonly cancelUseCase: CancelExecutionUseCase,
+    private readonly retryUseCase: RetryExecutionUseCase
   ) {}
 
   register(): void {
@@ -37,6 +39,14 @@ export class ExecutionIpcHandler {
     ipcMain.handle('executions:children', (_, parentId: unknown) => {
       return this.queryUseCase.getChildExecutions(validateInput(IdSchema, parentId))
         .map(executionToDTO);
+    });
+
+    ipcMain.handle('executions:retry', async (_, params: unknown) => {
+      const validated = validateInput(RetryExecutionSchema, params);
+      return this.retryUseCase.retry(
+        validated.executionId,
+        validated.workingDirectory ? { workingDirectory: validated.workingDirectory } : undefined
+      );
     });
   }
 }

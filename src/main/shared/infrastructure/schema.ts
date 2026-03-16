@@ -116,4 +116,15 @@ export function runMigrations(database: Database.Database): void {
   if (!execColumnNames.includes('iteration_index')) {
     database.exec('ALTER TABLE executions ADD COLUMN iteration_index INTEGER');
   }
+
+  // 执行重试支持
+  if (!execColumnNames.includes('inputs_json')) {
+    database.exec('ALTER TABLE executions ADD COLUMN inputs_json TEXT');
+  }
+  if (!execColumnNames.includes('source_execution_id')) {
+    database.exec('ALTER TABLE executions ADD COLUMN source_execution_id TEXT');
+  }
+  if (!execColumnNames.includes('retry_from_step')) {
+    database.exec('ALTER TABLE executions ADD COLUMN retry_from_step INTEGER');
+  }
 }

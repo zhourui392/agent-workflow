@@ -11,10 +11,22 @@ import type { Execution, ExecutionListParams } from '../model';
 import type { ExecutionStatus, TriggerType } from '../model/ExecutionStatus';
 import type { StepExecution } from '../model/StepExecution';
 
+/**
+ * @deprecated 使用 CreateExecutionOptions 替代
+ */
 export interface SubExecutionParams {
   parentExecutionId: string;
   parentStepIndex: number;
   iterationIndex?: number;
+}
+
+export interface CreateExecutionOptions {
+  parentExecutionId?: string;
+  parentStepIndex?: number;
+  iterationIndex?: number;
+  inputsJson?: string;
+  sourceExecutionId?: string;
+  retryFromStep?: number;
 }
 
 export interface ExecutionRepository {
@@ -24,7 +36,7 @@ export interface ExecutionRepository {
   findByParentExecutionId(parentExecutionId: string): Execution[];
   findByParentExecutionIdWithSteps(parentExecutionId: string): Execution[];
   count(params?: ExecutionListParams): number;
-  create(workflowId: string, triggerType: TriggerType, subParams?: SubExecutionParams): Execution;
+  create(workflowId: string, triggerType: TriggerType, options?: CreateExecutionOptions): Execution;
   updateStatus(id: string, status: ExecutionStatus, errorMessage?: string): void;
   updateCurrentStep(id: string, stepIndex: number): void;
   addTokens(id: string, tokens: number): void;

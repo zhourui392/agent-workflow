@@ -185,8 +185,12 @@ export async function cloneWorkflow(id: string) {
   };
 }
 
-export async function runWorkflow(id: string, inputs?: Record<string, unknown>) {
-  const response = await runWorkflowApi(id, inputs);
+export async function runWorkflow(id: string, inputs?: Record<string, unknown>, workingDirectory?: string) {
+  const options = {
+    ...(inputs && Object.keys(inputs).length > 0 && { inputs }),
+    ...(workingDirectory && { workingDirectory })
+  };
+  const response = await runWorkflowApi(id, Object.keys(options).length > 0 ? options : undefined);
   return {
     data: { execution_id: response.data || '' }
   };

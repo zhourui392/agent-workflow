@@ -3,6 +3,7 @@
  */
 
 export type { ExecutionStatus, TriggerType } from './ExecutionStatus';
+export type { RunOptions } from './RunOptions';
 
 export type {
   StepEventType,

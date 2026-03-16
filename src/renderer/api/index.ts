@@ -128,13 +128,13 @@ export function cloneWorkflow(
  * 执行工作流
  *
  * @param id 工作流ID
- * @param inputs 输入参数
+ * @param options 运行选项（inputs + workingDirectory 覆盖）
  */
 export function runWorkflow(
   id: string,
-  inputs?: Record<string, unknown>
+  options?: { inputs?: Record<string, unknown>; workingDirectory?: string }
 ): Promise<AxiosLikeResponse<string | null>> {
-  return wrapResponse(window.api.runWorkflow(id, inputs ? toPlain(inputs) : undefined));
+  return wrapResponse(window.api.runWorkflow(id, options ? toPlain(options) : undefined));
 }
 
 // ============ Executions API ============
@@ -179,6 +179,20 @@ export function cancelExecution(
   id: string
 ): Promise<AxiosLikeResponse<boolean>> {
   return wrapResponse(window.api.cancelExecution(id));
+}
+
+/**
+ * 重试失败的执行（从失败步骤断点续执行）
+ *
+ * @param executionId 源执行ID
+ * @param workingDirectory 可选的工作空间覆盖
+ */
+export function retryExecution(
+  executionId: string,
+  workingDirectory?: string
+): Promise<AxiosLikeResponse<string>> {
+  const params = { executionId, ...(workingDirectory && { workingDirectory }) };
+  return wrapResponse(window.api.retryExecution(toPlain(params)));
 }
 
 // ============ Config API ============

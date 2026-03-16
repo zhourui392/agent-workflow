@@ -13,9 +13,11 @@
 import type { MergedConfig, StepMergedConfig } from '../../../configuration/domain/model';
 import type { ConfigMergeService, WorkflowConfigRef, StepConfigRef } from '../../../configuration/domain/service/ConfigMergeService';
 import type { ExecutionRepository } from '../repository/ExecutionRepository';
+import type { Execution } from '../model/Execution';
 import type { StepEvent } from '../model/StepEvent';
 import type { StepResult, ValidationResult, ExecutionResult, ExecutionProgressEvent } from '../model/ExecutionResult';
 import type { ExecutionStatus, TriggerType } from '../model/ExecutionStatus';
+import type { RunOptions } from '../model/RunOptions';
 import type { TemplateContext } from './TemplateEngine';
 import { TemplateEngine } from './TemplateEngine';
 import type { CancellationRegistry } from './CancellationRegistry';
@@ -207,22 +209,162 @@ export class PipelineOrchestrator {
   async execute(
     workflow: WorkflowRef,
     inputs: Record<string, unknown>,
-    triggerType: TriggerType
+    triggerType: TriggerType,
+    options?: RunOptions
   ): Promise<string> {
-    const execution = this.executionRepository.create(workflow.id, triggerType);
+    const execution = this.executionRepository.create(workflow.id, triggerType, {
+      inputsJson: Object.keys(inputs).length > 0 ? JSON.stringify(inputs) : undefined
+    });
 
-    this.runPipelineAsync(workflow, execution.id, inputs);
+    this.runPipelineAsync(workflow, execution.id, inputs, options);
 
     return execution.id;
   }
 
   /**
-   * 异步执行流水线（不抛出异常，错误写入执行记录）
+   * 从失败步骤断点重试
+   *
+   * 加载源执行的成功步骤输出，跳过已成功步骤，从失败步骤开始继续执行。
    */
+  async retryFromFailedStep(
+    workflow: WorkflowRef,
+    sourceExecution: Execution,
+    inputs: Record<string, unknown>,
+    options?: RunOptions
+  ): Promise<string> {
+    const retryFromStep = this.findRetryStartStep(sourceExecution, workflow);
+
+    const execution = this.executionRepository.create(workflow.id, 'retry', {
+      sourceExecutionId: sourceExecution.id,
+      retryFromStep,
+      inputsJson: Object.keys(inputs).length > 0 ? JSON.stringify(inputs) : undefined
+    });
+
+    this.runRetryPipelineAsync(workflow, execution.id, inputs, sourceExecution, retryFromStep, options);
+
+    return execution.id;
+  }
+
+  /**
+   * 确定重试起始步骤
+   */
+  private findRetryStartStep(sourceExecution: Execution, workflow: WorkflowRef): number {
+    if (!sourceExecution.stepExecutions || sourceExecution.stepExecutions.length === 0) {
+      return 0;
+    }
+
+    const failedStep = sourceExecution.stepExecutions
+      .filter(s => s.status === 'failed')
+      .sort((a, b) => a.stepIndex - b.stepIndex)[0];
+
+    if (!failedStep) return 0;
+    if (failedStep.stepIndex >= workflow.steps.length) return 0;
+
+    return failedStep.stepIndex;
+  }
+
+  /**
+   * 断点重试异步执行流水线
+   */
+  private async runRetryPipelineAsync(
+    workflow: WorkflowRef,
+    executionId: string,
+    inputs: Record<string, unknown>,
+    sourceExecution: Execution,
+    retryFromStep: number,
+    options?: RunOptions
+  ): Promise<void> {
+    const context: TemplateContext = { inputs, steps: {} };
+    let totalTokens = 0;
+
+    try {
+      // 从源执行的成功步骤恢复 TemplateContext
+      if (sourceExecution.stepExecutions) {
+        for (const stepExec of sourceExecution.stepExecutions) {
+          if (stepExec.status === 'success' && stepExec.stepIndex < retryFromStep) {
+            const stepDef = workflow.steps[stepExec.stepIndex];
+            if (stepDef && context.steps) {
+              context.steps[stepDef.name] = { output: stepExec.outputText || '' };
+            }
+          }
+        }
+      }
+
+      this.executionRepository.updateStatus(executionId, 'running');
+
+      const globalConfig = this.configMergeService.loadGlobalConfig();
+      const workflowConfigRef = this.buildWorkflowConfigRef(workflow, options);
+      const mergedConfig = this.configMergeService.mergeWorkflowConfig(globalConfig, workflowConfigRef);
+
+      for (let i = 0; i < workflow.steps.length; i++) {
+        if (this.cancellationRegistry?.isCancellationRequested(executionId)) {
+          this.cancellationRegistry.clear(executionId);
+          this.executionRepository.updateStatus(executionId, 'cancelled', '用户取消');
+          return;
+        }
+
+        // 跳过已成功的步骤
+        if (i < retryFromStep) {
+          continue;
+        }
+
+        const step = workflow.steps[i];
+        const onFailure = step.onFailure || workflow.onFailure;
+
+        let stepResult: StepRunResult;
+        if (step.type === 'subWorkflow') {
+          stepResult = await this.runSubWorkflowStep(step, i, executionId, context);
+        } else if (step.type === 'dataSplit') {
+          stepResult = await this.runDataSplitStep(step, i, executionId, workflow, mergedConfig, context, options);
+        } else if (step.type === 'forEach') {
+          stepResult = await this.runForEachStep(step, i, executionId, workflow, mergedConfig, context, options);
+        } else {
+          stepResult = await this.runStep(step, i, executionId, workflow, mergedConfig, context, options);
+        }
+
+        totalTokens += stepResult.tokensUsed;
+
+        if (!stepResult.success) {
+          if (onFailure === 'skip') {
+            continue;
+          }
+          this.executionRepository.updateStatus(executionId, 'failed', stepResult.errorMessage);
+          return;
+        }
+      }
+
+      this.executionRepository.updateStatus(executionId, 'success');
+
+      const executionResult: ExecutionResult = {
+        success: true,
+        totalTokens,
+        outputs: this.flattenContext(context)
+      };
+
+      await this.outputProcessor.process(workflow.output, executionResult, inputs);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.executionRepository.updateStatus(executionId, 'failed', errorMessage);
+    }
+  }
+
+  /**
+   * 构建 WorkflowConfigRef，支持 RunOptions 覆盖 workingDirectory
+   */
+  private buildWorkflowConfigRef(workflow: WorkflowRef, options?: RunOptions): WorkflowConfigRef {
+    return {
+      rules: workflow.rules,
+      skills: workflow.skills,
+      limits: workflow.limits,
+      workingDirectory: options?.workingDirectory ?? workflow.workingDirectory
+    };
+  }
+
   private async runPipelineAsync(
     workflow: WorkflowRef,
     executionId: string,
-    inputs: Record<string, unknown>
+    inputs: Record<string, unknown>,
+    options?: RunOptions
   ): Promise<void> {
     const context: TemplateContext = { inputs, steps: {} };
     let totalTokens = 0;
@@ -231,12 +373,7 @@ export class PipelineOrchestrator {
       this.executionRepository.updateStatus(executionId, 'running');
 
       const globalConfig = this.configMergeService.loadGlobalConfig();
-      const workflowConfigRef: WorkflowConfigRef = {
-        rules: workflow.rules,
-        skills: workflow.skills,
-        limits: workflow.limits,
-        workingDirectory: workflow.workingDirectory
-      };
+      const workflowConfigRef = this.buildWorkflowConfigRef(workflow, options);
       const mergedConfig = this.configMergeService.mergeWorkflowConfig(globalConfig, workflowConfigRef);
 
       for (let i = 0; i < workflow.steps.length; i++) {
@@ -256,15 +393,15 @@ export class PipelineOrchestrator {
           );
         } else if (step.type === 'dataSplit') {
           stepResult = await this.runDataSplitStep(
-            step, i, executionId, workflow, mergedConfig, context
+            step, i, executionId, workflow, mergedConfig, context, options
           );
         } else if (step.type === 'forEach') {
           stepResult = await this.runForEachStep(
-            step, i, executionId, workflow, mergedConfig, context
+            step, i, executionId, workflow, mergedConfig, context, options
           );
         } else {
           stepResult = await this.runStep(
-            step, i, executionId, workflow, mergedConfig, context
+            step, i, executionId, workflow, mergedConfig, context, options
           );
         }
 
@@ -307,7 +444,8 @@ export class PipelineOrchestrator {
     executionId: string,
     workflow: WorkflowRef,
     mergedConfig: MergedConfig,
-    context: TemplateContext
+    context: TemplateContext,
+    options?: RunOptions
   ): Promise<StepRunResult> {
     // 1. 模板变量验证与渲染
     const unresolvedVariables = this.templateEngine.validate(step.prompt, context);
@@ -322,12 +460,7 @@ export class PipelineOrchestrator {
     this.progressNotifier.broadcastStepStart(executionId, stepIndex);
 
     // 3. 构建步骤级配置
-    const workflowConfigRef: WorkflowConfigRef = {
-      rules: workflow.rules,
-      skills: workflow.skills,
-      limits: workflow.limits,
-      workingDirectory: workflow.workingDirectory
-    };
+    const workflowConfigRef = this.buildWorkflowConfigRef(workflow, options);
     const stepConfigRef: StepConfigRef = {
       model: step.model,
       maxTurns: step.maxTurns,
@@ -590,7 +723,8 @@ export class PipelineOrchestrator {
     executionId: string,
     workflow: WorkflowRef,
     mergedConfig: MergedConfig,
-    context: TemplateContext
+    context: TemplateContext,
+    options?: RunOptions
   ): Promise<StepRunResult> {
     this.executionRepository.updateCurrentStep(executionId, stepIndex);
     const stepExecution = this.executionRepository.createStepExecution(
@@ -599,10 +733,7 @@ export class PipelineOrchestrator {
     this.progressNotifier.broadcastStepStart(executionId, stepIndex);
 
     // 构建步骤级配置（所有迭代共用）
-    const workflowConfigRef: WorkflowConfigRef = {
-      rules: workflow.rules, skills: workflow.skills,
-      limits: workflow.limits, workingDirectory: workflow.workingDirectory
-    };
+    const workflowConfigRef = this.buildWorkflowConfigRef(workflow, options);
     const stepConfigRef: StepConfigRef = {
       model: step.model, maxTurns: step.maxTurns, skillIds: step.skillIds
     };
@@ -770,7 +901,8 @@ export class PipelineOrchestrator {
     executionId: string,
     workflow: WorkflowRef,
     mergedConfig: MergedConfig,
-    context: TemplateContext
+    context: TemplateContext,
+    options?: RunOptions
   ): Promise<StepRunResult> {
     this.executionRepository.updateCurrentStep(executionId, stepIndex);
     const stepExecution = this.executionRepository.createStepExecution(
@@ -798,12 +930,7 @@ export class PipelineOrchestrator {
         const aiPrompt = step.aiPrompt || defaultPrompt;
         const fullPrompt = `${aiPrompt}\n\n${renderedInput}`;
 
-        const workflowConfigRef: WorkflowConfigRef = {
-          rules: workflow.rules,
-          skills: workflow.skills,
-          limits: workflow.limits,
-          workingDirectory: workflow.workingDirectory
-        };
+        const workflowConfigRef = this.buildWorkflowConfigRef(workflow, options);
         const stepConfigRef: StepConfigRef = {};
         const stepConfig = this.configMergeService.buildStepMergedConfig(
           mergedConfig, workflowConfigRef, stepConfigRef, executionId, stepIndex

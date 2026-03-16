@@ -10,12 +10,13 @@
 
 import type { Workflow } from '../../workflow/domain/model';
 import type { TriggerType } from '../domain/model/ExecutionStatus';
+import type { RunOptions } from '../domain/model/RunOptions';
 import type { PipelineOrchestrator } from '../domain/service/PipelineOrchestrator';
 
 export class ExecutePipelineUseCase {
   constructor(private readonly orchestrator: PipelineOrchestrator) {}
 
-  async execute(workflow: Workflow, inputs: Record<string, unknown>, triggerType: TriggerType): Promise<string> {
-    return this.orchestrator.execute(workflow, inputs, triggerType);
+  async execute(workflow: Workflow, inputs: Record<string, unknown>, triggerType: TriggerType, options?: RunOptions): Promise<string> {
+    return this.orchestrator.execute(workflow, inputs, triggerType, options);
   }
 }

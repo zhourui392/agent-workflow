@@ -70,8 +70,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
     return data;
   }
 
-  async function run(id: string, inputs?: Record<string, unknown>) {
-    const { data } = await runWorkflow(id, inputs)
+  async function run(id: string, inputs?: Record<string, unknown>, workingDirectory?: string) {
+    const { data } = await runWorkflow(id, inputs, workingDirectory)
     return data.execution_id
   }
 

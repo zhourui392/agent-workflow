@@ -3,6 +3,8 @@ export {
   CreateWorkflowSchema,
   UpdateWorkflowSchema,
   RunWorkflowInputsSchema,
+  RunWorkflowOptionsSchema,
+  RetryExecutionSchema,
   ExecutionListParamsSchema,
   CreateSkillSchema,
   UpdateSkillSchema,

@@ -37,6 +37,7 @@ import { PipelineOrchestrator } from './execution/domain/service/PipelineOrchest
 import { ExecutePipelineUseCase } from './execution/application/ExecutePipelineUseCase';
 import { QueryExecutionUseCase } from './execution/application/QueryExecutionUseCase';
 import { CancelExecutionUseCase } from './execution/application/CancelExecutionUseCase';
+import { RetryExecutionUseCase } from './execution/application/RetryExecutionUseCase';
 import { CancellationRegistry } from './execution/domain/service/CancellationRegistry';
 import { RuleValidator } from './execution/domain/service/RuleValidator';
 import { WorkflowLoaderAdapter } from './execution/infrastructure/WorkflowLoaderAdapter';
@@ -97,6 +98,7 @@ export function bootstrap(): AppContext {
   const executePipelineUseCase = new ExecutePipelineUseCase(pipelineOrchestrator);
   const queryExecutionUseCase = new QueryExecutionUseCase(executionRepo);
   const cancelExecutionUseCase = new CancelExecutionUseCase(executionRepo, cancellationRegistry);
+  const retryExecutionUseCase = new RetryExecutionUseCase(executionRepo, pipelineOrchestrator, workflowLoader);
 
   // === Scheduling Context ===
   const scheduler = new NodeCronScheduler();
@@ -111,7 +113,7 @@ export function bootstrap(): AppContext {
 
   // === IPC Handlers ===
   const workflowIpcHandler = new WorkflowIpcHandler(workflowAppService);
-  const executionIpcHandler = new ExecutionIpcHandler(queryExecutionUseCase, cancelExecutionUseCase);
+  const executionIpcHandler = new ExecutionIpcHandler(queryExecutionUseCase, cancelExecutionUseCase, retryExecutionUseCase);
   const skillIpcHandler = new SkillIpcHandler(skillAppService);
   const configIpcHandler = new ConfigIpcHandler(globalConfigAppService);
 

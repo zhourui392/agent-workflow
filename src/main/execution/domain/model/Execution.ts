@@ -44,6 +44,9 @@ export class Execution extends Entity {
   readonly parentExecutionId?: string;
   readonly parentStepIndex?: number;
   readonly iterationIndex?: number;
+  readonly inputsJson?: string;
+  readonly sourceExecutionId?: string;
+  readonly retryFromStep?: number;
 
   constructor(props: {
     id: string;
@@ -62,6 +65,9 @@ export class Execution extends Entity {
     parentExecutionId?: string;
     parentStepIndex?: number;
     iterationIndex?: number;
+    inputsJson?: string;
+    sourceExecutionId?: string;
+    retryFromStep?: number;
   }) {
     super(props.id, props.startedAt, props.updatedAt ?? props.startedAt);
     this.workflowId = props.workflowId;
@@ -77,6 +83,9 @@ export class Execution extends Entity {
     this.parentExecutionId = props.parentExecutionId;
     this.parentStepIndex = props.parentStepIndex;
     this.iterationIndex = props.iterationIndex;
+    this.inputsJson = props.inputsJson;
+    this.sourceExecutionId = props.sourceExecutionId;
+    this.retryFromStep = props.retryFromStep;
   }
 
   get status(): ExecutionStatus { return this._status; }

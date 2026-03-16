@@ -31,7 +31,7 @@ export interface ElectronAPI {
   deleteWorkflow: (id: string) => Promise<boolean>;
   toggleWorkflow: (id: string) => Promise<WorkflowDTO | null>;
   cloneWorkflow: (id: string) => Promise<WorkflowDTO | null>;
-  runWorkflow: (id: string, inputs?: Record<string, unknown>) => Promise<string | null>;
+  runWorkflow: (id: string, options?: { inputs?: Record<string, unknown>; workingDirectory?: string }) => Promise<string | null>;
 
   // Executions
   getExecutions: (params?: ExecutionListParams) => Promise<ExecutionDTO[]>;
@@ -40,6 +40,7 @@ export interface ElectronAPI {
 
   // Executions (actions)
   cancelExecution: (id: string) => Promise<boolean>;
+  retryExecution: (params: { executionId: string; workingDirectory?: string }) => Promise<string>;
 
   // Config
   getConfig: () => Promise<GlobalConfig>;
@@ -70,13 +71,14 @@ const api: ElectronAPI = {
   deleteWorkflow: (id) => ipcRenderer.invoke('workflows:delete', id),
   toggleWorkflow: (id) => ipcRenderer.invoke('workflows:toggle', id),
   cloneWorkflow: (id) => ipcRenderer.invoke('workflows:clone', id),
-  runWorkflow: (id, inputs) => ipcRenderer.invoke('workflows:run', id, inputs),
+  runWorkflow: (id, options) => ipcRenderer.invoke('workflows:run', id, options),
 
   // Executions
   getExecutions: (params) => ipcRenderer.invoke('executions:list', params),
   getExecution: (id) => ipcRenderer.invoke('executions:get', id),
   getChildExecutions: (parentId) => ipcRenderer.invoke('executions:children', parentId),
   cancelExecution: (id) => ipcRenderer.invoke('executions:cancel', id),
+  retryExecution: (params) => ipcRenderer.invoke('executions:retry', params),
 
   // Config
   getConfig: () => ipcRenderer.invoke('config:get'),

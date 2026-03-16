@@ -19,6 +19,7 @@ export type { RetryConfig } from './workflow/domain/model/Workflow';
 // Execution context
 export { Execution, StepExecution } from './execution/domain/model';
 export type { ExecutionListParams } from './execution/domain/model';
+export type { RunOptions } from './execution/domain/model';
 export type { ExecutionStatus, TriggerType } from './execution/domain/model/ExecutionStatus';
 export type { StepEvent, StepEventType, InitEvent, TextEvent, ToolCallEvent, ToolResultEvent, TurnEndEvent, ResultEvent, ErrorEvent } from './execution/domain/model/StepEvent';
 export type { StepResult, ValidationResult, ExecutionResult, ExecutionProgressEvent } from './execution/domain/model/ExecutionResult';
@@ -92,6 +93,8 @@ export interface ExecutionDTO {
   parentExecutionId?: string;
   parentStepIndex?: number;
   iterationIndex?: number;
+  sourceExecutionId?: string;
+  retryFromStep?: number;
 }
 
 export interface SkillDTO {

@@ -7,7 +7,7 @@ import {
   IdSchema,
   CreateWorkflowSchema,
   UpdateWorkflowSchema,
-  RunWorkflowInputsSchema,
+  RunWorkflowOptionsSchema,
   validateInput
 } from '../../shared/interface';
 import { workflowToDTO } from '../../shared/interface/dtoMapper';
@@ -52,10 +52,12 @@ export class WorkflowIpcHandler {
       return w ? workflowToDTO(w) : null;
     });
 
-    ipcMain.handle('workflows:run', async (_, id: unknown, inputs?: unknown) => {
+    ipcMain.handle('workflows:run', async (_, id: unknown, options?: unknown) => {
+      const validated = validateInput(RunWorkflowOptionsSchema, options);
       return this.service.run(
         validateInput(IdSchema, id),
-        validateInput(RunWorkflowInputsSchema, inputs) || {}
+        validated?.inputs || {},
+        validated?.workingDirectory ? { workingDirectory: validated.workingDirectory } : undefined
       );
     });
   }
