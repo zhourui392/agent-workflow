@@ -124,6 +124,40 @@ describe('mergeConfig', () => {
   })
 })
 
+// ========== mergeConfig with mcpServers ==========
+
+describe('mergeConfig with mcpServers', () => {
+  it('全局 mcpServers 透传到合并配置', () => {
+    const global: GlobalConfig = {
+      mcpServers: {
+        playwright: { command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-playwright'] }
+      }
+    }
+    const workflow = createWorkflow()
+
+    const merged = mergeConfig(global, workflow)
+    expect(merged.mcpServers).toEqual({
+      playwright: { command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-playwright'] }
+    })
+  })
+
+  it('无 mcpServers 时不设置', () => {
+    const global: GlobalConfig = {}
+    const workflow = createWorkflow()
+
+    const merged = mergeConfig(global, workflow)
+    expect(merged.mcpServers).toBeUndefined()
+  })
+
+  it('空 mcpServers 对象不设置', () => {
+    const global: GlobalConfig = { mcpServers: {} }
+    const workflow = createWorkflow()
+
+    const merged = mergeConfig(global, workflow)
+    expect(merged.mcpServers).toBeUndefined()
+  })
+})
+
 // ========== buildAllowedTools ==========
 
 describe('buildAllowedTools', () => {
@@ -150,6 +184,30 @@ describe('buildAllowedTools', () => {
   it('基础工具无 Skills 时返回基础工具', () => {
     const result = service.buildAllowedTools(['Read', 'Write'], false)
     expect(result).toEqual(['Read', 'Write'])
+  })
+
+  it('有 mcpServers 时自动添加 mcp__<name>__* 模式', () => {
+    const mcpServers = {
+      playwright: { command: 'npx', args: ['-y', '@anthropic-ai/mcp-server-playwright'] },
+      github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] }
+    }
+    const result = service.buildAllowedTools(['Read'], false, mcpServers)
+    expect(result).toContain('mcp__playwright__*')
+    expect(result).toContain('mcp__github__*')
+    expect(result).toContain('Read')
+  })
+
+  it('无 mcpServers 时不添加 mcp 模式', () => {
+    const result = service.buildAllowedTools(['Read'], false, undefined)
+    expect(result).toEqual(['Read'])
+  })
+
+  it('mcp 模式不重复添加', () => {
+    const mcpServers = {
+      playwright: { command: 'npx' }
+    }
+    const result = service.buildAllowedTools(['mcp__playwright__*'], false, mcpServers)
+    expect(result.filter(t => t === 'mcp__playwright__*')).toHaveLength(1)
   })
 })
 

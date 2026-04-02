@@ -192,6 +192,10 @@ function buildQueryOptions(
     })
   };
 
+  if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
+    options.mcpServers = config.mcpServers;
+  }
+
   if (config.model) {
     options.model = config.model;
   }

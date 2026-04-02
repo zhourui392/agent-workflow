@@ -25,6 +25,10 @@ export class GlobalConfigCacheImpl implements GlobalConfigProvider {
     return this.cliConfigLoader.loadClaudeCliSkills();
   }
 
+  loadMcpServers(): Record<string, import('../domain/model/McpServerConfig').McpServerConfig> {
+    return this.cliConfigLoader.loadMcpServers();
+  }
+
   loadDiskConfig(): GlobalConfig {
     return this.diskConfigRepo.getConfig();
   }

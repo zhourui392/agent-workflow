@@ -59,6 +59,7 @@ export function createMockSkillRepository(): SkillRepository {
 export function createMockGlobalConfigProvider(): GlobalConfigProvider {
   return {
     loadCliSkills: vi.fn(() => ({})),
+    loadMcpServers: vi.fn(() => ({})),
     loadDiskConfig: vi.fn(() => ({}))
   };
 }

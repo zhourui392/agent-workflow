@@ -15,6 +15,7 @@
 
 import log from 'electron-log';
 import type { GlobalConfig } from '../model/GlobalConfig';
+import type { McpServerConfig } from '../model/McpServerConfig';
 import type { MergedConfig, StepMergedConfig } from '../model/MergedConfig';
 import type { ReferenceValidationResult } from '../model/ConfigErrors';
 import type { SkillRepository } from '../repository/SkillRepository';
@@ -34,6 +35,7 @@ export interface SkillContent {
  */
 export interface GlobalConfigProvider {
   loadCliSkills(): Record<string, string>;
+  loadMcpServers(): Record<string, McpServerConfig>;
   loadDiskConfig(): GlobalConfig;
 }
 
@@ -104,6 +106,13 @@ export class ConfigMergeService {
       Object.assign(config.skills, diskConfig.skills);
     }
 
+    const cliMcpServers = this.globalConfigProvider.loadMcpServers();
+    if (Object.keys(cliMcpServers).length > 0) {
+      config.mcpServers = { ...cliMcpServers, ...diskConfig.mcpServers };
+    } else if (diskConfig.mcpServers && Object.keys(diskConfig.mcpServers).length > 0) {
+      config.mcpServers = diskConfig.mcpServers;
+    }
+
     return config;
   }
 
@@ -134,6 +143,10 @@ export class ConfigMergeService {
     };
     if (Object.keys(mergedSkills).length > 0) {
       merged.skills = mergedSkills;
+    }
+
+    if (globalConfig.mcpServers && Object.keys(globalConfig.mcpServers).length > 0) {
+      merged.mcpServers = { ...globalConfig.mcpServers };
     }
 
     if (workflow.limits) {
@@ -182,7 +195,8 @@ export class ConfigMergeService {
 
     const allowedTools = this.buildAllowedTools(
       baseConfig.allowedTools,
-      hasSkills
+      hasSkills,
+      baseConfig.mcpServers
     );
 
     return {
@@ -228,7 +242,8 @@ export class ConfigMergeService {
    */
   buildAllowedTools(
     baseAllowedTools: string[] | undefined,
-    hasSkills: boolean
+    hasSkills: boolean,
+    mcpServers?: Record<string, McpServerConfig>
   ): string[] {
     const result: string[] = [];
 
@@ -238,6 +253,15 @@ export class ConfigMergeService {
 
     if (hasSkills && !result.includes('Skill')) {
       result.push('Skill');
+    }
+
+    if (mcpServers) {
+      for (const serverName of Object.keys(mcpServers)) {
+        const pattern = `mcp__${serverName}__*`;
+        if (!result.includes(pattern)) {
+          result.push(pattern);
+        }
+      }
     }
 
     return result;

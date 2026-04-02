@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import log from 'electron-log';
+import type { McpServerConfig } from '../domain/model/McpServerConfig';
 
 export interface CliSkillDetail {
   name: string;
@@ -129,7 +130,57 @@ function scanAllCliSkills(): Map<string, SkillContentInternal> {
   return skills;
 }
 
+/**
+ * 解析 .mcp.json 文件，提取合法的 MCP server 配置
+ */
+export function parseMcpJsonFile(filePath: string): Record<string, McpServerConfig> {
+  const content = readFileOrNull(filePath);
+  if (!content) return {};
+
+  try {
+    const parsed = JSON.parse(content);
+    if (!parsed || typeof parsed !== 'object' || !parsed.mcpServers || typeof parsed.mcpServers !== 'object') {
+      return {};
+    }
+
+    const result: Record<string, McpServerConfig> = {};
+    for (const [name, config] of Object.entries(parsed.mcpServers)) {
+      if (typeof config !== 'object' || config === null) continue;
+      const cfg = config as Record<string, unknown>;
+      if (typeof cfg.command !== 'string') continue;
+
+      const entry: McpServerConfig = { command: cfg.command };
+      if (Array.isArray(cfg.args) && cfg.args.every((a: unknown) => typeof a === 'string')) {
+        entry.args = cfg.args as string[];
+      }
+      if (cfg.env && typeof cfg.env === 'object' && !Array.isArray(cfg.env)) {
+        const env: Record<string, string> = {};
+        for (const [k, v] of Object.entries(cfg.env as Record<string, unknown>)) {
+          if (typeof v === 'string') env[k] = v;
+        }
+        if (Object.keys(env).length > 0) entry.env = env;
+      }
+      result[name] = entry;
+    }
+
+    return result;
+  } catch (error) {
+    log.warn(`Failed to parse MCP config file: ${filePath}`, error);
+    return {};
+  }
+}
+
 export class CliConfigLoader {
+  /**
+   * 加载 ~/.claude/.mcp.json 中的 MCP server 配置
+   */
+  loadMcpServers(): Record<string, McpServerConfig> {
+    const mcpJsonPath = path.join(os.homedir(), '.claude', '.mcp.json');
+    const servers = parseMcpJsonFile(mcpJsonPath);
+    log.debug('Loaded MCP servers from CLI config', { count: Object.keys(servers).length });
+    return servers;
+  }
+
   loadClaudeCliSkills(): Record<string, string> {
     const skills = scanAllCliSkills();
     log.debug('Loaded Claude CLI skills', { count: skills.size });
