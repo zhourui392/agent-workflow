@@ -66,6 +66,27 @@ export function initializeTables(database: Database.Database): void {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      agent_type TEXT NOT NULL,
+      working_dir TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      resume_id TEXT,
+      title TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_sessions_created_at ON chat_sessions(created_at);
+
     CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON executions(workflow_id);
     CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
     CREATE INDEX IF NOT EXISTS idx_step_executions_execution_id ON step_executions(execution_id);

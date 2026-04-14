@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { McpServerConfig } from '../domain/model/McpServerConfig';
 
 export interface CliSkillDetail {

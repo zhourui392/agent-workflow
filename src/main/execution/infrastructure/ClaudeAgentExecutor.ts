@@ -10,7 +10,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { StepExecutor } from '../domain/service/PipelineOrchestrator';
 import type { MergedConfig, StepMergedConfig } from '../../configuration/domain/model';
 import type { StepEvent } from '../domain/model/StepEvent';

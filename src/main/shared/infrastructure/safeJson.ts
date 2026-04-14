@@ -5,7 +5,7 @@
  * @since 2026/03/14
  */
 
-import log from 'electron-log';
+import log from './logger';
 
 /**
  * 安全解析 JSON 字符串，解析失败时返回 fallback 值

@@ -8,7 +8,8 @@
  * @since 2026/03/14
  */
 
-import log from 'electron-log';
+import type { FastifyInstance } from 'fastify';
+import log from './shared/infrastructure/logger';
 
 // Shared infrastructure
 import { getDatabase, closeDatabase } from './shared/infrastructure';
@@ -30,7 +31,7 @@ import { WorkflowApplicationService } from './workflow/application/WorkflowAppli
 // Execution context
 import { SqliteExecutionRepository } from './execution/infrastructure/SqliteExecutionRepository';
 import { ClaudeAgentExecutor } from './execution/infrastructure/ClaudeAgentExecutor';
-import { ElectronProgressNotifier } from './execution/infrastructure/ElectronProgressNotifier';
+import type { ProgressNotifier } from './execution/domain/service/PipelineOrchestrator';
 import { OutputHandler } from './execution/infrastructure/OutputHandler';
 import { TemplateEngine } from './execution/domain/service/TemplateEngine';
 import { PipelineOrchestrator } from './execution/domain/service/PipelineOrchestrator';
@@ -46,14 +47,25 @@ import { WorkflowLoaderAdapter } from './execution/infrastructure/WorkflowLoader
 import { NodeCronScheduler } from './scheduling/infrastructure/NodeCronScheduler';
 import { CronSyncUseCase } from './scheduling/application/CronSyncUseCase';
 
-// IPC handlers (Interface layer)
-import { WorkflowIpcHandler } from './workflow/interface/WorkflowIpcHandler';
-import { ExecutionIpcHandler } from './execution/interface/ExecutionIpcHandler';
-import { SkillIpcHandler } from './configuration/interface/SkillIpcHandler';
-import { ConfigIpcHandler } from './configuration/interface/ConfigIpcHandler';
+// REST route handlers (Interface layer)
+import { WorkflowRoutes } from './workflow/interface/WorkflowRoutes';
+import { ExecutionRoutes } from './execution/interface/ExecutionRoutes';
+import { SkillRoutes } from './configuration/interface/SkillRoutes';
+import { ConfigRoutes } from './configuration/interface/ConfigRoutes';
+
+// Chat context
+import { ChatConfig } from './chat/infrastructure/ChatConfig';
+import { CliAgentGateway } from './chat/infrastructure/CliAgentGateway';
+import { SqliteSessionRepository } from './chat/infrastructure/SqliteSessionRepository';
+import { ChatApplicationService } from './chat/application/ChatApplicationService';
+import { ChatRoutes } from './chat/interface/ChatRoutes';
+
+// Filesystem module
+import { FsConfig } from './filesystem/FsConfig';
+import { FsRoutes } from './filesystem/FsRoutes';
 
 export interface AppContext {
-  registerIpc: () => void;
+  registerRoutes: (fastify: FastifyInstance) => void;
   syncCron: () => void;
   stopCron: () => void;
   cleanup: () => void;
@@ -61,8 +73,10 @@ export interface AppContext {
 
 /**
  * 初始化应用上下文，组装所有依赖
+ *
+ * @param progressNotifier 进度通知器（由 server.ts 传入 WebSocket 实现）
  */
-export function bootstrap(): AppContext {
+export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
   log.info('Bootstrapping application context...');
 
   // === Infrastructure ===
@@ -83,7 +97,6 @@ export function bootstrap(): AppContext {
   // === Execution Context ===
   const executionRepo = new SqliteExecutionRepository(db);
   const stepExecutor = new ClaudeAgentExecutor();
-  const progressNotifier = new ElectronProgressNotifier();
   const outputProcessor = new OutputHandler();
   const templateEngine = new TemplateEngine();
   const cancellationRegistry = new CancellationRegistry();
@@ -111,21 +124,34 @@ export function bootstrap(): AppContext {
     workflowRepo, scheduler, executePipelineUseCase
   );
 
-  // === IPC Handlers ===
-  const workflowIpcHandler = new WorkflowIpcHandler(workflowAppService);
-  const executionIpcHandler = new ExecutionIpcHandler(queryExecutionUseCase, cancelExecutionUseCase, retryExecutionUseCase);
-  const skillIpcHandler = new SkillIpcHandler(skillAppService);
-  const configIpcHandler = new ConfigIpcHandler(globalConfigAppService);
+  // === Chat Context ===
+  const chatConfig = new ChatConfig();
+  const chatSessionRepo = new SqliteSessionRepository(db);
+  const agentGateway = new CliAgentGateway(chatConfig);
+  const chatAppService = new ChatApplicationService(chatSessionRepo, agentGateway);
+
+  // === FileSystem Module ===
+  const fsConfig = new FsConfig();
+
+  // === REST Route handlers ===
+  const workflowRoutes = new WorkflowRoutes(workflowAppService);
+  const executionRoutes = new ExecutionRoutes(queryExecutionUseCase, cancelExecutionUseCase, retryExecutionUseCase);
+  const skillRoutes = new SkillRoutes(skillAppService);
+  const configRoutes = new ConfigRoutes(globalConfigAppService);
+  const chatRoutes = new ChatRoutes(chatAppService);
+  const fsRoutes = new FsRoutes(fsConfig);
 
   log.info('Application context bootstrapped successfully');
 
   return {
-    registerIpc: () => {
-      workflowIpcHandler.register();
-      executionIpcHandler.register();
-      skillIpcHandler.register();
-      configIpcHandler.register();
-      log.info('IPC handlers registered');
+    registerRoutes: (fastify: FastifyInstance) => {
+      workflowRoutes.register(fastify);
+      executionRoutes.register(fastify);
+      skillRoutes.register(fastify);
+      configRoutes.register(fastify);
+      chatRoutes.register(fastify);
+      fsRoutes.register(fastify);
+      log.info('REST routes registered');
     },
     syncCron: () => {
       cronSyncUseCase.syncAll();

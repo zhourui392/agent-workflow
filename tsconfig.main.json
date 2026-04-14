@@ -15,6 +15,6 @@
     "sourceMap": true,
     "lib": ["ES2022"]
   },
-  "include": ["src/main/**/*.ts", "src/preload/**/*.ts"],
-  "exclude": ["node_modules", "src/renderer"]
+  "include": ["src/main/**/*.ts"],
+  "exclude": ["node_modules", "src/renderer", "test"]
 }

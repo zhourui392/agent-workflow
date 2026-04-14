@@ -1,0 +1,23 @@
+/**
+ * 会话仓库接口（端口）
+ */
+
+import type { ChatSession } from '../model/ChatSession';
+
+export interface SessionSummary {
+  id: string;
+  agentType: string;
+  workingDir: string;
+  createdAt: Date;
+  title?: string;
+  messageCount: number;
+}
+
+export interface SessionRepository {
+  save(session: ChatSession): void;
+  find(id: string): ChatSession | null;
+  remove(id: string): boolean;
+  updateResumeId(id: string, resumeId: string): void;
+  addMessage(id: string, role: 'user' | 'assistant' | 'system', content: string, timestamp?: Date): void;
+  listSummaries(limit?: number, offset?: number): SessionSummary[];
+}

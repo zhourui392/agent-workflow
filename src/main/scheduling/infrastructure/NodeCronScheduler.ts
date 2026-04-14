@@ -3,7 +3,7 @@
  */
 
 import cron from 'node-cron';
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { SchedulerService } from '../domain/service/SchedulerService';
 
 export class NodeCronScheduler implements SchedulerService {

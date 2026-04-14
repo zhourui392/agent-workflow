@@ -2,7 +2,7 @@
  * 定时任务同步用例
  */
 
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { WorkflowRepository } from '../../workflow/domain/repository/WorkflowRepository';
 import type { SchedulerService } from '../domain/service/SchedulerService';
 import type { PipelinePort } from '../../workflow/application/WorkflowApplicationService';

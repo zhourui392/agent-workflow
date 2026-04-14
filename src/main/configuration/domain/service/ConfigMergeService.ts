@@ -13,7 +13,7 @@
  * - skills: 同名后者覆盖
  */
 
-import log from 'electron-log';
+import log from '../../../shared/infrastructure/logger';
 import type { GlobalConfig } from '../model/GlobalConfig';
 import type { McpServerConfig } from '../model/McpServerConfig';
 import type { MergedConfig, StepMergedConfig } from '../model/MergedConfig';

@@ -6,16 +6,17 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
 import * as yaml from 'yaml';
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { GlobalConfig } from '../domain/model';
 
+/**
+ * 返回 global_config/ 目录路径
+ *
+ * 优先使用 GLOBAL_CONFIG_PATH 环境变量；否则落在 <cwd>/global_config。
+ */
 function getGlobalConfigPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'global_config');
-  }
-  return path.join(__dirname, '..', '..', '..', '..', 'global_config');
+  return process.env.GLOBAL_CONFIG_PATH || path.join(process.cwd(), 'global_config');
 }
 
 function readFileOrNull(filePath: string): string | null {

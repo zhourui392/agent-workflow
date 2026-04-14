@@ -4,7 +4,7 @@
  * 实现 GlobalConfigProvider 接口，添加 TTL 缓存层
  */
 
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { GlobalConfig } from '../domain/model';
 import type { GlobalConfigProvider } from '../domain/service/ConfigMergeService';
 import type { CliConfigLoader } from './CliConfigLoader';

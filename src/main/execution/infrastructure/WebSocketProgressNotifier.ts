@@ -1,47 +1,35 @@
 /**
- * Electron 进度通知器
+ * WebSocket 进度通知器
  *
- * 实现 ProgressNotifier 接口，通过 BrowserWindow IPC 广播执行进度到渲染进程。
- * 每次广播时动态获取窗口列表，确保在窗口创建前实例化也能正常工作。
- *
- * @author zhourui
- * @since 2026/03/14
+ * 实现 ProgressNotifier 接口，通过注入的广播回调把执行事件推送给所有
+ * 已连接的 WebSocket 客户端。与 ElectronProgressNotifier 行为对齐。
  */
 
-import { BrowserWindow } from 'electron';
 import type { ProgressNotifier } from '../domain/service/PipelineOrchestrator';
 import type { ExecutionProgressEvent } from '../domain/model/ExecutionResult';
 import type { StepEvent } from '../domain/model/StepEvent';
 
-export class ElectronProgressNotifier implements ProgressNotifier {
-  /**
-   * 广播进度事件到所有窗口
-   */
+export type BroadcastFn = (event: ExecutionProgressEvent) => void;
+
+export class WebSocketProgressNotifier implements ProgressNotifier {
+  constructor(private readonly broadcastFn: BroadcastFn) {}
+
   broadcast(event: ExecutionProgressEvent): void {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('execution:progress', event);
-      }
+    try {
+      this.broadcastFn(event);
+    } catch {
+      /* 广播失败不应影响 pipeline */
     }
   }
 
-  /**
-   * 广播步骤开始
-   */
   broadcastStepStart(executionId: string, stepIndex: number): void {
     this.broadcast({ executionId, stepIndex, status: 'running' });
   }
 
-  /**
-   * 广播流式事件
-   */
   broadcastStepEvent(executionId: string, stepIndex: number, event: StepEvent): void {
     this.broadcast({ executionId, stepIndex, status: 'running', event });
   }
 
-  /**
-   * 广播步骤完成/失败
-   */
   broadcastStepResult(
     executionId: string,
     stepIndex: number,

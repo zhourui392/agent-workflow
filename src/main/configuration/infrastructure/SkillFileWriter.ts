@@ -6,7 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import { SkillWriteError } from '../domain/model';
 import type { SkillContent, SkillFileWriter as ISkillFileWriter } from '../domain/service/ConfigMergeService';
 

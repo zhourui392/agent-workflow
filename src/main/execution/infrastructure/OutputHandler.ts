@@ -10,7 +10,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { OutputProcessor } from '../domain/service/PipelineOrchestrator';
 import type { WorkflowOutput } from '../../workflow/domain/model';
 import type { ExecutionResult } from '../domain/model/ExecutionResult';

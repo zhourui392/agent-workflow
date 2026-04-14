@@ -24,6 +24,14 @@
           <el-icon><Monitor /></el-icon>
           <span>实时监控</span>
         </el-menu-item>
+        <el-menu-item index="/chat">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>对话</span>
+        </el-menu-item>
+        <el-menu-item index="/files">
+          <el-icon><Folder /></el-icon>
+          <span>文件</span>
+        </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
           <span>全局配置</span>
@@ -51,7 +59,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { List, Clock, Monitor, Setting, MagicStick } from '@element-plus/icons-vue'
+import { List, Clock, Monitor, Setting, MagicStick, ChatDotRound, Folder } from '@element-plus/icons-vue'
 
 const route = useRoute()
 

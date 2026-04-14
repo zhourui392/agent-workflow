@@ -2,7 +2,7 @@
  * 工作流应用服务
  */
 
-import log from 'electron-log';
+import log from '../../shared/infrastructure/logger';
 import type { Workflow, CreateWorkflowRequest, UpdateWorkflowRequest } from '../domain/model';
 import type { WorkflowRepository } from '../domain/repository/WorkflowRepository';
 import type { RunOptions } from '../../execution/domain/model/RunOptions';
