@@ -64,6 +64,10 @@ import { ChatRoutes } from './chat/interface/ChatRoutes';
 import { FsConfig } from './filesystem/FsConfig';
 import { FsRoutes } from './filesystem/FsRoutes';
 
+// Worktree module
+import { WorktreeService } from './worktree/WorktreeService';
+import { WorktreeRoutes } from './worktree/WorktreeRoutes';
+
 export interface AppContext {
   registerRoutes: (fastify: FastifyInstance) => void;
   syncCron: () => void;
@@ -140,6 +144,7 @@ export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
   const configRoutes = new ConfigRoutes(globalConfigAppService);
   const chatRoutes = new ChatRoutes(chatAppService, chatConfig);
   const fsRoutes = new FsRoutes(fsConfig);
+  const worktreeRoutes = new WorktreeRoutes(new WorktreeService());
 
   log.info('Application context bootstrapped successfully');
 
@@ -151,6 +156,7 @@ export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
       configRoutes.register(fastify);
       chatRoutes.register(fastify);
       fsRoutes.register(fastify);
+      worktreeRoutes.register(fastify);
       log.info('REST routes registered');
     },
     syncCron: () => {

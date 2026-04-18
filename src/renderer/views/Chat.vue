@@ -40,6 +40,84 @@
             <el-option label="prod" value="prod" />
             <el-option label="test" value="test" />
           </el-select>
+
+          <el-popover
+            v-if="envKey === 'test' && chat.current"
+            trigger="click"
+            :width="420"
+            placement="bottom-start"
+          >
+            <template #reference>
+              <el-tag type="success" style="cursor: pointer; flex-shrink: 0">
+                🌿 {{ currentBranch || '选择分支' }}
+              </el-tag>
+            </template>
+            <div style="display: flex; gap: 8px; align-items: center">
+              <el-select
+                v-model="selectedBranch"
+                filterable
+                allow-create
+                default-first-option
+                clearable
+                size="small"
+                placeholder="选择或输入分支名"
+                style="flex: 1"
+                :teleported="false"
+              >
+                <el-option v-for="b in savedBranches" :key="b" :label="b" :value="b" />
+              </el-select>
+              <el-button
+                type="primary"
+                size="small"
+                :loading="switching"
+                :disabled="!selectedBranch"
+                @click="doSwitchBranch"
+              >切换</el-button>
+              <el-button
+                size="small"
+                :loading="updating"
+                :disabled="!currentBranch"
+                @click="doUpdateBranch"
+              >更新</el-button>
+              <el-button
+                v-if="currentBranch"
+                size="small"
+                type="info"
+                plain
+                @click="doClearBranch"
+              >还原</el-button>
+            </div>
+            <div v-if="savedBranches.length > 0" style="margin-top: 10px">
+              <el-tag
+                v-for="b in savedBranches"
+                :key="b"
+                closable
+                size="small"
+                :type="b === currentBranch ? 'success' : 'info'"
+                style="margin: 2px; cursor: pointer"
+                @close="doRemoveSavedBranch(b)"
+                @click="selectedBranch = b"
+              >{{ b }}</el-tag>
+            </div>
+            <div v-if="switchResultCreated.length > 0" class="wt-result">
+              <div v-for="r in switchResultCreated" :key="'sw-' + r.name">
+                ✅ {{ r.name }}
+                <span v-if="r.actualBranch && r.actualBranch !== currentBranch" style="color:#e6a23c">
+                  (回退到 {{ r.actualBranch }})
+                </span>
+              </div>
+            </div>
+            <div v-if="updateResult.length > 0" class="wt-result">
+              <div v-for="r in updateResult" :key="'up-' + r.name">
+                <span v-if="r.updated" style="color:#67c23a">✅</span>
+                <span v-else-if="r.skipped" style="color:#909399">◎</span>
+                <span v-else style="color:#f56c6c">✗</span>
+                {{ r.name }}
+                <span style="color:#909399">{{ r.reason }}</span>
+              </div>
+            </div>
+          </el-popover>
+
           <span style="flex: 1"></span>
           <el-button
             v-if="chat.current"
@@ -120,6 +198,16 @@
               @keydown.ctrl.enter.exact.prevent="insertNewline"
             />
             <div class="input-actions">
+              <el-button
+                plain
+                size="small"
+                :disabled="!chat.current || chat.streaming"
+                @click="doClearContext"
+              >
+                <el-icon><Delete /></el-icon>
+                <span>清除上下文</span>
+              </el-button>
+              <span style="flex: 1"></span>
               <el-button v-if="chat.streaming" type="danger" plain @click="chat.stop()">
                 <el-icon><VideoPause /></el-icon>
                 <span>停止</span>
@@ -198,6 +286,12 @@ import {
 import { marked } from 'marked';
 import { useChatStore } from '../stores/chat';
 import { shareSession } from '../api/chat';
+import {
+  switchBranch as apiSwitchBranch,
+  updateBranch as apiUpdateBranch,
+  removeBranch as apiRemoveBranch,
+  type RepoStatus
+} from '../api/worktree';
 import type { FileEntry } from '../api/filesystem';
 import {
   listRoots, listPath, downloadUrl, uploadFile, deleteFile
@@ -212,6 +306,131 @@ const envKey = ref<string | undefined>(undefined);
 const scrollRef = ref<{ setScrollTop: (v: number) => void; wrapRef?: HTMLElement } | null>(null);
 const creating = ref(false);
 const sharing = ref(false);
+
+// === Worktree 状态 ===
+interface WorktreeState { originalWorkingDir: string; currentBranch: string; worktreePath: string }
+const LS_BRANCHES = 'agent_saved_branches';
+const LS_WORKTREE = 'agent_worktree_state';
+
+const savedBranches = ref<string[]>(loadSavedBranches());
+const selectedBranch = ref<string>('');
+const switching = ref(false);
+const updating = ref(false);
+const switchResultCreated = ref<RepoStatus[]>([]);
+const updateResult = ref<RepoStatus[]>([]);
+
+function loadSavedBranches(): string[] {
+  try {
+    const raw = localStorage.getItem(LS_BRANCHES);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function persistSavedBranches(): void {
+  localStorage.setItem(LS_BRANCHES, JSON.stringify(savedBranches.value));
+}
+
+function loadAllState(): Record<string, WorktreeState> {
+  try {
+    const raw = localStorage.getItem(LS_WORKTREE);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function saveSessionState(sessionId: string, state: WorktreeState | null): void {
+  const all = loadAllState();
+  if (state) all[sessionId] = state; else delete all[sessionId];
+  localStorage.setItem(LS_WORKTREE, JSON.stringify(all));
+}
+function getSessionState(sessionId: string): WorktreeState | null {
+  const all = loadAllState();
+  return all[sessionId] ?? null;
+}
+
+const currentBranch = computed<string>(() => {
+  const id = chat.current?.id;
+  if (!id) return '';
+  return getSessionState(id)?.currentBranch ?? '';
+});
+
+async function doSwitchBranch(): Promise<void> {
+  if (!chat.current || !selectedBranch.value) return;
+  const sid = chat.current.id;
+  const branch = selectedBranch.value.trim();
+  const existing = getSessionState(sid);
+  const workspace = existing?.originalWorkingDir ?? chat.current.workingDir;
+  switching.value = true;
+  switchResultCreated.value = [];
+  try {
+    const resp = await apiSwitchBranch(workspace, branch);
+    switchResultCreated.value = resp.data.repos.filter(r => r.created);
+    saveSessionState(sid, {
+      originalWorkingDir: workspace,
+      currentBranch: branch,
+      worktreePath: resp.data.worktreePath
+    });
+    if (!savedBranches.value.includes(branch)) {
+      savedBranches.value.push(branch);
+      persistSavedBranches();
+    }
+    await chat.changeWorkingDir(resp.data.worktreePath);
+    ElMessage.success(`已切换到分支 ${branch}`);
+  } catch (e) {
+    ElMessage.error('切换失败');
+  } finally {
+    switching.value = false;
+  }
+}
+
+async function doUpdateBranch(): Promise<void> {
+  if (!chat.current) return;
+  const sid = chat.current.id;
+  const state = getSessionState(sid);
+  if (!state) return;
+  updating.value = true;
+  updateResult.value = [];
+  try {
+    const resp = await apiUpdateBranch(state.originalWorkingDir, state.currentBranch);
+    updateResult.value = resp.data.repos;
+    const ok = resp.data.repos.filter(r => r.updated || r.skipped).length;
+    const fail = resp.data.repos.length - ok;
+    if (fail === 0) ElMessage.success(`${state.currentBranch} 更新完成 (${ok}/${resp.data.repos.length})`);
+    else ElMessage.warning(`${fail} 个仓库更新失败`);
+  } catch (e) {
+    ElMessage.error('更新失败');
+  } finally {
+    updating.value = false;
+  }
+}
+
+async function doClearBranch(): Promise<void> {
+  if (!chat.current) return;
+  const sid = chat.current.id;
+  const state = getSessionState(sid);
+  if (!state) return;
+  try {
+    await chat.changeWorkingDir(state.originalWorkingDir);
+    saveSessionState(sid, null);
+    selectedBranch.value = '';
+    switchResultCreated.value = [];
+    updateResult.value = [];
+    ElMessage.success('已还原工作目录');
+  } catch (e) {
+    ElMessage.error('还原失败');
+  }
+}
+
+async function doRemoveSavedBranch(branch: string): Promise<void> {
+  savedBranches.value = savedBranches.value.filter(b => b !== branch);
+  persistSavedBranches();
+  if (chat.current) {
+    const state = getSessionState(chat.current.id);
+    if (state && state.currentBranch === branch) {
+      try { await doClearBranch(); } catch { /* noop */ }
+      try {
+        await apiRemoveBranch(state.originalWorkingDir, branch);
+      } catch { /* best effort */ }
+    }
+  }
+}
 
 async function doShare(): Promise<void> {
   if (!chat.current) return;
@@ -296,6 +515,16 @@ function send(): void {
 }
 
 function insertNewline(): void { draft.value += '\n'; }
+
+async function doClearContext(): Promise<void> {
+  if (!chat.current) return;
+  try {
+    await chat.clearContext();
+    ElMessage.success('上下文已清除');
+  } catch (e) {
+    ElMessage.error('清除失败');
+  }
+}
 
 async function openWorkspaceDialog(): Promise<void> {
   showWorkspaceDialog.value = true;
@@ -476,7 +705,9 @@ onMounted(() => { void chat.ensureCurrent(); });
 @keyframes dot { 0%, 80%, 100% { opacity: .3; } 40% { opacity: 1; } }
 
 .input-area { padding: 12px 16px; border-top: 1px solid #ebeef5; background: #fafafa; }
-.input-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.wt-result { margin-top: 10px; font-size: 12px; color: #606266; max-height: 200px; overflow-y: auto; }
+.wt-result > div { padding: 2px 0; }
+.input-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 
 .fs-item {
   display: flex; align-items: center; gap: 8px;
