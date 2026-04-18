@@ -146,7 +146,7 @@
                 <pre class="text">{{ m.content }}</pre>
               </div>
               <div v-else-if="m.role === 'assistant'" class="bubble assistant">
-                <StepEventViewer :events="m.events" :output-text="m.content" />
+                <ChatAssistantRenderer :events="m.events" :output-text="m.content" />
               </div>
               <div v-else class="bubble system">
                 <pre class="text">{{ m.content }}</pre>
@@ -155,7 +155,7 @@
 
             <div v-if="chat.streaming" class="message assistant">
               <div class="bubble assistant streaming">
-                <StepEventViewer v-if="chat.liveEvents.length > 0" :events="chat.liveEvents" />
+                <ChatAssistantRenderer v-if="chat.liveEvents.length > 0" :events="chat.liveEvents" />
                 <div v-else class="loading-dots"><span></span><span></span><span></span></div>
               </div>
             </div>
@@ -257,7 +257,7 @@ import {
   Folder, Document, FolderOpened, Upload, Plus, Delete,
   Refresh, VideoPause, Promotion, Share
 } from '@element-plus/icons-vue';
-import StepEventViewer from '../components/StepEventViewer.vue';
+import ChatAssistantRenderer from '../components/ChatAssistantRenderer.vue';
 import { useChatStore } from '../stores/chat';
 import { shareSession } from '../api/chat';
 import {

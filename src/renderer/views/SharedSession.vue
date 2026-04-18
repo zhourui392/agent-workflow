@@ -26,7 +26,7 @@
           <pre class="text">{{ m.content }}</pre>
         </div>
         <div v-else-if="m.role === 'assistant'" class="bubble assistant">
-          <StepEventViewer :events="m.events" :output-text="m.content" />
+          <ChatAssistantRenderer :events="m.events" :output-text="m.content" />
         </div>
         <div v-else class="bubble system">
           <pre class="text">{{ m.content }}</pre>
@@ -40,7 +40,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import StepEventViewer from '../components/StepEventViewer.vue';
+import ChatAssistantRenderer from '../components/ChatAssistantRenderer.vue';
 import { getSharedSession, type SharedSessionDTO, type ChatMessageDTO } from '../api/chat';
 import { parseAssistantContentToEvents } from '../utils/streamJsonParser';
 import type { StepEvent } from '../../main/types';
