@@ -10,43 +10,51 @@ import {
   streamMessage
 } from '../api/chat';
 
-export type Segment =
-  | { type: 'text'; content: string }
-  | { type: 'tool'; name: string; content: string };
+export interface TextSegment { type: 'text'; content: string }
+export interface ToolSegment { type: 'tool'; id?: string; name: string; content: string }
+export type Segment = TextSegment | ToolSegment;
 
 /**
- * 将一条 assistant 输出（stream-json 多行聚合文本）解析为可渲染 segments。
- * 严格对齐 agent-web/js/app.js 的解析策略：
- * - stream_event + content_block_start + tool_use → push 新 tool 段
- * - stream_event + content_block_delta(text_delta)   → 追加到最后一个 text 段
- * - stream_event + content_block_delta(input_json)   → 追加到最后一个 tool 段
- * - assistant.message.content[]                       → 仅当已有 segments 为空时用完整块替换
- * - user.message.content[].tool_result                → **合并**进最后一个 tool 段（而非新段）
- * - result                                            → 仅当无内容时作为 fallback 文本
- * - tool_use_result.file → 格式化为 [文件: path (N行)]
- * - 工具结果超 2000 字截断
+ * 将 stream-json 原始行解析为可渲染的 segments。
+ * 原则：不丢数据 + 按 tool_use.id 去重合并。
+ * - stream_event → 立即打开 tool 段 / 增量追加文字或 input json
+ * - assistant.message.content[] → 按 id 查找并补齐 tool 输入；text 已有则跳过（防重复），无则补
+ * - user.message.content[].tool_result → 按 tool_use_id 合并进对应 tool 段；找不到则回溯末尾 tool
+ * - result → 仅当无任何可见内容时作 fallback
  */
 export function parseChunksToSegments(chunks: string[]): Segment[] {
-  let segments: Segment[] = [];
+  const segments: Segment[] = [];
 
+  const lastText = (): TextSegment | undefined => {
+    const s = segments[segments.length - 1];
+    return s && s.type === 'text' ? s : undefined;
+  };
+  const lastTool = (): ToolSegment | undefined => {
+    for (let j = segments.length - 1; j >= 0; j--) {
+      if (segments[j].type === 'tool') return segments[j] as ToolSegment;
+    }
+    return undefined;
+  };
+  const findToolById = (id: string | undefined): ToolSegment | undefined => {
+    if (!id) return undefined;
+    for (const s of segments) if (s.type === 'tool' && s.id === id) return s;
+    return undefined;
+  };
   const appendText = (text: string): void => {
     if (!text) return;
-    const last = segments[segments.length - 1];
-    if (last && last.type === 'text') { last.content += text; return; }
+    const t = lastText();
+    if (t) { t.content += text; return; }
     segments.push({ type: 'text', content: text });
   };
-
-  const appendToolContent = (content: string): void => {
-    for (let j = segments.length - 1; j >= 0; j--) {
-      if (segments[j].type === 'tool') {
-        (segments[j] as { content: string }).content += content;
-        return;
-      }
-    }
+  const appendToolJson = (partial: string): void => {
+    const t = lastTool();
+    if (t) t.content += partial;
   };
-
-  const hasContent = (): boolean =>
+  const hasVisibleContent = (): boolean =>
     segments.some(s => s.content && s.content.trim() !== '');
+
+  const truncate = (s: string): string =>
+    s.length > 2000 ? s.slice(0, 2000) + `\n... (共 ${s.length} 字符，已截断)` : s;
 
   for (const raw of chunks) {
     const line = raw.trim();
@@ -66,17 +74,24 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
       if (et === 'content_block_start') {
         const block = event.content_block as Record<string, unknown> | undefined;
         if (block?.type === 'tool_use') {
-          segments.push({ type: 'tool', name: String(block.name ?? 'Tool'), content: '' });
+          const id = typeof block.id === 'string' ? block.id : undefined;
+          // 若同 id 已存在则不重复创建
+          if (!findToolById(id)) {
+            segments.push({
+              type: 'tool',
+              id,
+              name: String(block.name ?? 'Tool'),
+              content: ''
+            });
+          }
         }
       } else if (et === 'content_block_delta') {
         const delta = event.delta as Record<string, unknown> | undefined;
         if (!delta) continue;
         if (typeof delta.text === 'string') {
           appendText(delta.text);
-        } else if (delta.type === 'text_delta' && typeof delta.text === 'string') {
-          appendText(delta.text);
         } else if (typeof delta.partial_json === 'string') {
-          appendToolContent(delta.partial_json);
+          appendToolJson(delta.partial_json);
         }
       }
       continue;
@@ -86,17 +101,26 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
       const message = json.message as Record<string, unknown> | undefined;
       const content = message?.content as Array<Record<string, unknown>> | undefined;
       if (!Array.isArray(content)) continue;
-      // 仅当流式阶段没产生内容时，才用完整块替换；否则丢弃（防止重复）
-      if (!hasContent()) {
-        segments = [];
-        for (const c of content) {
-          if (c.type === 'text' && typeof c.text === 'string') {
-            segments.push({ type: 'text', content: c.text });
-          } else if (c.type === 'tool_use') {
+
+      for (const c of content) {
+        if (c.type === 'text' && typeof c.text === 'string') {
+          // 若已经有文本内容（来自 stream_event），跳过；否则补
+          const t = lastText();
+          if (!t || t.content.trim() === '') appendText(c.text);
+        } else if (c.type === 'tool_use') {
+          const cid = typeof c.id === 'string' ? c.id : undefined;
+          const fullInput = c.input ? JSON.stringify(c.input, null, 2) : '';
+          const existing = findToolById(cid);
+          if (existing) {
+            // 用完整 input 替换（partial_json 拼出来的可能不完整）
+            if (fullInput) existing.content = fullInput;
+            if (c.name) existing.name = String(c.name);
+          } else {
             segments.push({
               type: 'tool',
+              id: cid,
               name: String(c.name ?? 'Tool'),
-              content: c.input ? JSON.stringify(c.input, null, 2) : ''
+              content: fullInput
             });
           }
         }
@@ -108,6 +132,7 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
       const message = json.message as Record<string, unknown> | undefined;
       const content = message?.content as Array<Record<string, unknown>> | undefined;
       if (!Array.isArray(content)) continue;
+
       for (const c of content) {
         if (c.type !== 'tool_result') continue;
         let resultText = '';
@@ -126,20 +151,13 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
         }
         if (!resultText && typeof c.content === 'string') resultText = c.content;
         if (!resultText) continue;
-        if (resultText.length > 2000) {
-          resultText = resultText.slice(0, 2000) + `\n... (共 ${resultText.length} 字符，已截断)`;
-        }
-        // 合并到最后一个 tool 段
-        let merged = false;
-        for (let j = segments.length - 1; j >= 0; j--) {
-          if (segments[j].type === 'tool') {
-            (segments[j] as { content: string }).content =
-              ((segments[j] as { content: string }).content || '') + '\n' + resultText;
-            merged = true;
-            break;
-          }
-        }
-        if (!merged) {
+        resultText = truncate(resultText);
+
+        const tid = typeof c.tool_use_id === 'string' ? c.tool_use_id : undefined;
+        const target = findToolById(tid) ?? lastTool();
+        if (target) {
+          target.content = (target.content || '') + '\n' + resultText;
+        } else {
           segments.push({ type: 'tool', name: 'Tool Result', content: resultText });
         }
       }
@@ -147,17 +165,20 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
     }
 
     if (type === 'result' && typeof json.result === 'string') {
-      if (!hasContent()) {
+      if (!hasVisibleContent()) {
         segments.push({ type: 'text', content: json.result });
       }
       continue;
     }
 
-    // system / init / 其他 → 丢弃（不可见事件）
+    // system / init 等不可见事件丢弃
   }
 
-  // 过滤空段
-  return segments.filter(s => s.content && s.content.trim() !== '');
+  // 只过滤掉纯空文本段；空 tool 段保留（显示"调用中…"）
+  return segments.filter(s => {
+    if (s.type === 'text') return s.content.trim() !== '';
+    return true;
+  });
 }
 
 export interface ParsedMessage {
