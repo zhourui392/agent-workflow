@@ -24,6 +24,7 @@ import {
 } from './index';
 
 export interface StepConfig {
+  type?: 'agent' | 'subWorkflow' | 'dataSplit' | 'forEach';
   name: string;
   prompt: string;
   tools?: string[];
@@ -67,9 +68,8 @@ export function workflowToData(workflow: WorkflowDTO): WorkflowData {
     schedule: workflow.schedule || null,
     inputs: workflow.inputs ? { items: workflow.inputs } : undefined,
     steps: workflow.steps.map(step => {
-      // subWorkflow/dataSplit 步骤透传，由 WorkflowEdit 在加载时解析
-      const stepType = (step as Record<string, unknown>).type;
-      if (stepType === 'subWorkflow' || stepType === 'dataSplit' || stepType === 'forEach') {
+      // subWorkflow/dataSplit/forEach 步骤透传，由 WorkflowEdit 在加载时解析
+      if (step.type && step.type !== 'agent') {
         return step as unknown as StepConfig;
       }
       return {
@@ -99,8 +99,7 @@ export function workflowToData(workflow: WorkflowDTO): WorkflowData {
 export function dataToCreateRequest(data: Partial<WorkflowData>) {
   const steps: WorkflowStep[] = (data.steps || []).map(step => {
     // handleSave 已为 subWorkflow/dataSplit/forEach 生成正确的 API 格式，直接透传
-    const stepType = (step as Record<string, unknown>).type;
-    if (stepType === 'subWorkflow' || stepType === 'dataSplit' || stepType === 'forEach') {
+    if (step.type && step.type !== 'agent') {
       return step as unknown as WorkflowStep;
     }
     // Agent 步骤：从表单字段映射到 API 字段
