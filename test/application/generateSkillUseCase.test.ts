@@ -171,6 +171,109 @@ describe('GenerateSkillUseCase', () => {
     expect(draft!.workDir.startsWith(tmpRoot)).toBe(true);
   });
 
+  it('allowedTools 不包含 Bash（生成阶段禁止自测脚本）', async () => {
+    const { useCase, executor } = buildUseCase({
+      executorSideEffect: (workDir) => {
+        const skillDir = path.join(workDir, 'hello');
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(path.join(skillDir, 'SKILL.md'), validSkillMd('hello'), 'utf-8');
+      },
+      executorOutputText: '```skill-result\n{"name":"hello","suggestedTests":["t"]}\n```'
+    });
+
+    const { generationId } = await useCase.start('x');
+    await useCase.waitForCompletion(generationId);
+
+    const config = (executor.execute as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(config.allowedTools).not.toContain('Bash');
+  });
+
+  it('显式设置 maxTurns 预算，避免默认上限导致会话截断', async () => {
+    const { useCase, executor } = buildUseCase({
+      executorSideEffect: (workDir) => {
+        const skillDir = path.join(workDir, 'hello');
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(path.join(skillDir, 'SKILL.md'), validSkillMd('hello'), 'utf-8');
+      },
+      executorOutputText: '```skill-result\n{"name":"hello","suggestedTests":["t"]}\n```'
+    });
+
+    const { generationId } = await useCase.start('x');
+    await useCase.waitForCompletion(generationId);
+
+    const config = (executor.execute as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(typeof config.maxTurns).toBe('number');
+    expect(config.maxTurns).toBeGreaterThan(0);
+  });
+
+  it('system prompt 明确禁止运行或验证脚本', async () => {
+    const { useCase, executor } = buildUseCase({
+      executorSideEffect: (workDir) => {
+        const skillDir = path.join(workDir, 'hello');
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(path.join(skillDir, 'SKILL.md'), validSkillMd('hello'), 'utf-8');
+      },
+      executorOutputText: '```skill-result\n{"name":"hello","suggestedTests":["t"]}\n```'
+    });
+
+    const { generationId } = await useCase.start('x');
+    await useCase.waitForCompletion(generationId);
+
+    const config = (executor.execute as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(config.systemPrompt).toMatch(/禁止|不要|请勿/);
+    expect(config.systemPrompt).toMatch(/运行|执行|验证|测试/);
+  });
+
+  it('system prompt 动态注入 workingDirectory 绝对路径（防止 agent 用 /tmp 式 POSIX 路径）', async () => {
+    const { useCase, executor } = buildUseCase({
+      executorSideEffect: (workDir) => {
+        const skillDir = path.join(workDir, 'hello');
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(path.join(skillDir, 'SKILL.md'), validSkillMd('hello'), 'utf-8');
+      },
+      executorOutputText: '```skill-result\n{"name":"hello","suggestedTests":["t"]}\n```'
+    });
+
+    const { generationId } = await useCase.start('x');
+    await useCase.waitForCompletion(generationId);
+
+    const config = (executor.execute as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(config.systemPrompt).toContain(config.workingDirectory);
+  });
+
+  it('agent 把文件写到 POSIX-mirror 路径（<drive>:\\tmp\\...）时，仍能通过 fallback 救回并搬到 primary workDir', async () => {
+    const { useCase, store } = buildUseCase({
+      executorSideEffect: (workDir) => {
+        // 模拟 Claude CLI on Windows：把 /tmp/... 解析为 <drive>:\tmp\...
+        const sessionDir = path.basename(path.dirname(workDir));          // skill-gen-<id>
+        const tmpRootBase = path.basename(path.dirname(path.dirname(workDir))); // gen-uc-<xxx>（测试里用 mkdtemp 生成）
+        const root = path.parse(workDir).root;
+        const mirrorWork = path.join(root, 'tmp', tmpRootBase, sessionDir, 'work');
+        const mirrorSkill = path.join(mirrorWork, 'mirror-skill');
+        fs.mkdirSync(mirrorSkill, { recursive: true });
+        fs.writeFileSync(path.join(mirrorSkill, 'SKILL.md'), validSkillMd('mirror-skill'), 'utf-8');
+      },
+      executorOutputText: '```skill-result\n{"name":"mirror-skill","suggestedTests":["t"]}\n```'
+    });
+
+    const { generationId } = await useCase.start('x');
+    await useCase.waitForCompletion(generationId);
+
+    const draft = store.get(generationId);
+    expect(draft!.status).toBe('generated');
+    expect(draft!.draftName).toBe('mirror-skill');
+    expect(draft!.draftDir).toBeDefined();
+    // 必须已经搬回 primary workDir，draftDir 指向 primary
+    expect(draft!.draftDir!.startsWith(draft!.workDir)).toBe(true);
+    expect(fs.existsSync(path.join(draft!.draftDir!, 'SKILL.md'))).toBe(true);
+
+    // 清理测试产生的 mirror
+    const sessionDir = path.basename(path.dirname(draft!.workDir));
+    const tmpRootBase = path.basename(path.dirname(path.dirname(draft!.workDir)));
+    const mirrorRoot = path.join(path.parse(draft!.workDir).root, 'tmp', tmpRootBase);
+    fs.rmSync(mirrorRoot, { recursive: true, force: true });
+  });
+
   it('executor 接收到 StepMergedConfig 且包含 plugin-dir 指向 skill-creator 父目录', async () => {
     const { useCase, executor } = buildUseCase({
       executorSideEffect: (workDir) => {

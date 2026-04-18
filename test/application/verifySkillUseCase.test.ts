@@ -91,10 +91,24 @@ describe('VerifySkillUseCase', () => {
 
     const executeCall = (executor.execute as ReturnType<typeof vi.fn>).mock.calls[0];
     const config = executeCall[1];
-    expect(config.skillsDir).toBe(draft.workDir);
     expect(config.hasSkills).toBe(true);
     expect(config.workingDirectory).toContain(`skill-verify-${draft.generationId}`);
     expect(config.workingDirectory).toMatch(new RegExp(`^${tmpRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+
+    // skillsDir 必须是"plugin 包装目录"，而不是 draft.workDir
+    expect(config.skillsDir).not.toBe(draft.workDir);
+    expect(fs.existsSync(path.join(config.skillsDir as string, '.claude-plugin', 'plugin.json'))).toBe(true);
+    expect(fs.existsSync(path.join(config.skillsDir as string, 'skills', draft.draftName!, 'SKILL.md'))).toBe(true);
+
+    // plugin.json 中必须有 name 字段，供 CLI 作为 plugin 命名空间
+    const pluginJson = JSON.parse(
+      fs.readFileSync(path.join(config.skillsDir as string, '.claude-plugin', 'plugin.json'), 'utf-8')
+    );
+    expect(typeof pluginJson.name).toBe('string');
+    expect(pluginJson.name.length).toBeGreaterThan(0);
+
+    // system prompt 要告诉 agent 完整限定名（<pluginName>:<skillName>）
+    expect(config.systemPrompt).toContain(`${pluginJson.name}:${draft.draftName}`);
   });
 
   it('executor 失败 → 广播 error，不广播 done', async () => {

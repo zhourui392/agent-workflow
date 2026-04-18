@@ -24,10 +24,14 @@ import type { SkillGenerationNotifier } from '../domain/service/SkillGenerationN
 import { parseSkillMd, SkillDraftParseError } from '../domain/service/SkillDraftParser';
 import { extractGenerationResult } from '../domain/service/GenerationResultExtractor';
 
-const SKILL_CREATOR_SYSTEM_PROMPT = `你是一个 Skill 创建助手。
+function buildSkillCreatorSystemPrompt(workDir: string): string {
+  return `你是一个 Skill 创建助手。
+
+工作目录（cwd，绝对路径，必须严格使用此前缀）：
+${workDir}
 
 流程：
-1) 在当前工作目录（cwd）下创建一个新 skill 子目录，子目录名必须小写字母/数字/连字符。
+1) 在上述 cwd 下创建一个新 skill 子目录，子目录名必须小写字母/数字/连字符。
 2) 子目录至少包含 SKILL.md（YAML frontmatter：name/description/可选 allowed-tools）。
 3) 需要时在子目录下创建 scripts/、references/、assets/ 等辅助资源。
 4) 使用 skill-creator skill 的最佳实践。
@@ -37,9 +41,17 @@ const SKILL_CREATOR_SYSTEM_PROMPT = `你是一个 Skill 创建助手。
 {"name": "<子目录名（= frontmatter.name）>", "suggestedTests": ["<一个简短的测试 prompt>", "<另一个 prompt>"]}
 \`\`\`
 
-不要把 SKILL.md 的内容塞进回复中，文件写到磁盘即可。`;
+硬性约束：
+- **所有写入路径必须以上述 cwd 绝对路径作为前缀**。禁止使用任何不以该前缀开头的绝对路径（例如擅自拼装 \`/tmp/...\`、\`C:\\tmp\\...\` 等）——Windows 下 POSIX 形式的绝对路径会被解析到错误的驱动器根目录，导致文件落盘错位。
+- 禁止运行、执行、验证任何脚本或命令（不要 dry-run、import 测试、语法检查、curl 探活等）。该阶段只写文件；真正的调用验证在随后的"验证阶段"由独立会话完成。
+- 不要把 SKILL.md 的内容塞进回复中，文件写到磁盘即可。
+- 创建完全部文件后立即输出 \`skill-result\` 代码块并结束，不要做事后总结或追加解释。
+- 轮次预算有限（约 20 轮），请合理规划，避免反复读写同一文件。`;
+}
 
-const DEFAULT_ALLOWED_TOOLS = ['Read', 'Write', 'Bash', 'Glob', 'Grep', 'Skill'];
+const DEFAULT_ALLOWED_TOOLS = ['Read', 'Write', 'Glob', 'Grep', 'Skill'];
+
+const DEFAULT_MAX_TURNS = 20;
 
 function copyDirRecursive(src: string, dest: string): void {
   fs.mkdirSync(dest, { recursive: true });
@@ -63,6 +75,41 @@ function findSkillSubdir(workDir: string): string | null {
     const mdPath = path.join(workDir, entry.name, 'SKILL.md');
     if (fs.existsSync(mdPath)) return entry.name;
   }
+  return null;
+}
+
+/**
+ * 计算 POSIX-mirror 兜底路径。
+ *
+ * Windows 下 Claude CLI 若把 /tmp/... 形式绝对路径交给 Node `path.resolve`，
+ * 会被解析到 `<当前驱动>:\tmp\...`，与真实的 `%TEMP%\agent-workflow-skill-gen\...` 错位。
+ * 这里按 primaryWorkDir 的结构反推出"mirror"路径，用于兜底查找与回搬。
+ */
+function computePosixMirrorWorkDir(primaryWorkDir: string): string | null {
+  const sessionDir = path.basename(path.dirname(primaryWorkDir));
+  const tmpRootBase = path.basename(path.dirname(path.dirname(primaryWorkDir)));
+  if (!sessionDir || !tmpRootBase) return null;
+  const root = path.parse(primaryWorkDir).root;
+  const mirror = path.join(root, 'tmp', tmpRootBase, sessionDir, 'work');
+  if (path.resolve(mirror) === path.resolve(primaryWorkDir)) return null;
+  return mirror;
+}
+
+/**
+ * 定位生成的 skill 子目录：先查 primary，再查 POSIX-mirror 兜底。
+ * 返回实际落盘目录（primary 或 mirror）与子目录名，找不到返回 null。
+ */
+function locateGeneratedSkill(
+  primaryWorkDir: string
+): { dir: string; subdir: string; isFallback: boolean } | null {
+  const primary = findSkillSubdir(primaryWorkDir);
+  if (primary) return { dir: primaryWorkDir, subdir: primary, isFallback: false };
+
+  const mirror = computePosixMirrorWorkDir(primaryWorkDir);
+  if (!mirror) return null;
+  const mirrorMatch = findSkillSubdir(mirror);
+  if (mirrorMatch) return { dir: mirror, subdir: mirrorMatch, isFallback: true };
+
   return null;
 }
 
@@ -141,8 +188,9 @@ export class GenerateSkillUseCase {
     this.notifier.start(generationId, 'generating');
 
     const config: StepMergedConfig = {
-      systemPrompt: SKILL_CREATOR_SYSTEM_PROMPT,
+      systemPrompt: buildSkillCreatorSystemPrompt(workDir),
       allowedTools: DEFAULT_ALLOWED_TOOLS,
+      maxTurns: DEFAULT_MAX_TURNS,
       workingDirectory: workDir,
       skillsDir: pluginDir,
       hasSkills: true,
@@ -162,13 +210,27 @@ export class GenerateSkillUseCase {
         return;
       }
 
-      const subdirName = findSkillSubdir(workDir);
-      if (!subdirName) {
+      const located = locateGeneratedSkill(workDir);
+      if (!located) {
         this.failDraft(generationId, workDir, '未在工作目录中找到包含 SKILL.md 的子目录');
         return;
       }
 
-      const draftDir = path.join(workDir, subdirName);
+      if (located.isFallback) {
+        log.warn('skill 生成命中 POSIX-mirror 兜底，搬回 primary workDir', {
+          generationId,
+          mirror: located.dir,
+          primary: workDir
+        });
+        copyDirRecursive(located.dir, workDir);
+        try {
+          fs.rmSync(path.dirname(located.dir), { recursive: true, force: true });
+        } catch (error) {
+          log.warn('清理 POSIX-mirror 失败（可忽略）', { generationId, error });
+        }
+      }
+
+      const draftDir = path.join(workDir, located.subdir);
       const md = fs.readFileSync(path.join(draftDir, 'SKILL.md'), 'utf-8');
 
       let draftName: string;

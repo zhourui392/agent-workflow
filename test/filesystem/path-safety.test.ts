@@ -7,12 +7,12 @@ describe('assertUnderRoot', () => {
   const roots = ['/home/user/projects', '/tmp/work'];
 
   it('accepts exact root', () => {
-    expect(assertUnderRoot('/home/user/projects', roots)).toBe('/home/user/projects');
+    expect(assertUnderRoot('/home/user/projects', roots)).toBe(path.resolve('/home/user/projects'));
   });
 
   it('accepts subdirectory', () => {
     expect(assertUnderRoot('/home/user/projects/repo/src', roots))
-      .toBe('/home/user/projects/repo/src');
+      .toBe(path.resolve('/home/user/projects/repo/src'));
   });
 
   it('rejects sibling path', () => {
