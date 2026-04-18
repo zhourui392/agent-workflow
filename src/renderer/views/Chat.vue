@@ -36,10 +36,14 @@
             <el-icon><FolderOpened /></el-icon>
             <span class="path">{{ chat.current?.workingDir || '默认工作目录' }}</span>
           </div>
-          <el-select v-model="envKey" placeholder="环境（可选）" clearable size="small" style="width: 140px">
-            <el-option label="prod" value="prod" />
-            <el-option label="test" value="test" />
-          </el-select>
+          <div class="env-switcher">
+            <span class="env-switcher-label">环境</span>
+            <el-radio-group v-model="envKey" size="small" class="env-radio-group">
+              <el-radio-button value="">无</el-radio-button>
+              <el-radio-button value="test" class="env-option env-option-test">test</el-radio-button>
+              <el-radio-button value="prod" class="env-option env-option-prod">prod</el-radio-button>
+            </el-radio-group>
+          </div>
 
           <el-popover
             v-if="envKey === 'test' && chat.current"
@@ -155,7 +159,7 @@
 
             <div v-if="chat.streaming" class="message assistant">
               <div class="bubble assistant streaming">
-                <ChatAssistantRenderer v-if="chat.liveEvents.length > 0" :events="chat.liveEvents" />
+                <ChatAssistantRenderer v-if="hasRenderableLiveEvents" :events="chat.liveEvents" />
                 <div v-else class="loading-dots"><span></span><span></span><span></span></div>
               </div>
             </div>
@@ -273,8 +277,12 @@ import {
 
 const chat = useChatStore();
 
+const hasRenderableLiveEvents = computed(() =>
+  chat.liveEvents.some(e => e.type === 'text' || e.type === 'tool_call' || e.type === 'tool_result')
+);
+
 const draft = ref('');
-const envKey = ref<string | undefined>(undefined);
+const envKey = ref<string>('');
 const scrollRef = ref<{ setScrollTop: (v: number) => void; wrapRef?: HTMLElement } | null>(null);
 const creating = ref(false);
 const sharing = ref(false);
@@ -393,15 +401,38 @@ async function doClearBranch(): Promise<void> {
 async function doRemoveSavedBranch(branch: string): Promise<void> {
   savedBranches.value = savedBranches.value.filter(b => b !== branch);
   persistSavedBranches();
+
+  // 当前会话若处于该分支：先还原工作目录
   if (chat.current) {
     const state = getSessionState(chat.current.id);
     if (state && state.currentBranch === branch) {
       try { await doClearBranch(); } catch { /* noop */ }
-      try {
-        await apiRemoveBranch(state.originalWorkingDir, branch);
-      } catch { /* best effort */ }
     }
   }
+
+  // 收集所有知道该分支的原始工作目录（跨会话）
+  const workspaces = new Set<string>();
+  const allState = loadAllState();
+  for (const sid of Object.keys(allState)) {
+    if (allState[sid].currentBranch === branch) {
+      workspaces.add(allState[sid].originalWorkingDir);
+    }
+  }
+  if (workspaces.size === 0 && chat.current) {
+    const s = getSessionState(chat.current.id);
+    const fallback = s?.originalWorkingDir ?? chat.current.workingDir;
+    if (fallback) workspaces.add(fallback);
+  }
+
+  let anyDeleted = false;
+  for (const ws of workspaces) {
+    try {
+      await apiRemoveBranch(ws, branch);
+      anyDeleted = true;
+    } catch { /* best effort across workspaces */ }
+  }
+  if (anyDeleted) ElMessage.success(`已删除分支 ${branch}`);
+  else ElMessage.warning(`已从列表移除 ${branch}（工作目录未清理）`);
 }
 
 async function doShare(): Promise<void> {
@@ -460,7 +491,7 @@ function send(): void {
   if (!draft.value.trim() || chat.streaming) return;
   const msg = draft.value;
   draft.value = '';
-  chat.sendMessage(msg, envKey.value);
+  chat.sendMessage(msg, envKey.value || undefined);
 }
 
 function insertNewline(): void { draft.value += '\n'; }
@@ -601,6 +632,26 @@ onMounted(() => { void chat.ensureCurrent(); });
 .workspace-selector:hover { border-color: #409eff; }
 .workspace-selector .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .resume-id { font-size: 12px; color: #909399; }
+
+.env-switcher {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 8px 4px 10px; border-radius: 6px;
+  background: #fff; border: 1px solid #dcdfe6;
+}
+.env-switcher-label {
+  font-size: 12px; font-weight: 600; color: #606266; letter-spacing: 0.3px;
+}
+.env-radio-group :deep(.el-radio-button__inner) {
+  padding: 6px 14px; font-size: 12px; font-weight: 600;
+}
+.env-radio-group :deep(.env-option-test.is-active .el-radio-button__inner),
+.env-radio-group :deep(.env-option-test .el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: #67c23a; border-color: #67c23a; box-shadow: -1px 0 0 0 #67c23a;
+}
+.env-radio-group :deep(.env-option-prod.is-active .el-radio-button__inner),
+.env-radio-group :deep(.env-option-prod .el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: #f56c6c; border-color: #f56c6c; box-shadow: -1px 0 0 0 #f56c6c;
+}
 
 .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; }
 .messages { flex: 1; padding: 16px; }
