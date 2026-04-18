@@ -54,7 +54,7 @@ steps 是一个 JSON 数组，每个元素是以下四种步骤类型之一：
   "type": "agent",
   "name": "步骤名称（必须唯一）",
   "prompt": "发送给 Claude 的提示词，支持模板变量",
-  "model": "claude-sonnet-4-20250514",
+  "model": "覆盖全局默认模型（可选，不填则使用 global_config/settings.yaml 中的 default_model）",
   "maxTurns": 999,
   "onFailure": "stop",
   "retryConfig": { "maxAttempts": 3, "delayMs": 1000 },
