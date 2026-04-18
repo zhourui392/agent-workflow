@@ -13,29 +13,13 @@
         text-color="#bfcbd9"
         active-text-color="#409eff"
       >
-        <el-menu-item index="/">
-          <el-icon><List /></el-icon>
-          <span>工作流列表</span>
-        </el-menu-item>
-        <el-menu-item index="/executions">
-          <el-icon><Clock /></el-icon>
-          <span>执行历史</span>
-        </el-menu-item>
-        <el-menu-item index="/monitor">
-          <el-icon><Monitor /></el-icon>
-          <span>实时监控</span>
-        </el-menu-item>
         <el-menu-item index="/chat">
           <el-icon><ChatDotRound /></el-icon>
           <span>对话</span>
         </el-menu-item>
-        <el-menu-item index="/settings">
-          <el-icon><Setting /></el-icon>
-          <span>全局配置</span>
-        </el-menu-item>
-        <el-menu-item index="/skills">
-          <el-icon><MagicStick /></el-icon>
-          <span>Skills</span>
+        <el-menu-item index="/">
+          <el-icon><List /></el-icon>
+          <span>工作流列表</span>
         </el-menu-item>
       </el-menu>
     </el-header>
@@ -49,12 +33,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { List, Clock, Monitor, Setting, MagicStick, ChatDotRound } from '@element-plus/icons-vue'
+import { List, ChatDotRound } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
 const activeMenu = computed(() => {
-  return route.path
+  if (route.path.startsWith('/chat')) return '/chat'
+  return '/'
 })
 </script>
 
