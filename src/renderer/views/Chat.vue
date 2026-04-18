@@ -143,46 +143,20 @@
               :class="m.role"
             >
               <div v-if="m.role === 'user'" class="bubble user">
-                <pre class="text">{{ m.raw }}</pre>
+                <pre class="text">{{ m.content }}</pre>
               </div>
               <div v-else-if="m.role === 'assistant'" class="bubble assistant">
-                <template v-for="(seg, si) in m.segments" :key="si">
-                  <div
-                    v-if="seg.type === 'text'"
-                    class="text-segment markdown"
-                    v-html="renderMarkdown(seg.content)"
-                  ></div>
-                  <div v-else class="tool-block">
-                    <div class="tool-header" @click="toggleTool(i, si)">
-                      <span class="tool-toggle" :class="{ expanded: isExpanded(i, si) }">▶</span>
-                      <span class="tool-label">{{ seg.name }}</span>
-                    </div>
-                    <pre v-show="isExpanded(i, si)" class="tool-content">{{ seg.content || '(empty)' }}</pre>
-                  </div>
-                </template>
+                <StepEventViewer :events="m.events" :output-text="m.content" />
               </div>
               <div v-else class="bubble system">
-                <pre class="text">{{ m.raw }}</pre>
+                <pre class="text">{{ m.content }}</pre>
               </div>
             </div>
 
             <div v-if="chat.streaming" class="message assistant">
               <div class="bubble assistant streaming">
-                <template v-for="(seg, si) in chat.liveSegments" :key="'live-' + si">
-                  <div
-                    v-if="seg.type === 'text'"
-                    class="text-segment markdown"
-                    v-html="renderMarkdown(seg.content)"
-                  ></div>
-                  <div v-else class="tool-block">
-                    <div class="tool-header" @click="toggleLive(si)">
-                      <span class="tool-toggle" :class="{ expanded: liveExpanded.has(si) }">▶</span>
-                      <span class="tool-label">{{ seg.name }}</span>
-                    </div>
-                    <pre v-show="liveExpanded.has(si)" class="tool-content">{{ seg.content || '(streaming...)' }}</pre>
-                  </div>
-                </template>
-                <div v-if="chat.liveSegments.length === 0" class="loading-dots"><span></span><span></span><span></span></div>
+                <StepEventViewer v-if="chat.liveEvents.length > 0" :events="chat.liveEvents" />
+                <div v-else class="loading-dots"><span></span><span></span><span></span></div>
               </div>
             </div>
           </el-scrollbar>
@@ -277,13 +251,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue';
+import { computed, onMounted, ref, nextTick, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Folder, Document, FolderOpened, Upload, Plus, Delete,
   Refresh, VideoPause, Promotion, Share
 } from '@element-plus/icons-vue';
-import { marked } from 'marked';
+import StepEventViewer from '../components/StepEventViewer.vue';
 import { useChatStore } from '../stores/chat';
 import { shareSession } from '../api/chat';
 import {
@@ -296,8 +270,6 @@ import type { FileEntry } from '../api/filesystem';
 import {
   listRoots, listPath, downloadUrl, uploadFile, deleteFile
 } from '../api/filesystem';
-
-marked.setOptions({ breaks: true, gfm: true });
 
 const chat = useChatStore();
 
@@ -451,29 +423,6 @@ async function doShare(): Promise<void> {
   }
 }
 
-const expandedTools = reactive<Record<string, boolean>>({});
-function toolKey(mi: number, si: number): string { return `${mi}:${si}`; }
-function isExpanded(mi: number, si: number): boolean { return !!expandedTools[toolKey(mi, si)]; }
-function toggleTool(mi: number, si: number): void {
-  const k = toolKey(mi, si);
-  expandedTools[k] = !expandedTools[k];
-}
-const liveExpanded = reactive(new Set<number>());
-function toggleLive(si: number): void {
-  if (liveExpanded.has(si)) liveExpanded.delete(si); else liveExpanded.add(si);
-}
-
-function renderMarkdown(content: string): string {
-  try { return marked.parse(content) as string; }
-  catch {
-    return content.replace(/[&<>"']/g, (c) => {
-      const map: Record<string, string> = {
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-      };
-      return map[c] ?? c;
-    });
-  }
-}
 
 const showWorkspaceDialog = ref(false);
 const fsRoots = ref<string[]>([]);
@@ -603,7 +552,7 @@ function formatSize(n: number): string {
 
 function formatTime(ms: number | string): string { return new Date(ms).toLocaleString(); }
 
-watch(() => chat.liveSegments.length, () => {
+watch(() => chat.liveEvents.length, () => {
   nextTick(() => {
     const el = scrollRef.value?.wrapRef;
     if (el) el.scrollTop = el.scrollHeight;
