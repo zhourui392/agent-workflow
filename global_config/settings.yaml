@@ -1,1 +1,29 @@
+# 全局配置（应用级）
+# 优先级：同名环境变量 > 本文件 > 代码内硬编码默认值
+# 本文件缺失或键缺失时，均不报错，按次级优先级回退。
+
+# 默认模型（用于 Claude Agent SDK 执行工作流步骤）
 default_model: claude-opus-4-6
+
+# 文件系统允许访问的根路径列表（工作目录选择器/上传下载的边界）
+# 对应 env FS_ROOTS（逗号分隔）。未配置时回退到启动进程的 cwd。
+# fs:
+#   roots:
+#     - /home/ubuntu/qpon
+
+# Chat 相关默认值
+# chat:
+#   # 新建会话的默认工作目录；对应 env CHAT_DEFAULT_WORKING_DIR
+#   defaultWorkingDir: /home/ubuntu/qpon
+
+# Agent 环境前缀：切换 test/prod 时注入的系统提示词
+# 对应 env AGENT_ENV_PROMPTS_JSON（JSON 字符串）。env 设置时整组覆盖。
+# env_prompts:
+#   - key: test
+#     label: 测试
+#     color: "#67c23a"
+#     prompt: "你现在处于测试环境，可以修改代码、切换 git worktree 进行调试。"
+#   - key: prod
+#     label: 生产
+#     color: "#f56c6c"
+#     prompt: "你现在处于生产环境，只能根据日志定位问题，禁止修改任何代码。"

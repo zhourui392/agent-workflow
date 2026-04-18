@@ -41,19 +41,26 @@ describe('assertUnderRoot', () => {
 });
 
 describe('FsConfig', () => {
-  it('defaults to process.cwd() when FS_ROOTS is unset', () => {
-    const cfg = new FsConfig({});
+  it('defaults to process.cwd() when FS_ROOTS and yaml are unset', () => {
+    const cfg = new FsConfig({}, {});
     expect(cfg.roots).toEqual([process.cwd()]);
   });
 
-  it('parses FS_ROOTS comma-separated', () => {
-    const cfg = new FsConfig({ FS_ROOTS: '/tmp/a, /tmp/b' });
+  it('parses FS_ROOTS comma-separated (env overrides yaml)', () => {
+    const cfg = new FsConfig({ FS_ROOTS: '/tmp/a, /tmp/b' }, { fs: { roots: ['/ignored'] } });
     expect(cfg.roots).toContain(path.resolve('/tmp/a'));
     expect(cfg.roots).toContain(path.resolve('/tmp/b'));
+    expect(cfg.roots).not.toContain(path.resolve('/ignored'));
   });
 
   it('dedupes roots', () => {
-    const cfg = new FsConfig({ FS_ROOTS: '/tmp/x,/tmp/x' });
+    const cfg = new FsConfig({ FS_ROOTS: '/tmp/x,/tmp/x' }, {});
     expect(cfg.roots).toHaveLength(1);
+  });
+
+  it('falls back to yaml fs.roots when env is unset', () => {
+    const cfg = new FsConfig({}, { fs: { roots: ['/tmp/yaml-a', '/tmp/yaml-b'] } });
+    expect(cfg.roots).toContain(path.resolve('/tmp/yaml-a'));
+    expect(cfg.roots).toContain(path.resolve('/tmp/yaml-b'));
   });
 });

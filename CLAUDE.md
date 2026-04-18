@@ -119,7 +119,8 @@ CronSyncUseCase             → WorkflowRepository, PipelinePort
   - **执行历史列表**：`findAll` / `count` 查询需排除子执行（`parent_execution_id IS NULL`），子执行只在父执行详情页内联展示
 - **模板变量**: `{{today}}`, `{{yesterday}}`, `{{now}}`, `{{inputs.xxx}}`, `{{steps.<name>.output}}`
 - **步骤失败策略**: stop（停止）/ skip（跳过）/ retry（重试）
-- **全局配置存储在磁盘**: `global_config/` (rules/, skills/)
+- **全局配置存储在磁盘**: `global_config/` (rules/, skills/, settings.yaml)
+- **应用级配置优先级**: env > `global_config/settings.yaml` > 代码硬编码默认值。当前 yaml 支持的键：`default_model`、`allowed_tools`、`fs.roots`（对应 env `FS_ROOTS`）、`chat.defaultWorkingDir`（对应 `CHAT_DEFAULT_WORKING_DIR`）、`env_prompts`（对应 `AGENT_ENV_PROMPTS_JSON`）。统一由 `src/main/shared/infrastructure/AppSettings.ts` 解析。
 - **数据库**: SQLite (better-sqlite3 同步)，默认路径 `<cwd>/data/agent_workflow.db`，可通过 `DB_PATH` 覆盖
 - **嵌套会话保护**: `server.ts` 启动时清除 `CLAUDECODE` 环境变量，防止从 Claude Code 终端启动时子进程被拒绝
 - **前端请求序列化**: Vue reactive Proxy 无法被 axios 正确序列化的场景（如嵌套对象），在 `src/renderer/api/` 层做 `toPlain`（JSON 深拷贝）剥离

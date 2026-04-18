@@ -17,7 +17,7 @@ function makeConfig(overrides: NodeJS.ProcessEnv = {}): ChatConfig {
     CODEX_CLI_STDIN: 'true',
     CODEX_CLI_TIMEOUT_SECONDS: '0',
     ...overrides
-  });
+  }, {});
 }
 
 // Use a fake CLI that echoes its stdin line-by-line

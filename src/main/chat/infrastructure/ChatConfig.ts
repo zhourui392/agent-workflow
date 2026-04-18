@@ -1,11 +1,14 @@
 /**
  * Chat 模块配置
  *
- * 从环境变量读取 CLI 命令、参数、超时、环境前缀表。所有字段都有合理默认值，
- * 未设置时按 agent-web 的默认行为运行。
+ * 优先级：env > settings.yaml > hardcoded。
+ * - CLI 相关（命令/参数/超时/stdin）：仅 env，含默认值。
+ * - defaultWorkingDir：env CHAT_DEFAULT_WORKING_DIR > settings.chat.defaultWorkingDir > process.cwd()
+ * - envEntries：env AGENT_ENV_PROMPTS_JSON > settings.env_prompts > []
  */
 
 import type { AgentType } from '../domain/model/AgentType';
+import { loadAppSettings, type AppSettings, type EnvPromptEntry } from '../../shared/infrastructure/AppSettings';
 
 export interface AgentCliSpec {
   /** 可执行文件路径或命令名 */
@@ -18,26 +21,22 @@ export interface AgentCliSpec {
   timeoutSeconds: number;
 }
 
-export interface EnvEntry {
-  key: string;
-  label?: string;
-  color?: string;
-  prompt: string;
-}
+export type EnvEntry = EnvPromptEntry;
 
 /**
- * 解析 JSON 格式的环境前缀列表（ENV: AGENT_ENV_PROMPTS_JSON）
+ * 解析 JSON 格式的环境前缀列表（ENV: AGENT_ENV_PROMPTS_JSON）。
+ * 解析失败返回 null，调用方可回退到 yaml。
  */
-function parseEnvPrompts(raw?: string): EnvEntry[] {
-  if (!raw || raw.trim() === '') return [];
+function parseEnvPromptsJson(raw?: string): EnvEntry[] | null {
+  if (!raw || raw.trim() === '') return null;
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) return null;
     return parsed.filter((e: unknown): e is EnvEntry =>
       typeof e === 'object' && e !== null && typeof (e as { key: unknown }).key === 'string' && typeof (e as { prompt: unknown }).prompt === 'string'
     );
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -57,7 +56,9 @@ export class ChatConfig {
   readonly envEntries: EnvEntry[];
   readonly defaultWorkingDir: string;
 
-  constructor(env: NodeJS.ProcessEnv = process.env) {
+  constructor(env: NodeJS.ProcessEnv = process.env, settings?: AppSettings) {
+    const s = settings ?? loadAppSettings();
+
     this.claude = {
       exec: env.CLAUDE_CLI_CMD || 'claude',
       args: env.CLAUDE_CLI_ARGS ? env.CLAUDE_CLI_ARGS.split(/\s+/).filter(Boolean) : DEFAULT_CLAUDE_ARGS,
@@ -70,8 +71,14 @@ export class ChatConfig {
       stdin: env.CODEX_CLI_STDIN !== 'false',
       timeoutSeconds: env.CODEX_CLI_TIMEOUT_SECONDS ? Number(env.CODEX_CLI_TIMEOUT_SECONDS) : 0
     };
-    this.envEntries = parseEnvPrompts(env.AGENT_ENV_PROMPTS_JSON);
-    this.defaultWorkingDir = env.CHAT_DEFAULT_WORKING_DIR?.trim() || process.cwd();
+
+    const envPrompts = parseEnvPromptsJson(env.AGENT_ENV_PROMPTS_JSON);
+    this.envEntries = envPrompts ?? s.envPrompts ?? [];
+
+    this.defaultWorkingDir =
+      env.CHAT_DEFAULT_WORKING_DIR?.trim() ||
+      s.chat?.defaultWorkingDir ||
+      process.cwd();
   }
 
   getSpec(type: AgentType): AgentCliSpec {
