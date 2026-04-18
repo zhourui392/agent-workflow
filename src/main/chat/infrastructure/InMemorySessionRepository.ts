@@ -24,6 +24,14 @@ export class InMemorySessionRepository implements SessionRepository {
     this.sessions.get(id)?.updateResumeId(resumeId);
   }
 
+  clearResumeId(id: string): void {
+    this.sessions.get(id)?.clearResumeId();
+  }
+
+  updateWorkingDir(id: string, workingDir: string): void {
+    this.sessions.get(id)?.updateWorkingDir(workingDir);
+  }
+
   addMessage(id: string, role: 'user' | 'assistant' | 'system', content: string): void {
     this.sessions.get(id)?.addMessage(role, content);
   }

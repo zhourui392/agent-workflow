@@ -93,6 +93,20 @@ export class ChatRoutes {
       return { success: this.service.stopSession(req.params.id) };
     });
 
+    fastify.post('/api/chat/sessions/:id/clear-context', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const ok = this.service.clearContext(req.params.id);
+      if (!ok) { reply.code(404); return { error: 'Session not found' }; }
+      return { success: true };
+    });
+
+    fastify.put('/api/chat/sessions/:id/working-dir', async (req: FastifyRequest<{ Params: { id: string }; Body: { workingDir?: string } }>, reply: FastifyReply) => {
+      const workingDir = (req.body?.workingDir ?? '').trim();
+      if (!workingDir) { reply.code(400); return { error: 'workingDir required' }; }
+      const ok = this.service.updateWorkingDir(req.params.id, workingDir);
+      if (!ok) { reply.code(404); return { error: 'Session not found' }; }
+      return { success: true };
+    });
+
     fastify.get('/api/chat/sessions/:id/status', async (req: FastifyRequest<{ Params: { id: string } }>) => {
       return { running: this.service.isRunning(req.params.id) };
     });

@@ -7,6 +7,8 @@ import {
   getSession as apiGet,
   deleteSession as apiDelete,
   stopSession as apiStop,
+  clearContext as apiClearContext,
+  updateWorkingDir as apiUpdateWorkingDir,
   streamMessage
 } from '../api/chat';
 
@@ -292,6 +294,27 @@ export const useChatStore = defineStore('chat', () => {
     streaming.value = false;
   }
 
+  /**
+   * 清除上下文：后端清空 resumeId 并插入系统消息，前端同步 current 快照。
+   * 会话 id 不变，下一次发送不带 --resume，Claude 从零开始新对话。
+   */
+  async function clearContext(): Promise<void> {
+    if (!current.value) return;
+    const id = current.value.id;
+    await apiClearContext(id);
+    const resp = await apiGet(id);
+    if (current.value?.id === id) current.value = resp.data;
+    rebuildParsed();
+  }
+
+  async function changeWorkingDir(workingDir: string): Promise<void> {
+    if (!current.value) return;
+    const id = current.value.id;
+    await apiUpdateWorkingDir(id, workingDir);
+    const resp = await apiGet(id);
+    if (current.value?.id === id) current.value = resp.data;
+  }
+
   async function ensureCurrent(): Promise<void> {
     if (current.value) return;
     await refreshList();
@@ -305,6 +328,6 @@ export const useChatStore = defineStore('chat', () => {
   return {
     sessions, current, parsedMessages, streaming, liveChunks, liveSegments,
     refreshList, createSession, loadSession, removeSession,
-    sendMessage, stop, ensureCurrent
+    sendMessage, stop, ensureCurrent, clearContext, changeWorkingDir
   };
 });

@@ -129,6 +129,25 @@ export class ChatApplicationService {
   }
 
   /**
+   * 清除会话的 resumeId。下一次发送消息时不再带 --resume，Claude 从零开始新对话。
+   * 会话 id/历史消息/working_dir 不变。
+   */
+  clearContext(sessionId: string): boolean {
+    const session = this.sessionRepo.find(sessionId);
+    if (!session) return false;
+    this.sessionRepo.clearResumeId(sessionId);
+    this.sessionRepo.addMessage(sessionId, 'system', '上下文已清除');
+    return true;
+  }
+
+  updateWorkingDir(sessionId: string, workingDir: string): boolean {
+    const session = this.sessionRepo.find(sessionId);
+    if (!session) return false;
+    this.sessionRepo.updateWorkingDir(sessionId, workingDir);
+    return true;
+  }
+
+  /**
    * 为会话生成或返回已有的分享 token（幂等）。
    * token 使用 16 字符无连字符 UUID，与 agent-web 一致。
    */

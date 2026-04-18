@@ -122,6 +122,15 @@ export class SqliteSessionRepository implements SessionRepository {
     this.db.prepare('UPDATE chat_sessions SET resume_id = ? WHERE id = ?').run(resumeId.trim(), id);
   }
 
+  clearResumeId(id: string): void {
+    this.db.prepare('UPDATE chat_sessions SET resume_id = NULL WHERE id = ?').run(id);
+  }
+
+  updateWorkingDir(id: string, workingDir: string): void {
+    if (!workingDir || workingDir.trim() === '') return;
+    this.db.prepare('UPDATE chat_sessions SET working_dir = ? WHERE id = ?').run(workingDir.trim(), id);
+  }
+
   addMessage(id: string, role: 'user' | 'assistant' | 'system', content: string, timestamp?: Date): void {
     const ts = (timestamp ?? new Date()).toISOString();
     this.db.prepare(

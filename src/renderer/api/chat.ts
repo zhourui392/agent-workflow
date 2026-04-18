@@ -58,6 +58,14 @@ export function stopSession(id: string): Promise<{ data: { success: boolean } }>
   return http.post<{ success: boolean }>(`/api/chat/sessions/${encodeURIComponent(id)}/stop`);
 }
 
+export function clearContext(id: string): Promise<{ data: { success: boolean } }> {
+  return http.post<{ success: boolean }>(`/api/chat/sessions/${encodeURIComponent(id)}/clear-context`);
+}
+
+export function updateWorkingDir(id: string, workingDir: string): Promise<{ data: { success: boolean } }> {
+  return http.put<{ success: boolean }>(`/api/chat/sessions/${encodeURIComponent(id)}/working-dir`, { workingDir });
+}
+
 export interface ShareResponse { shareToken: string }
 
 export function shareSession(id: string): Promise<{ data: ShareResponse }> {

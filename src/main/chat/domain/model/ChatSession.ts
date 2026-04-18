@@ -82,6 +82,15 @@ export class ChatSession {
     this._resumeId = resumeId.trim();
   }
 
+  clearResumeId(): void {
+    this._resumeId = undefined;
+  }
+
+  updateWorkingDir(workingDir: string): void {
+    if (!workingDir || workingDir.trim() === '') return;
+    (this as { workingDir: string }).workingDir = workingDir.trim();
+  }
+
   setTitle(title: string): void {
     this._title = title;
   }

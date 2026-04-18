@@ -18,6 +18,8 @@ export interface SessionRepository {
   find(id: string): ChatSession | null;
   remove(id: string): boolean;
   updateResumeId(id: string, resumeId: string): void;
+  clearResumeId(id: string): void;
+  updateWorkingDir(id: string, workingDir: string): void;
   addMessage(id: string, role: 'user' | 'assistant' | 'system', content: string, timestamp?: Date): void;
   listSummaries(limit?: number, offset?: number): SessionSummary[];
   /**
