@@ -4,12 +4,12 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
-      path: '/chat',
+      path: '/',
       name: 'Chat',
       component: () => import('@/views/Chat.vue'),
     },
     {
-      path: '/',
+      path: '/workflows',
       component: () => import('@/layouts/WorkflowLayout.vue'),
       children: [
         { path: '', name: 'WorkflowList', component: () => import('@/views/WorkflowList.vue') },

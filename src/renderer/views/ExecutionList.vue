@@ -142,7 +142,7 @@ onMounted(() => {
   loadPage(1)
 })
 
-function handleRowClick(row: { id: string }) { router.push(`/executions/${row.id}`) }
+function handleRowClick(row: { id: string }) { router.push(`/workflows/executions/${row.id}`) }
 </script>
 
 <style scoped>

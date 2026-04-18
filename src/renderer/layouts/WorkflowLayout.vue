@@ -2,10 +2,10 @@
   <div class="workflow-layout">
     <div class="tabs-bar">
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
-        <el-tab-pane label="工作流列表" name="/" />
-        <el-tab-pane label="执行历史" name="/executions" />
-        <el-tab-pane label="全局配置" name="/settings" />
-        <el-tab-pane label="Skills" name="/skills" />
+        <el-tab-pane label="工作流列表" name="/workflows" />
+        <el-tab-pane label="执行历史" name="/workflows/executions" />
+        <el-tab-pane label="全局配置" name="/workflows/settings" />
+        <el-tab-pane label="Skills" name="/workflows/skills" />
       </el-tabs>
     </div>
     <div class="layout-content">
@@ -24,10 +24,10 @@ const router = useRouter()
 const activeTab = computed({
   get: () => {
     const p = route.path
-    if (p.startsWith('/executions')) return '/executions'
-    if (p.startsWith('/settings')) return '/settings'
-    if (p.startsWith('/skills')) return '/skills'
-    return '/'
+    if (p.startsWith('/workflows/executions')) return '/workflows/executions'
+    if (p.startsWith('/workflows/settings')) return '/workflows/settings'
+    if (p.startsWith('/workflows/skills')) return '/workflows/skills'
+    return '/workflows'
   },
   set: () => {}
 })

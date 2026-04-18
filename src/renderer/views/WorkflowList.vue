@@ -110,7 +110,7 @@ async function executeRun(id: string, inputs?: Record<string, unknown>) {
   try {
     const executionId = await store.run(id, inputs)
     ElMessage.success('已触发执行')
-    router.push(`/executions/${executionId}`)
+    router.push(`/workflows/executions/${executionId}`)
   } catch (e: unknown) {
     ElMessage.error('触发失败: ' + extractErrorMessage(e))
   } finally {

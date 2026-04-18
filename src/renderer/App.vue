@@ -13,11 +13,11 @@
         text-color="#bfcbd9"
         active-text-color="#409eff"
       >
-        <el-menu-item index="/chat">
-          <el-icon><ChatDotRound /></el-icon>
-          <span>对话</span>
-        </el-menu-item>
         <el-menu-item index="/">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>Q&amp;A</span>
+        </el-menu-item>
+        <el-menu-item index="/workflows">
           <el-icon><List /></el-icon>
           <span>工作流列表</span>
         </el-menu-item>
@@ -38,7 +38,7 @@ import { List, ChatDotRound } from '@element-plus/icons-vue'
 const route = useRoute()
 
 const activeMenu = computed(() => {
-  if (route.path.startsWith('/chat')) return '/chat'
+  if (route.path.startsWith('/workflows')) return '/workflows'
   return '/'
 })
 

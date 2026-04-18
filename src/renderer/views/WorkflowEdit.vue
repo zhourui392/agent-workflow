@@ -308,7 +308,7 @@ async function handleSave() {
     }
     await store.saveWorkflow(payload)
     ElMessage.success('保存成功')
-    router.push('/')
+    router.push('/workflows')
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     ElMessage.error('保存失败: ' + msg)
