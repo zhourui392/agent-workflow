@@ -39,11 +39,6 @@ const router = createRouter({
       component: () => import('@/views/Chat.vue'),
     },
     {
-      path: '/files',
-      name: 'FileBrowser',
-      component: () => import('@/views/FileBrowser.vue'),
-    },
-    {
       path: '/settings',
       name: 'GlobalConfig',
       component: () => import('@/views/GlobalConfig.vue'),
