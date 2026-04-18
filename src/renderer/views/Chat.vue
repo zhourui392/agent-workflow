@@ -96,13 +96,21 @@
               <el-tag
                 v-for="b in savedBranches"
                 :key="b"
-                closable
                 size="small"
                 :type="b === currentBranch ? 'success' : 'info'"
                 style="margin: 2px; cursor: pointer"
-                @close="doRemoveSavedBranch(b)"
                 @click="selectedBranch = b"
-              >{{ b }}</el-tag>
+              >
+                <span>{{ b }}</span>
+                <el-icon
+                  class="branch-close"
+                  :class="{ 'is-removing': removingBranches.has(b) }"
+                  @click.stop="doRemoveSavedBranch(b)"
+                >
+                  <Loading v-if="removingBranches.has(b)" />
+                  <Close v-else />
+                </el-icon>
+              </el-tag>
             </div>
             <div v-if="switchResultCreated.length > 0" class="wt-result">
               <div v-for="r in switchResultCreated" :key="'sw-' + r.name">
@@ -295,7 +303,8 @@ import { computed, onMounted, ref, nextTick, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Folder, Document, FolderOpened, Upload, Plus, Delete,
-  Refresh, VideoPause, Promotion, Share, QuestionFilled
+  Refresh, VideoPause, Promotion, Share, QuestionFilled,
+  Close, Loading
 } from '@element-plus/icons-vue';
 import ChatAssistantRenderer from '../components/ChatAssistantRenderer.vue';
 import { useChatStore } from '../stores/chat';
@@ -333,6 +342,7 @@ const savedBranches = ref<string[]>(loadSavedBranches());
 const selectedBranch = ref<string>('');
 const switching = ref(false);
 const updating = ref(false);
+const removingBranches = ref<Set<string>>(new Set());
 const switchResultCreated = ref<RepoStatus[]>([]);
 const updateResult = ref<RepoStatus[]>([]);
 
@@ -450,13 +460,22 @@ async function doClearBranch(): Promise<void> {
 
 async function doRemoveSavedBranch(branch: string): Promise<void> {
   if (!chat.current) return;
+  if (removingBranches.value.has(branch)) return;
   const state = getSessionState(chat.current.id);
   const workspace = state?.originalWorkingDir ?? chat.current.workingDir;
+  const next = new Set(removingBranches.value);
+  next.add(branch);
+  removingBranches.value = next;
+  ElMessage.info(`正在清理分支 ${branch} 的 worktree...`);
   try {
     await apiRemoveBranch(workspace, branch);
     ElMessage.success(`已清理分支 ${branch} 的 worktree`);
   } catch {
     ElMessage.warning('清理 worktree 失败，已移除标签');
+  } finally {
+    const done = new Set(removingBranches.value);
+    done.delete(branch);
+    removingBranches.value = done;
   }
   savedBranches.value = savedBranches.value.filter(b => b !== branch);
   persistSavedBranches();
@@ -729,6 +748,13 @@ onMounted(() => {
   border: 1.5px solid #909399; color: #909399;
   font-size: 12px; font-weight: bold; cursor: pointer; user-select: none; flex-shrink: 0;
 }
+
+.branch-close {
+  margin-left: 4px; cursor: pointer; font-size: 12px; opacity: 0.6;
+}
+.branch-close:hover { opacity: 1; }
+.branch-close.is-removing { cursor: wait; opacity: 1; animation: branch-spin 1s linear infinite; }
+@keyframes branch-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 .usage-guide { font-size: 13px; line-height: 1.7; max-height: 70vh; overflow-y: auto; }
 .usage-guide .guide-heading { font-weight: 600; color: #303133; margin-bottom: 6px; }
