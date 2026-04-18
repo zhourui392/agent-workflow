@@ -243,7 +243,6 @@
           <el-input v-model="fsPath" readonly>
             <template #prefix><el-icon><FolderOpened /></el-icon></template>
             <template #append>
-              <el-button :disabled="!canGoUp" @click="goUp">上级</el-button>
               <el-button @click="reloadFs">刷新</el-button>
             </template>
           </el-input>
@@ -261,8 +260,8 @@
           <el-icon v-else><Document /></el-icon>
           <span class="fs-name">{{ item.name }}</span>
           <span v-if="!item.dir" class="fs-size">{{ formatSize(item.size) }}</span>
-          <span class="fs-time">{{ formatTime(item.lastModified) }}</span>
-          <span class="fs-actions" v-if="!item.dir" @click.stop>
+          <span v-if="item.name !== '..'" class="fs-time">{{ formatTime(item.lastModified) }}</span>
+          <span class="fs-actions" v-if="!item.dir && item.name !== '..'" @click.stop>
             <el-button link size="small" @click="download(item)">下载</el-button>
             <el-button link size="small" type="danger" @click="removeFile(item)">删除</el-button>
           </span>
@@ -488,7 +487,6 @@ const fsRoot = ref<string>('');
 const fsPath = ref<string>('');
 const fsEntries = ref<FileEntry[]>([]);
 const fsLoading = ref(false);
-const canGoUp = computed(() => fsPath.value && fsPath.value !== fsRoot.value);
 
 async function refresh(): Promise<void> {
   try { await chat.refreshList(); } catch (e) { ElMessage.error('刷新失败'); }
@@ -588,16 +586,6 @@ async function onRootChange(val: string): Promise<void> {
 async function enter(row: FileEntry): Promise<void> {
   fsPath.value = row.path;
   await reloadFs();
-}
-
-function goUp(): void {
-  const parts = fsPath.value.split('/').filter(Boolean);
-  parts.pop();
-  const parent = '/' + parts.join('/');
-  if (parent.startsWith(fsRoot.value) || parent === fsRoot.value) {
-    fsPath.value = parent || fsRoot.value;
-    void reloadFs();
-  }
 }
 
 function download(row: FileEntry): void {

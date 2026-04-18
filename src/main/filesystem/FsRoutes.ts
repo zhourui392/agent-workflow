@@ -81,7 +81,17 @@ export class FsRoutes {
         const resolved = assertUnderRoot(p, this.config.roots);
         const st = await fsp.stat(resolved);
         if (!st.isDirectory()) { reply.code(400); return { error: 'Not a directory' }; }
-        return await listDirectory(resolved);
+        const entries = await listDirectory(resolved);
+        const parent = path.dirname(resolved);
+        if (parent !== resolved) {
+          try {
+            assertUnderRoot(parent, this.config.roots);
+            entries.unshift({ name: '..', path: parent, dir: true, size: 0, lastModified: 0 });
+          } catch (e) {
+            if (!(e instanceof PathOutOfRootError)) throw e;
+          }
+        }
+        return entries;
       } catch (err) {
         if (err instanceof PathOutOfRootError) { reply.code(403); return { error: 'Forbidden' }; }
         reply.code(404);
