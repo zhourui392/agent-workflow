@@ -7,9 +7,9 @@ default_model: claude-opus-4-6
 
 # 文件系统允许访问的根路径列表（工作目录选择器/上传下载的边界）
 # 对应 env FS_ROOTS（逗号分隔）。未配置时回退到启动进程的 cwd。
-# fs:
-#   roots:
-#     - /home/ubuntu/qpon
+fs:
+  roots:
+    - D:\qpon\workspace
 
 # Chat 相关默认值
 # chat:

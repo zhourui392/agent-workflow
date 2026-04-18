@@ -3,7 +3,7 @@
  *
  * 优先级：env > settings.yaml > hardcoded。
  * - CLI 相关（命令/参数/超时/stdin）：仅 env，含默认值。
- * - defaultWorkingDir：env CHAT_DEFAULT_WORKING_DIR > settings.chat.defaultWorkingDir > process.cwd()
+ * - defaultWorkingDir：env CHAT_DEFAULT_WORKING_DIR > settings.chat.defaultWorkingDir > settings.fs.roots[0] > process.cwd()
  * - envEntries：env AGENT_ENV_PROMPTS_JSON > settings.env_prompts > []
  */
 
@@ -78,6 +78,7 @@ export class ChatConfig {
     this.defaultWorkingDir =
       env.CHAT_DEFAULT_WORKING_DIR?.trim() ||
       s.chat?.defaultWorkingDir ||
+      s.fs?.roots?.[0] ||
       process.cwd();
   }
 
