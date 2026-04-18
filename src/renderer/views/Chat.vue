@@ -41,6 +41,15 @@
             <el-option label="test" value="test" />
           </el-select>
           <span style="flex: 1"></span>
+          <el-button
+            v-if="chat.current"
+            size="small"
+            :loading="sharing"
+            @click="doShare"
+          >
+            <el-icon><Share /></el-icon>
+            <span>分享</span>
+          </el-button>
           <span v-if="chat.current?.resumeId" class="resume-id">resumeId: {{ chat.current.resumeId.slice(0, 8) }}…</span>
         </div>
 
@@ -184,10 +193,11 @@ import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Folder, Document, FolderOpened, Upload, Plus, Delete,
-  Refresh, VideoPause, Promotion
+  Refresh, VideoPause, Promotion, Share
 } from '@element-plus/icons-vue';
 import { marked } from 'marked';
 import { useChatStore } from '../stores/chat';
+import { shareSession } from '../api/chat';
 import type { FileEntry } from '../api/filesystem';
 import {
   listRoots, listPath, downloadUrl, uploadFile, deleteFile
@@ -201,6 +211,26 @@ const draft = ref('');
 const envKey = ref<string | undefined>(undefined);
 const scrollRef = ref<{ setScrollTop: (v: number) => void; wrapRef?: HTMLElement } | null>(null);
 const creating = ref(false);
+const sharing = ref(false);
+
+async function doShare(): Promise<void> {
+  if (!chat.current) return;
+  sharing.value = true;
+  try {
+    const resp = await shareSession(chat.current.id);
+    const url = `${window.location.origin}/share/${resp.data.shareToken}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      ElMessage.success('分享链接已复制到剪贴板');
+    } catch {
+      ElMessageBox.alert(url, '分享链接', { confirmButtonText: '关闭' });
+    }
+  } catch (e) {
+    ElMessage.error('分享失败');
+  } finally {
+    sharing.value = false;
+  }
+}
 
 const expandedTools = reactive<Record<string, boolean>>({});
 function toolKey(mi: number, si: number): string { return `${mi}:${si}`; }

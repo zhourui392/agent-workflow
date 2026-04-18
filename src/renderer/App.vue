@@ -1,6 +1,6 @@
 <template>
   <el-container class="app-container" direction="vertical">
-    <el-header class="app-header">
+    <el-header v-if="!isPublic" class="app-header">
       <div class="logo">
         <span>Agent Workflow</span>
       </div>
@@ -41,6 +41,8 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/chat')) return '/chat'
   return '/'
 })
+
+const isPublic = computed(() => route.meta?.public === true)
 </script>
 
 <style>

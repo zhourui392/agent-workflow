@@ -58,6 +58,24 @@ export function stopSession(id: string): Promise<{ data: { success: boolean } }>
   return http.post<{ success: boolean }>(`/api/chat/sessions/${encodeURIComponent(id)}/stop`);
 }
 
+export interface ShareResponse { shareToken: string }
+
+export function shareSession(id: string): Promise<{ data: ShareResponse }> {
+  return http.post<ShareResponse>(`/api/chat/sessions/${encodeURIComponent(id)}/share`);
+}
+
+export interface SharedSessionDTO {
+  title: string | null;
+  agentType: AgentType;
+  workingDir: string;
+  createdAt: string;
+  messages: ChatMessageDTO[];
+}
+
+export function getSharedSession(token: string): Promise<{ data: SharedSessionDTO }> {
+  return http.get<SharedSessionDTO>(`/api/share/${encodeURIComponent(token)}`);
+}
+
 export interface StreamHandlers {
   onChunk: (chunk: string) => void;
   onExit: (code: number) => void;

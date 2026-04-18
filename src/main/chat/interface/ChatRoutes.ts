@@ -97,6 +97,42 @@ export class ChatRoutes {
       return { running: this.service.isRunning(req.params.id) };
     });
 
+    // 生成/获取分享 token（幂等）
+    fastify.post(
+      '/api/chat/sessions/:id/share',
+      async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+        const token = this.service.shareSession(req.params.id);
+        if (!token) {
+          reply.code(404);
+          return { error: 'Session not found' };
+        }
+        return { shareToken: token };
+      }
+    );
+
+    // 公开只读快照（无需鉴权）
+    fastify.get(
+      '/api/share/:token',
+      async (req: FastifyRequest<{ Params: { token: string } }>, reply: FastifyReply) => {
+        const session = this.service.getSharedSession(req.params.token);
+        if (!session) {
+          reply.code(404);
+          return { error: 'Shared session not found' };
+        }
+        return {
+          title: session.title ?? null,
+          agentType: session.agentType,
+          workingDir: session.workingDir,
+          createdAt: session.createdAt.toISOString(),
+          messages: session.messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp.toISOString()
+          }))
+        };
+      }
+    );
+
     // SSE 流式发送消息
     fastify.get(
       '/api/chat/sessions/:id/stream',

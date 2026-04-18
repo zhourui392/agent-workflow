@@ -28,6 +28,23 @@ export class InMemorySessionRepository implements SessionRepository {
     this.sessions.get(id)?.addMessage(role, content);
   }
 
+  setShareToken(id: string, token: string): string | null {
+    const session = this.sessions.get(id);
+    if (!session) return null;
+    if (session.shareToken && session.shareToken.trim() !== '') return session.shareToken;
+    session.setShareToken(token);
+    return session.shareToken ?? null;
+  }
+
+  findByShareToken(token: string): ChatSession | null {
+    if (!token || token.trim() === '') return null;
+    const t = token.trim();
+    for (const s of this.sessions.values()) {
+      if (s.shareToken === t) return s;
+    }
+    return null;
+  }
+
   listSummaries(limit = 50, offset = 0): SessionSummary[] {
     const all = Array.from(this.sessions.values())
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

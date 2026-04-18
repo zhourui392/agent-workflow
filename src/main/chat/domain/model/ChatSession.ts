@@ -19,6 +19,7 @@ export interface ChatSessionSnapshot {
   createdAt: Date;
   resumeId?: string;
   title?: string;
+  shareToken?: string;
   messages: ChatMessage[];
 }
 
@@ -29,6 +30,7 @@ export class ChatSession {
   readonly createdAt: Date;
   private _resumeId?: string;
   private _title?: string;
+  private _shareToken?: string;
   private readonly _messages: ChatMessage[];
 
   private constructor(snapshot: ChatSessionSnapshot) {
@@ -41,6 +43,7 @@ export class ChatSession {
     this.createdAt = snapshot.createdAt;
     this._resumeId = snapshot.resumeId;
     this._title = snapshot.title;
+    this._shareToken = snapshot.shareToken;
     this._messages = [...snapshot.messages];
   }
 
@@ -60,7 +63,13 @@ export class ChatSession {
 
   get resumeId(): string | undefined { return this._resumeId; }
   get title(): string | undefined { return this._title; }
+  get shareToken(): string | undefined { return this._shareToken; }
   get messages(): readonly ChatMessage[] { return this._messages; }
+
+  setShareToken(token: string): void {
+    if (!token || token.trim() === '') return;
+    this._shareToken = token.trim();
+  }
 
   addMessage(role: MessageRole, content: string): ChatMessage {
     const msg = createMessage(role, content);
@@ -85,6 +94,7 @@ export class ChatSession {
       createdAt: this.createdAt,
       resumeId: this._resumeId,
       title: this._title,
+      shareToken: this._shareToken,
       messages: [...this._messages]
     };
   }

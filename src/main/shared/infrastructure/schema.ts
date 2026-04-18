@@ -72,7 +72,8 @@ export function initializeTables(database: Database.Database): void {
       working_dir TEXT NOT NULL,
       created_at TEXT NOT NULL,
       resume_id TEXT,
-      title TEXT
+      title TEXT,
+      share_token TEXT
     );
 
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -86,6 +87,7 @@ export function initializeTables(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_created_at ON chat_sessions(created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_sessions_share_token ON chat_sessions(share_token) WHERE share_token IS NOT NULL;
 
     CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON executions(workflow_id);
     CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
@@ -147,5 +149,13 @@ export function runMigrations(database: Database.Database): void {
   }
   if (!execColumnNames.includes('retry_from_step')) {
     database.exec('ALTER TABLE executions ADD COLUMN retry_from_step INTEGER');
+  }
+
+  // 会话分享支持
+  const sessionColumns = database.prepare("PRAGMA table_info(chat_sessions)").all() as { name: string }[];
+  const sessionColumnNames = sessionColumns.map(col => col.name);
+  if (!sessionColumnNames.includes('share_token')) {
+    database.exec('ALTER TABLE chat_sessions ADD COLUMN share_token TEXT');
+    database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_sessions_share_token ON chat_sessions(share_token) WHERE share_token IS NOT NULL');
   }
 }

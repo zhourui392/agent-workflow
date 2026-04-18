@@ -19,6 +19,7 @@ interface SessionRow {
   created_at: string;
   resume_id: string | null;
   title: string | null;
+  share_token: string | null;
 }
 
 interface MessageRow {
@@ -45,13 +46,14 @@ export class SqliteSessionRepository implements SessionRepository {
 
   save(session: ChatSession): void {
     const stmt = this.db.prepare(`
-      INSERT INTO chat_sessions (id, agent_type, working_dir, created_at, resume_id, title)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO chat_sessions (id, agent_type, working_dir, created_at, resume_id, title, share_token)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         agent_type = excluded.agent_type,
         working_dir = excluded.working_dir,
         resume_id = excluded.resume_id,
-        title = excluded.title
+        title = excluded.title,
+        share_token = COALESCE(chat_sessions.share_token, excluded.share_token)
     `);
     stmt.run(
       session.id,
@@ -59,17 +61,15 @@ export class SqliteSessionRepository implements SessionRepository {
       session.workingDir,
       session.createdAt.toISOString(),
       session.resumeId ?? null,
-      session.title ?? null
+      session.title ?? null,
+      session.shareToken ?? null
     );
   }
 
-  find(id: string): ChatSession | null {
-    const row = this.db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(id) as SessionRow | undefined;
-    if (!row) return null;
-
+  private rowToSession(row: SessionRow): ChatSession {
     const msgRows = this.db.prepare(
       'SELECT role, content, timestamp FROM chat_messages WHERE session_id = ? ORDER BY id ASC'
-    ).all(id) as MessageRow[];
+    ).all(row.id) as MessageRow[];
 
     const messages: ChatMessage[] = msgRows.map(m => ({
       role: toRole(m.role),
@@ -84,8 +84,31 @@ export class SqliteSessionRepository implements SessionRepository {
       createdAt: new Date(row.created_at),
       resumeId: row.resume_id ?? undefined,
       title: row.title ?? undefined,
+      shareToken: row.share_token ?? undefined,
       messages
     });
+  }
+
+  find(id: string): ChatSession | null {
+    const row = this.db.prepare('SELECT * FROM chat_sessions WHERE id = ?').get(id) as SessionRow | undefined;
+    if (!row) return null;
+    return this.rowToSession(row);
+  }
+
+  setShareToken(id: string, token: string): string | null {
+    if (!token || token.trim() === '') return null;
+    const existing = this.db.prepare('SELECT share_token FROM chat_sessions WHERE id = ?').get(id) as { share_token: string | null } | undefined;
+    if (!existing) return null;
+    if (existing.share_token && existing.share_token.trim() !== '') return existing.share_token;
+    this.db.prepare('UPDATE chat_sessions SET share_token = ? WHERE id = ?').run(token.trim(), id);
+    return token.trim();
+  }
+
+  findByShareToken(token: string): ChatSession | null {
+    if (!token || token.trim() === '') return null;
+    const row = this.db.prepare('SELECT * FROM chat_sessions WHERE share_token = ?').get(token.trim()) as SessionRow | undefined;
+    if (!row) return null;
+    return this.rowToSession(row);
   }
 
   remove(id: string): boolean {

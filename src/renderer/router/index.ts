@@ -29,6 +29,12 @@ const router = createRouter({
       name: 'WorkflowEdit',
       component: () => import('@/views/WorkflowEdit.vue'),
     },
+    {
+      path: '/share/:token',
+      name: 'SharedSession',
+      component: () => import('@/views/SharedSession.vue'),
+      meta: { public: true },
+    },
   ],
 })
 

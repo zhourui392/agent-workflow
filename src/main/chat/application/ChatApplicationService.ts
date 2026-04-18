@@ -8,6 +8,7 @@
  * - 进程退出后把 assistantBuffer 以 assistant 角色写回持久层
  */
 
+import { randomUUID } from 'crypto';
 import { ChatSession } from '../domain/model/ChatSession';
 import type { AgentType } from '../domain/model/AgentType';
 import type { SessionRepository, SessionSummary } from '../domain/repository/SessionRepository';
@@ -125,5 +126,18 @@ export class ChatApplicationService {
 
   isRunning(sessionId: string): boolean {
     return this.agentGateway.isRunning(sessionId);
+  }
+
+  /**
+   * 为会话生成或返回已有的分享 token（幂等）。
+   * token 使用 16 字符无连字符 UUID，与 agent-web 一致。
+   */
+  shareSession(sessionId: string): string | null {
+    const candidate = randomUUID().replace(/-/g, '').slice(0, 16);
+    return this.sessionRepo.setShareToken(sessionId, candidate);
+  }
+
+  getSharedSession(token: string): ChatSession | null {
+    return this.sessionRepo.findByShareToken(token);
   }
 }
