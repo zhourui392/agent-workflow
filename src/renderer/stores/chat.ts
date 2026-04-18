@@ -12,45 +12,50 @@ import {
 
 export type Segment =
   | { type: 'text'; content: string }
-  | { type: 'tool'; name: string; content: string }
-  | { type: 'tool_result'; content: string }
-  | { type: 'result'; content: string };
+  | { type: 'tool'; name: string; content: string };
 
 /**
- * 将一条 assistant 消息（可能是聚合后的多行 stream-json 或自由文本）解析为可渲染 segments。
- * 规则对齐 agent-web/js/app.js 的 parseStreamJson：
- * - stream_event + content_block_start + tool_use → 打开 tool 段
- * - stream_event + content_block_delta + text_delta → 追加到最后一个 text 段
- * - stream_event + content_block_delta + input_json_delta → 追加到最后一个 tool 段
- * - assistant.message.content[] → 整块文本 / 工具调用
- * - user.message.content[] 含 tool_result → 工具结果
- * - result → 结果段
- * 非 JSON 行回落为 text。
+ * 将一条 assistant 输出（stream-json 多行聚合文本）解析为可渲染 segments。
+ * 严格对齐 agent-web/js/app.js 的解析策略：
+ * - stream_event + content_block_start + tool_use → push 新 tool 段
+ * - stream_event + content_block_delta(text_delta)   → 追加到最后一个 text 段
+ * - stream_event + content_block_delta(input_json)   → 追加到最后一个 tool 段
+ * - assistant.message.content[]                       → 仅当已有 segments 为空时用完整块替换
+ * - user.message.content[].tool_result                → **合并**进最后一个 tool 段（而非新段）
+ * - result                                            → 仅当无内容时作为 fallback 文本
+ * - tool_use_result.file → 格式化为 [文件: path (N行)]
+ * - 工具结果超 2000 字截断
  */
 export function parseChunksToSegments(chunks: string[]): Segment[] {
-  const segs: Segment[] = [];
-  const lastText = (): Segment | undefined => {
-    const s = segs[segs.length - 1];
-    return s && s.type === 'text' ? s : undefined;
-  };
-  const lastTool = (): Segment | undefined => {
-    const s = segs[segs.length - 1];
-    return s && s.type === 'tool' ? s : undefined;
-  };
-  const pushText = (text: string): void => {
+  let segments: Segment[] = [];
+
+  const appendText = (text: string): void => {
     if (!text) return;
-    const t = lastText();
-    if (t && t.type === 'text') { t.content += text; return; }
-    segs.push({ type: 'text', content: text });
+    const last = segments[segments.length - 1];
+    if (last && last.type === 'text') { last.content += text; return; }
+    segments.push({ type: 'text', content: text });
   };
+
+  const appendToolContent = (content: string): void => {
+    for (let j = segments.length - 1; j >= 0; j--) {
+      if (segments[j].type === 'tool') {
+        (segments[j] as { content: string }).content += content;
+        return;
+      }
+    }
+  };
+
+  const hasContent = (): boolean =>
+    segments.some(s => s.content && s.content.trim() !== '');
 
   for (const raw of chunks) {
     const line = raw.trim();
     if (!line) continue;
-    if (!line.startsWith('{')) { pushText(line + '\n'); continue; }
+    if (!line.startsWith('{') && !line.startsWith('[')) { appendText(line); continue; }
+
     let json: Record<string, unknown>;
     try { json = JSON.parse(line) as Record<string, unknown>; }
-    catch { pushText(line + '\n'); continue; }
+    catch { continue; }
 
     const type = json.type;
 
@@ -61,16 +66,17 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
       if (et === 'content_block_start') {
         const block = event.content_block as Record<string, unknown> | undefined;
         if (block?.type === 'tool_use') {
-          segs.push({ type: 'tool', name: String(block.name ?? 'Tool'), content: '' });
+          segments.push({ type: 'tool', name: String(block.name ?? 'Tool'), content: '' });
         }
       } else if (et === 'content_block_delta') {
         const delta = event.delta as Record<string, unknown> | undefined;
         if (!delta) continue;
-        if (delta.type === 'text_delta' && typeof delta.text === 'string') {
-          pushText(delta.text);
-        } else if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
-          const t = lastTool();
-          if (t && t.type === 'tool') t.content += delta.partial_json;
+        if (typeof delta.text === 'string') {
+          appendText(delta.text);
+        } else if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+          appendText(delta.text);
+        } else if (typeof delta.partial_json === 'string') {
+          appendToolContent(delta.partial_json);
         }
       }
       continue;
@@ -80,15 +86,19 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
       const message = json.message as Record<string, unknown> | undefined;
       const content = message?.content as Array<Record<string, unknown>> | undefined;
       if (!Array.isArray(content)) continue;
-      for (const c of content) {
-        if (c.type === 'text' && typeof c.text === 'string') {
-          pushText(c.text);
-        } else if (c.type === 'tool_use') {
-          segs.push({
-            type: 'tool',
-            name: String(c.name ?? 'Tool'),
-            content: c.input ? JSON.stringify(c.input, null, 2) : ''
-          });
+      // 仅当流式阶段没产生内容时，才用完整块替换；否则丢弃（防止重复）
+      if (!hasContent()) {
+        segments = [];
+        for (const c of content) {
+          if (c.type === 'text' && typeof c.text === 'string') {
+            segments.push({ type: 'text', content: c.text });
+          } else if (c.type === 'tool_use') {
+            segments.push({
+              type: 'tool',
+              name: String(c.name ?? 'Tool'),
+              content: c.input ? JSON.stringify(c.input, null, 2) : ''
+            });
+          }
         }
       }
       continue;
@@ -99,29 +109,55 @@ export function parseChunksToSegments(chunks: string[]): Segment[] {
       const content = message?.content as Array<Record<string, unknown>> | undefined;
       if (!Array.isArray(content)) continue;
       for (const c of content) {
-        if (c.type === 'tool_result') {
-          const text = typeof c.content === 'string'
-            ? c.content
-            : JSON.stringify(c.content, null, 2);
-          segs.push({ type: 'tool_result', content: text });
+        if (c.type !== 'tool_result') continue;
+        let resultText = '';
+        const tur = json.tool_use_result as unknown;
+        if (tur && typeof tur === 'object') {
+          const turObj = tur as Record<string, unknown>;
+          const file = turObj.file as Record<string, unknown> | undefined;
+          if (file && typeof file.filePath === 'string') {
+            const lines = typeof file.numLines === 'number' ? ` (${file.numLines}行)` : '';
+            resultText = `[文件: ${file.filePath}${lines}]`;
+          } else if (typeof c.content === 'string') {
+            resultText = c.content;
+          }
+        } else if (typeof tur === 'string') {
+          resultText = tur;
+        }
+        if (!resultText && typeof c.content === 'string') resultText = c.content;
+        if (!resultText) continue;
+        if (resultText.length > 2000) {
+          resultText = resultText.slice(0, 2000) + `\n... (共 ${resultText.length} 字符，已截断)`;
+        }
+        // 合并到最后一个 tool 段
+        let merged = false;
+        for (let j = segments.length - 1; j >= 0; j--) {
+          if (segments[j].type === 'tool') {
+            (segments[j] as { content: string }).content =
+              ((segments[j] as { content: string }).content || '') + '\n' + resultText;
+            merged = true;
+            break;
+          }
+        }
+        if (!merged) {
+          segments.push({ type: 'tool', name: 'Tool Result', content: resultText });
         }
       }
       continue;
     }
 
     if (type === 'result' && typeof json.result === 'string') {
-      segs.push({ type: 'result', content: json.result });
+      if (!hasContent()) {
+        segments.push({ type: 'text', content: json.result });
+      }
       continue;
     }
 
-    // system / init 等不可见事件丢弃
+    // system / init / 其他 → 丢弃（不可见事件）
   }
 
-  // 去掉空 text / 空 tool
-  return segs.filter(s => {
-    if (s.type === 'text' || s.type === 'result' || s.type === 'tool_result') return s.content.trim() !== '';
-    return true;
-  });
+  // 过滤空段
+  return segments.filter(s => s.content && s.content.trim() !== '');
 }
 
 export interface ParsedMessage {
@@ -221,7 +257,6 @@ export const useChatStore = defineStore('chat', () => {
         liveChunks.value = [];
         liveSegments.value = [];
         streaming.value = false;
-        // 同步 resumeId 并刷新会话列表（首个用户消息会作为 title 回显）
         void apiGet(sessionId).then(r => { if (current.value?.id === sessionId) current.value = r.data; });
         void refreshList();
       },
@@ -236,11 +271,6 @@ export const useChatStore = defineStore('chat', () => {
     streaming.value = false;
   }
 
-  /**
-   * 进入聊天页的默认初始化：
-   * - 若已有 current 直接返回
-   * - 刷新列表；有记录则加载最近一条，没有则自动创建
-   */
   async function ensureCurrent(): Promise<void> {
     if (current.value) return;
     await refreshList();

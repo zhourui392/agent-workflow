@@ -60,20 +60,17 @@
               </div>
               <div v-else-if="m.role === 'assistant'" class="bubble assistant">
                 <template v-for="(seg, si) in m.segments" :key="si">
-                  <div v-if="seg.type === 'text' || seg.type === 'result'" class="text-segment">{{ seg.content }}</div>
-                  <div v-else-if="seg.type === 'tool'" class="tool-block">
+                  <div
+                    v-if="seg.type === 'text'"
+                    class="text-segment markdown"
+                    v-html="renderMarkdown(seg.content)"
+                  ></div>
+                  <div v-else class="tool-block">
                     <div class="tool-header" @click="toggleTool(i, si)">
                       <span class="tool-toggle" :class="{ expanded: isExpanded(i, si) }">▶</span>
-                      <span class="tool-label">🔧 {{ seg.name }}</span>
+                      <span class="tool-label">{{ seg.name }}</span>
                     </div>
                     <pre v-show="isExpanded(i, si)" class="tool-content">{{ seg.content || '(empty)' }}</pre>
-                  </div>
-                  <div v-else-if="seg.type === 'tool_result'" class="tool-block result">
-                    <div class="tool-header" @click="toggleTool(i, si)">
-                      <span class="tool-toggle" :class="{ expanded: isExpanded(i, si) }">▶</span>
-                      <span class="tool-label">✅ Tool Result</span>
-                    </div>
-                    <pre v-show="isExpanded(i, si)" class="tool-content">{{ seg.content }}</pre>
                   </div>
                 </template>
               </div>
@@ -85,20 +82,17 @@
             <div v-if="chat.streaming" class="message assistant">
               <div class="bubble assistant streaming">
                 <template v-for="(seg, si) in chat.liveSegments" :key="'live-' + si">
-                  <div v-if="seg.type === 'text' || seg.type === 'result'" class="text-segment">{{ seg.content }}</div>
-                  <div v-else-if="seg.type === 'tool'" class="tool-block">
+                  <div
+                    v-if="seg.type === 'text'"
+                    class="text-segment markdown"
+                    v-html="renderMarkdown(seg.content)"
+                  ></div>
+                  <div v-else class="tool-block">
                     <div class="tool-header" @click="toggleLive(si)">
                       <span class="tool-toggle" :class="{ expanded: liveExpanded.has(si) }">▶</span>
-                      <span class="tool-label">🔧 {{ seg.name }}</span>
+                      <span class="tool-label">{{ seg.name }}</span>
                     </div>
                     <pre v-show="liveExpanded.has(si)" class="tool-content">{{ seg.content || '(streaming...)' }}</pre>
-                  </div>
-                  <div v-else-if="seg.type === 'tool_result'" class="tool-block result">
-                    <div class="tool-header" @click="toggleLive(si)">
-                      <span class="tool-toggle" :class="{ expanded: liveExpanded.has(si) }">▶</span>
-                      <span class="tool-label">✅ Tool Result</span>
-                    </div>
-                    <pre v-show="liveExpanded.has(si)" class="tool-content">{{ seg.content }}</pre>
                   </div>
                 </template>
                 <div v-if="chat.liveSegments.length === 0" class="loading-dots"><span></span><span></span><span></span></div>
@@ -192,11 +186,14 @@ import {
   Folder, Document, FolderOpened, Upload, Plus, Delete,
   Refresh, VideoPause, Promotion
 } from '@element-plus/icons-vue';
+import { marked } from 'marked';
 import { useChatStore } from '../stores/chat';
 import type { FileEntry } from '../api/filesystem';
 import {
   listRoots, listPath, downloadUrl, uploadFile, deleteFile
 } from '../api/filesystem';
+
+marked.setOptions({ breaks: true, gfm: true });
 
 const chat = useChatStore();
 
@@ -205,7 +202,6 @@ const envKey = ref<string | undefined>(undefined);
 const scrollRef = ref<{ setScrollTop: (v: number) => void; wrapRef?: HTMLElement } | null>(null);
 const creating = ref(false);
 
-// tool 折叠状态：key = messageIndex:segIndex
 const expandedTools = reactive<Record<string, boolean>>({});
 function toolKey(mi: number, si: number): string { return `${mi}:${si}`; }
 function isExpanded(mi: number, si: number): boolean { return !!expandedTools[toolKey(mi, si)]; }
@@ -216,6 +212,18 @@ function toggleTool(mi: number, si: number): void {
 const liveExpanded = reactive(new Set<number>());
 function toggleLive(si: number): void {
   if (liveExpanded.has(si)) liveExpanded.delete(si); else liveExpanded.add(si);
+}
+
+function renderMarkdown(content: string): string {
+  try { return marked.parse(content) as string; }
+  catch {
+    return content.replace(/[&<>"']/g, (c) => {
+      const map: Record<string, string> = {
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      };
+      return map[c] ?? c;
+    });
+  }
 }
 
 const showWorkspaceDialog = ref(false);
@@ -245,9 +253,8 @@ async function remove(id: string): Promise<void> {
 
 async function doNew(): Promise<void> {
   creating.value = true;
-  try {
-    await chat.createSession();
-  } catch (e) { ElMessage.error('创建失败'); }
+  try { await chat.createSession(); }
+  catch (e) { ElMessage.error('创建失败'); }
   finally { creating.value = false; }
 }
 
@@ -258,9 +265,7 @@ function send(): void {
   chat.sendMessage(msg, envKey.value);
 }
 
-function insertNewline(): void {
-  draft.value += '\n';
-}
+function insertNewline(): void { draft.value += '\n'; }
 
 async function openWorkspaceDialog(): Promise<void> {
   showWorkspaceDialog.value = true;
@@ -337,9 +342,7 @@ function formatSize(n: number): string {
   return (n / 1024 / 1024).toFixed(1) + ' MB';
 }
 
-function formatTime(ms: number | string): string {
-  return new Date(ms).toLocaleString();
-}
+function formatTime(ms: number | string): string { return new Date(ms).toLocaleString(); }
 
 watch(() => chat.liveSegments.length, () => {
   nextTick(() => {
@@ -398,7 +401,7 @@ onMounted(() => { void chat.ensureCurrent(); });
 .message.assistant { justify-content: flex-start; }
 .message.system { justify-content: center; }
 
-.bubble { max-width: 80%; padding: 10px 14px; border-radius: 8px; line-height: 1.6; font-size: 14px; }
+.bubble { max-width: 85%; padding: 10px 14px; border-radius: 8px; line-height: 1.6; font-size: 14px; }
 .bubble.user { background: #409eff; color: #fff; }
 .bubble.user .text { color: #fff; }
 .bubble.assistant { background: #f5f7fa; color: #303133; }
@@ -406,16 +409,35 @@ onMounted(() => { void chat.ensureCurrent(); });
 .bubble.streaming { border: 1px dashed #409eff; min-width: 120px; }
 
 .text { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 14px; }
-.text-segment { white-space: pre-wrap; word-break: break-word; margin: 4px 0; }
+.text-segment { margin: 4px 0; }
+.text-segment.markdown :deep(p) { margin: 6px 0; }
+.text-segment.markdown :deep(pre) {
+  background: #272822; color: #f8f8f2; padding: 10px 12px; border-radius: 4px;
+  overflow-x: auto; font-size: 12px; margin: 8px 0;
+}
+.text-segment.markdown :deep(code) {
+  background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px;
+  font-family: ui-monospace, monospace; font-size: 12.5px;
+}
+.text-segment.markdown :deep(pre code) { background: transparent; padding: 0; color: inherit; font-size: 12px; }
+.text-segment.markdown :deep(ul), .text-segment.markdown :deep(ol) { padding-left: 22px; margin: 6px 0; }
+.text-segment.markdown :deep(blockquote) {
+  border-left: 3px solid #dcdfe6; padding-left: 10px; color: #606266; margin: 6px 0;
+}
+.text-segment.markdown :deep(h1),
+.text-segment.markdown :deep(h2),
+.text-segment.markdown :deep(h3) { margin: 10px 0 6px; font-weight: 600; }
+.text-segment.markdown :deep(table) { border-collapse: collapse; margin: 8px 0; }
+.text-segment.markdown :deep(th),
+.text-segment.markdown :deep(td) { border: 1px solid #dcdfe6; padding: 4px 8px; }
 
 .tool-block { margin: 8px 0; border: 1px solid #e4e7ed; border-radius: 6px; background: #fafbfc; overflow: hidden; }
-.tool-block.result { background: #f0f9eb; border-color: #d9ecc8; }
 .tool-header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; user-select: none; font-size: 12px; color: #606266; }
 .tool-header:hover { background: rgba(64, 158, 255, 0.06); }
 .tool-toggle { font-size: 10px; transition: transform .15s; display: inline-block; }
 .tool-toggle.expanded { transform: rotate(90deg); }
 .tool-label { font-weight: 500; }
-.tool-content { margin: 0; padding: 8px 12px; background: #272822; color: #f8f8f2; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
+.tool-content { margin: 0; padding: 8px 12px; background: #272822; color: #f8f8f2; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 360px; overflow-y: auto; }
 
 .loading-dots { display: inline-flex; gap: 4px; padding: 4px 0; }
 .loading-dots span { width: 6px; height: 6px; border-radius: 50%; background: #409eff; animation: dot 1.2s infinite; }
