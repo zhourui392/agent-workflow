@@ -185,7 +185,20 @@ export const UpdateConfigSchema = z.object({
 // ========== 校验辅助函数 ==========
 
 /**
- * 校验 IPC 输入，失败时抛出描述性错误
+ * 输入校验错误
+ *
+ * 带 statusCode=400 以便 Fastify 默认错误处理器映射为 Bad Request。
+ */
+export class ValidationError extends Error {
+  readonly statusCode = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+/**
+ * 校验输入，失败时抛出 ValidationError（HTTP 400）
  */
 export function validateInput<T>(schema: z.ZodSchema<T>, data: unknown): T {
   const result = schema.safeParse(data);
@@ -193,7 +206,7 @@ export function validateInput<T>(schema: z.ZodSchema<T>, data: unknown): T {
     const messages = result.error.issues
       .map(issue => `${issue.path.join('.')}: ${issue.message}`)
       .join('; ');
-    throw new Error(`输入校验失败: ${messages}`);
+    throw new ValidationError(`输入校验失败: ${messages}`);
   }
   return result.data;
 }
