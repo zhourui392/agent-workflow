@@ -314,7 +314,7 @@ const hasRenderableLiveEvents = computed(() =>
 );
 
 const draft = ref('');
-const envKey = ref<string>('');
+const envKey = ref<string>('test');
 const scrollRef = ref<{ setScrollTop: (v: number) => void; wrapRef?: HTMLElement } | null>(null);
 const creating = ref(false);
 const sharing = ref(false);
@@ -536,6 +536,26 @@ async function doClearContext(): Promise<void> {
 async function openWorkspaceDialog(): Promise<void> {
   showWorkspaceDialog.value = true;
   if (fsRoots.value.length === 0) await loadRoots();
+  await syncDialogToCurrentWorkingDir();
+}
+
+function isUnderPath(child: string, parent: string): boolean {
+  if (child === parent) return true;
+  const norm = (s: string): string => s.replace(/\\/g, '/').replace(/\/+$/, '');
+  const c = norm(child);
+  const p = norm(parent);
+  return c === p || c.startsWith(p + '/');
+}
+
+async function syncDialogToCurrentWorkingDir(): Promise<void> {
+  const cwd = chat.current?.workingDir;
+  if (!cwd) return;
+  const match = fsRoots.value.find(r => isUnderPath(cwd, r));
+  if (match && match !== fsRoot.value) fsRoot.value = match;
+  if (cwd !== fsPath.value) {
+    fsPath.value = cwd;
+    await reloadFs();
+  }
 }
 
 async function loadRoots(): Promise<void> {
@@ -622,6 +642,17 @@ watch(() => chat.parsedMessages.length, () => {
     const el = scrollRef.value?.wrapRef;
     if (el) el.scrollTop = el.scrollHeight;
   });
+});
+
+// 环境切换 ⇄ 工作目录联动：test 用 worktree 路径，非 test 还原到 originalWorkingDir
+watch(envKey, async (next, prev) => {
+  if (next === prev) return;
+  if (!chat.current) return;
+  const state = getSessionState(chat.current.id);
+  if (!state) return;
+  const target = next === 'test' ? state.worktreePath : state.originalWorkingDir;
+  if (!target || target === chat.current.workingDir) return;
+  await chat.changeWorkingDir(target);
 });
 
 onMounted(() => { void chat.ensureCurrent(); });
