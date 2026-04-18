@@ -1,7 +1,7 @@
 /**
  * Git Worktree 服务
  *
- * 移植自 agent-web 的 WorktreeService.java。对 workspace 下所有 .git 仓库（递归深度 4）
+ * 移植自 agent-web 的 WorktreeService.java。对 workspace 下所有 .git 仓库（递归深度 6）
  * 并行 fetch/worktree add/pull。
  */
 
@@ -10,7 +10,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import log from '../shared/infrastructure/logger';
 
-const MAX_DEPTH = 4;
+const MAX_DEPTH = 6;
 const CONCURRENCY = 8;
 const GIT_TIMEOUT_MS = 30_000;
 
@@ -157,14 +157,15 @@ export class WorktreeService {
 
     fs.mkdirSync(path.dirname(target), { recursive: true });
 
-    // 1. 远端分支存在：worktree add -B
+    // 1. 远端有该分支：基于 origin/<branch> 创建 worktree（无 -B/-b，避免覆盖本地已有同名分支；
+    //    若本地无同名分支，git 会自动建立跟踪分支，pull --ff-only 可用）
     if (await remoteBranchExists(repoDir, branch)) {
-      const r = await runGit(repoDir, ['worktree', 'add', '-B', branch, target, `origin/${branch}`]);
+      const r = await runGit(repoDir, ['worktree', 'add', target, `origin/${branch}`]);
       if (r.code === 0) return { name, created: true, actualBranch: branch };
       return { name, created: false, actualBranch: branch, reason: r.stderr.trim().slice(0, 200) };
     }
 
-    // 2. 回退到默认分支
+    // 2. 远端无该分支：维持在默认分支（通常 master/main），不新建任何分支
     const fallback = await getDefaultBranch(repoDir);
     if (!fallback) {
       return { name, created: false, actualBranch: '', reason: '无法确定默认分支' };

@@ -43,6 +43,9 @@
               <el-radio-button value="test" class="env-option env-option-test">test</el-radio-button>
               <el-radio-button value="prod" class="env-option env-option-prod">prod</el-radio-button>
             </el-radio-group>
+            <el-tooltip raw-content content="环境选择使用注入限制提示词<br/>生产环境只能根据日志定位问题" placement="bottom">
+              <span class="env-help-mark">?</span>
+            </el-tooltip>
           </div>
 
           <el-popover
@@ -83,13 +86,6 @@
                 :disabled="!currentBranch"
                 @click="doUpdateBranch"
               >更新</el-button>
-              <el-button
-                v-if="currentBranch"
-                size="small"
-                type="info"
-                plain
-                @click="doClearBranch"
-              >还原</el-button>
             </div>
             <div v-if="savedBranches.length > 0" style="margin-top: 10px">
               <el-tag
@@ -123,6 +119,37 @@
           </el-popover>
 
           <span style="flex: 1"></span>
+          <el-popover trigger="click" :width="400" placement="bottom-end">
+            <template #reference>
+              <el-button size="small" plain>
+                <el-icon><QuestionFilled /></el-icon>
+                <span>使用说明</span>
+              </el-button>
+            </template>
+            <div class="usage-guide">
+              <div class="guide-heading">快速开始</div>
+              <ol>
+                <li>（可选）点击顶部<b>工作目录</b>，选择项目根路径</li>
+                <li>（可选）切换<b>环境</b>：测试 / 生产会注入对应约束提示词</li>
+                <li>测试环境下可点击 🌿 <b>分支标签</b> 切换或更新 worktree</li>
+                <li>在底部输入框提问，<el-tag size="small" effect="plain">Enter</el-tag> 发送，<el-tag size="small" effect="plain">Ctrl+Enter</el-tag> 换行</li>
+              </ol>
+              <div class="guide-heading">输入技巧</div>
+              <ul>
+                <li><b>清除上下文</b>：开启新一轮对话但保留会话</li>
+                <li><b>停止</b>：中断当前 AI 回答</li>
+              </ul>
+              <div class="guide-heading">侧边栏</div>
+              <ul>
+                <li>点击 <b>新对话</b> 开启新会话；点击会话项切换；🗑 <b>删除</b></li>
+              </ul>
+              <div class="guide-heading">其他</div>
+              <ul>
+                <li><b>分享</b>：导出当前会话</li>
+                <li><b>工作空间</b>弹窗支持 上传 / 下载 / 删除 文件</li>
+              </ul>
+            </div>
+          </el-popover>
           <el-button
             v-if="chat.current"
             size="small"
@@ -259,7 +286,7 @@ import { computed, onMounted, ref, nextTick, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   Folder, Document, FolderOpened, Upload, Plus, Delete,
-  Refresh, VideoPause, Promotion, Share
+  Refresh, VideoPause, Promotion, Share, QuestionFilled
 } from '@element-plus/icons-vue';
 import ChatAssistantRenderer from '../components/ChatAssistantRenderer.vue';
 import { useChatStore } from '../stores/chat';
@@ -339,6 +366,7 @@ async function doSwitchBranch(): Promise<void> {
   const workspace = existing?.originalWorkingDir ?? chat.current.workingDir;
   switching.value = true;
   switchResultCreated.value = [];
+  updateResult.value = [];
   try {
     const resp = await apiSwitchBranch(workspace, branch);
     switchResultCreated.value = resp.data.repos.filter(r => r.created);
@@ -352,7 +380,8 @@ async function doSwitchBranch(): Promise<void> {
       persistSavedBranches();
     }
     await chat.changeWorkingDir(resp.data.worktreePath);
-    ElMessage.success(`已切换到分支 ${branch}`);
+    const switched = resp.data.repos.filter(r => r.created && r.actualBranch === branch).length;
+    ElMessage.success(`已切换到 ${branch}，${switched} 个服务`);
   } catch (e) {
     ElMessage.error('切换失败');
   } finally {
@@ -367,13 +396,14 @@ async function doUpdateBranch(): Promise<void> {
   if (!state) return;
   updating.value = true;
   updateResult.value = [];
+  switchResultCreated.value = [];
   try {
     const resp = await apiUpdateBranch(state.originalWorkingDir, state.currentBranch);
     updateResult.value = resp.data.repos;
-    const ok = resp.data.repos.filter(r => r.updated || r.skipped).length;
-    const fail = resp.data.repos.length - ok;
-    if (fail === 0) ElMessage.success(`${state.currentBranch} 更新完成 (${ok}/${resp.data.repos.length})`);
-    else ElMessage.warning(`${fail} 个仓库更新失败`);
+    const ok = resp.data.repos.filter(r => r.updated).length;
+    const failed = resp.data.repos.filter(r => !r.updated && !r.skipped).length;
+    if (failed === 0) ElMessage.success(`已更新 ${ok} 个服务`);
+    else ElMessage.warning(`成功 ${ok}，失败 ${failed}`);
   } catch (e) {
     ElMessage.error('更新失败');
   } finally {
@@ -387,11 +417,11 @@ async function doClearBranch(): Promise<void> {
   const state = getSessionState(sid);
   if (!state) return;
   try {
-    await chat.changeWorkingDir(state.originalWorkingDir);
     saveSessionState(sid, null);
     selectedBranch.value = '';
     switchResultCreated.value = [];
     updateResult.value = [];
+    await chat.changeWorkingDir(state.originalWorkingDir);
     ElMessage.success('已还原工作目录');
   } catch (e) {
     ElMessage.error('还原失败');
@@ -399,40 +429,22 @@ async function doClearBranch(): Promise<void> {
 }
 
 async function doRemoveSavedBranch(branch: string): Promise<void> {
+  if (!chat.current) return;
+  const state = getSessionState(chat.current.id);
+  const workspace = state?.originalWorkingDir ?? chat.current.workingDir;
+  try {
+    await apiRemoveBranch(workspace, branch);
+    ElMessage.success(`已清理分支 ${branch} 的 worktree`);
+  } catch {
+    ElMessage.warning('清理 worktree 失败，已移除标签');
+  }
   savedBranches.value = savedBranches.value.filter(b => b !== branch);
   persistSavedBranches();
-
-  // 当前会话若处于该分支：先还原工作目录
-  if (chat.current) {
-    const state = getSessionState(chat.current.id);
-    if (state && state.currentBranch === branch) {
-      try { await doClearBranch(); } catch { /* noop */ }
-    }
+  if (state && state.currentBranch === branch) {
+    await doClearBranch();
+  } else if (selectedBranch.value === branch) {
+    selectedBranch.value = '';
   }
-
-  // 收集所有知道该分支的原始工作目录（跨会话）
-  const workspaces = new Set<string>();
-  const allState = loadAllState();
-  for (const sid of Object.keys(allState)) {
-    if (allState[sid].currentBranch === branch) {
-      workspaces.add(allState[sid].originalWorkingDir);
-    }
-  }
-  if (workspaces.size === 0 && chat.current) {
-    const s = getSessionState(chat.current.id);
-    const fallback = s?.originalWorkingDir ?? chat.current.workingDir;
-    if (fallback) workspaces.add(fallback);
-  }
-
-  let anyDeleted = false;
-  for (const ws of workspaces) {
-    try {
-      await apiRemoveBranch(ws, branch);
-      anyDeleted = true;
-    } catch { /* best effort across workspaces */ }
-  }
-  if (anyDeleted) ElMessage.success(`已删除分支 ${branch}`);
-  else ElMessage.warning(`已从列表移除 ${branch}（工作目录未清理）`);
 }
 
 async function doShare(): Promise<void> {
@@ -652,6 +664,17 @@ onMounted(() => { void chat.ensureCurrent(); });
 .env-radio-group :deep(.env-option-prod .el-radio-button__original-radio:checked + .el-radio-button__inner) {
   background: #f56c6c; border-color: #f56c6c; box-shadow: -1px 0 0 0 #f56c6c;
 }
+.env-help-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid #909399; color: #909399;
+  font-size: 12px; font-weight: bold; cursor: pointer; user-select: none; flex-shrink: 0;
+}
+
+.usage-guide { font-size: 13px; line-height: 1.7; max-height: 70vh; overflow-y: auto; }
+.usage-guide .guide-heading { font-weight: 600; color: #303133; margin-bottom: 6px; }
+.usage-guide ol, .usage-guide ul { padding-left: 20px; margin: 0 0 10px; }
+.usage-guide ul:last-child, .usage-guide ol:last-child { margin-bottom: 0; }
 
 .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; }
 .messages { flex: 1; padding: 16px; }
