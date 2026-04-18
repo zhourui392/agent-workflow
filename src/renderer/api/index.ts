@@ -15,12 +15,14 @@ import type {
   UpdateWorkflowRequest,
   ExecutionListParams,
   ExecutionProgressEvent,
-  SkillDTO,
-  CreateSkillInput,
-  UpdateSkillInput
+  SkillDTO
 } from '../../main/types';
 
-import { subscribeExecutionProgress as wsSubscribe } from './websocket';
+import {
+  subscribeExecutionProgress as wsSubscribe,
+  subscribeSkillGeneration as wsSubscribeSkillGeneration,
+  type SkillGenerationEvent
+} from './websocket';
 
 /**
  * axios 风格响应（保留字段形状以兼容原 IPC 封装）
@@ -146,17 +148,6 @@ export function getSkill(id: string): Promise<AxiosLikeResponse<SkillDTO | null>
   return http.get<SkillDTO | null>(`/api/skills/${encodeURIComponent(id)}`);
 }
 
-export function createSkill(data: CreateSkillInput): Promise<AxiosLikeResponse<SkillDTO>> {
-  return http.post<SkillDTO>('/api/skills', data);
-}
-
-export function updateSkill(
-  id: string,
-  data: UpdateSkillInput
-): Promise<AxiosLikeResponse<SkillDTO | null>> {
-  return http.put<SkillDTO | null>(`/api/skills/${encodeURIComponent(id)}`, data);
-}
-
 export function deleteSkill(id: string): Promise<AxiosLikeResponse<boolean>> {
   return http.delete<boolean>(`/api/skills/${encodeURIComponent(id)}`);
 }
@@ -171,6 +162,59 @@ export function setSkillEnabled(
   );
 }
 
+// ============ Skill Generation API ============
+
+export interface SkillDraftDTO {
+  generationId: string;
+  status: 'generating' | 'generated' | 'failed';
+  draftName?: string;
+  draftDir?: string;
+  suggestedTests: string[];
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function generateSkill(
+  prompt: string,
+  model?: string
+): Promise<AxiosLikeResponse<{ generationId: string }>> {
+  return http.post<{ generationId: string }>('/api/skills/generate', { prompt, model });
+}
+
+export function getSkillDraft(
+  generationId: string
+): Promise<AxiosLikeResponse<SkillDraftDTO>> {
+  return http.get<SkillDraftDTO>(`/api/skills/generate/${encodeURIComponent(generationId)}`);
+}
+
+export function verifySkill(
+  generationId: string,
+  testPrompt: string,
+  model?: string
+): Promise<AxiosLikeResponse<{ generationId: string }>> {
+  return http.post<{ generationId: string }>(
+    `/api/skills/generate/${encodeURIComponent(generationId)}/verify`,
+    { testPrompt, model }
+  );
+}
+
+export function saveSkillFromDraft(
+  generationId: string,
+  enabled?: boolean
+): Promise<AxiosLikeResponse<SkillDTO>> {
+  return http.post<SkillDTO>(
+    `/api/skills/generate/${encodeURIComponent(generationId)}/save`,
+    enabled === undefined ? {} : { enabled }
+  );
+}
+
+export function cancelSkillGeneration(
+  generationId: string
+): Promise<AxiosLikeResponse<null>> {
+  return http.post<null>(`/api/skills/generate/${encodeURIComponent(generationId)}/cancel`);
+}
+
 // ============ Real-time Events ============
 
 export function subscribeExecutionProgress(
@@ -178,6 +222,18 @@ export function subscribeExecutionProgress(
 ): () => void {
   return wsSubscribe(callback);
 }
+
+/**
+ * 订阅 Skill 生成/验证会话事件。
+ * 回调只会收到 `kind === 'skill-generation'` 的消息；按 generationId 再自行过滤。
+ */
+export function subscribeSkillGeneration(
+  callback: (event: SkillGenerationEvent) => void
+): () => void {
+  return wsSubscribeSkillGeneration(callback);
+}
+
+export type { SkillGenerationEvent };
 
 // ============ Re-export types ============
 
@@ -199,7 +255,5 @@ export type {
   WorkflowOutput,
   ExecutionStatus,
   TriggerType,
-  SkillDTO,
-  CreateSkillInput,
-  UpdateSkillInput
+  SkillDTO
 } from '../../main/types';

@@ -25,7 +25,10 @@ export {
   createTestSkill,
   createMockSkillRepository,
   createMockGlobalConfigProvider,
-  createMockSkillFileWriter
+  createMockSkillFileWriter,
+  createMockSkillDraftStore,
+  createMockSkillGenerationNotifier,
+  createMockSkillCreatorLocator
 } from './configuration.fixtures';
 
 // 领域服务 mock

@@ -1,7 +1,10 @@
 /**
  * Claude CLI 配置加载器
  *
- * 从 ~/.claude/skills/ 加载用户的 CLI 配置
+ * 从 ~/.claude/skills/ 和 ~/.claude/plugins/ 加载目录形式的 CLI skills。
+ *
+ * 返回值 value 为 skill 源目录绝对路径（含 SKILL.md）。
+ * 单文件（*.md 直接放在 skills/ 下）形式已不支持，会被忽略。
  */
 
 import * as fs from 'fs';
@@ -9,19 +12,13 @@ import * as path from 'path';
 import * as os from 'os';
 import log from '../../shared/infrastructure/logger';
 import type { McpServerConfig } from '../domain/model/McpServerConfig';
+import { parseSkillMd, SkillDraftParseError } from '../domain/service/SkillDraftParser';
 
 export interface CliSkillDetail {
   name: string;
+  dirPath: string;
   description?: string;
   allowedTools?: string[];
-  content: string;
-}
-
-interface SkillContentInternal {
-  name: string;
-  description?: string;
-  allowedTools?: string[];
-  content: string;
 }
 
 function readFileOrNull(filePath: string): string | null {
@@ -35,35 +32,20 @@ function readFileOrNull(filePath: string): string | null {
   return null;
 }
 
-function parseSkillContent(name: string, content: string): SkillContentInternal {
-  const result: SkillContentInternal = { name, content };
-
-  if (content.startsWith('---')) {
-    const endIndex = content.indexOf('---', 3);
-    if (endIndex > 0) {
-      const frontmatter = content.substring(3, endIndex).trim();
-      result.content = content.substring(endIndex + 3).trim();
-
-      for (const line of frontmatter.split('\n')) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex > 0) {
-          const key = line.substring(0, colonIndex).trim();
-          const value = line.substring(colonIndex + 1).trim();
-
-          if (key === 'description') {
-            result.description = value;
-          } else if (key === 'allowed-tools') {
-            result.allowedTools = value.split(',').map(t => t.trim());
-          }
-        }
-      }
-    }
+function readSkillMeta(dirPath: string): { description?: string; allowedTools?: string[] } {
+  const mdPath = path.join(dirPath, 'SKILL.md');
+  const md = readFileOrNull(mdPath);
+  if (!md) return {};
+  try {
+    const parsed = parseSkillMd(md);
+    return { description: parsed.description, allowedTools: parsed.allowedTools };
+  } catch (error) {
+    if (!(error instanceof SkillDraftParseError)) throw error;
+    return {};
   }
-
-  return result;
 }
 
-function scanSkillsDirectory(dir: string, skills: Map<string, SkillContentInternal>): void {
+function scanSkillsDirectory(dir: string, skills: Map<string, string>): void {
   if (!fs.existsSync(dir)) return;
 
   try {
@@ -75,10 +57,7 @@ function scanSkillsDirectory(dir: string, skills: Map<string, SkillContentIntern
       if (entry.isDirectory()) {
         const skillFile = path.join(fullPath, 'SKILL.md');
         if (fs.existsSync(skillFile)) {
-          const content = readFileOrNull(skillFile);
-          if (content) {
-            skills.set(entry.name, parseSkillContent(entry.name, content));
-          }
+          skills.set(entry.name, fullPath);
         } else {
           scanSkillsDirectory(fullPath, skills);
         }
@@ -89,33 +68,22 @@ function scanSkillsDirectory(dir: string, skills: Map<string, SkillContentIntern
   }
 }
 
-function scanAllCliSkills(): Map<string, SkillContentInternal> {
+function scanAllCliSkills(): Map<string, string> {
   const claudeDir = path.join(os.homedir(), '.claude');
   const skillsPath = path.join(claudeDir, 'skills');
   const pluginsPath = path.join(claudeDir, 'plugins');
-  const skills = new Map<string, SkillContentInternal>();
+  const skills = new Map<string, string>();
 
   if (fs.existsSync(skillsPath)) {
     try {
       const entries = fs.readdirSync(skillsPath, { withFileTypes: true });
 
       for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
         const fullPath = path.join(skillsPath, entry.name);
-
-        if (entry.isFile() && entry.name.endsWith('.md')) {
-          const skillName = path.basename(entry.name, '.md');
-          const content = readFileOrNull(fullPath);
-          if (content) {
-            skills.set(skillName, parseSkillContent(skillName, content));
-          }
-        } else if (entry.isDirectory()) {
-          const skillFile = path.join(fullPath, 'SKILL.md');
-          if (fs.existsSync(skillFile)) {
-            const content = readFileOrNull(skillFile);
-            if (content) {
-              skills.set(entry.name, parseSkillContent(entry.name, content));
-            }
-          }
+        const skillFile = path.join(fullPath, 'SKILL.md');
+        if (fs.existsSync(skillFile)) {
+          skills.set(entry.name, fullPath);
         }
       }
     } catch (error) {
@@ -181,15 +149,14 @@ export class CliConfigLoader {
     return servers;
   }
 
+  /**
+   * 返回 CLI skills 的 name → 源目录绝对路径 映射
+   */
   loadClaudeCliSkills(): Record<string, string> {
     const skills = scanAllCliSkills();
     log.debug('Loaded Claude CLI skills', { count: skills.size });
 
-    const result: Record<string, string> = {};
-    for (const [name, skill] of skills) {
-      result[name] = skill.content;
-    }
-    return result;
+    return Object.fromEntries(skills.entries());
   }
 
   loadClaudeCliSkillsWithDetails(): CliSkillDetail[] {
@@ -197,12 +164,13 @@ export class CliConfigLoader {
     log.debug('Loaded Claude CLI skills with details', { count: skills.size });
 
     const result: CliSkillDetail[] = [];
-    for (const [, skill] of skills) {
+    for (const [name, dirPath] of skills) {
+      const meta = readSkillMeta(dirPath);
       result.push({
-        name: skill.name,
-        description: skill.description,
-        allowedTools: skill.allowedTools,
-        content: skill.content
+        name,
+        dirPath,
+        description: meta.description,
+        allowedTools: meta.allowedTools
       });
     }
     return result;

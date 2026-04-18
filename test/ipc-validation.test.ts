@@ -12,6 +12,8 @@ import {
   UpdateWorkflowSchema,
   ExecutionListParamsSchema,
   CreateSkillSchema,
+  VerifySkillSchema,
+  SaveSkillFromDraftSchema,
   UpdateConfigSchema,
   RunWorkflowInputsSchema,
   validateInput
@@ -364,23 +366,51 @@ describe('CreateSkillSchema', () => {
   it('should accept valid skill', () => {
     const result = validateInput(CreateSkillSchema, {
       name: 'test-skill',
-      content: '# My Skill\nDo stuff'
+      sourceDir: '/tmp/src/test-skill'
     });
     expect(result.name).toBe('test-skill');
+    expect(result.sourceDir).toBe('/tmp/src/test-skill');
   });
 
-  it('should reject without content', () => {
+  it('should reject without sourceDir', () => {
     expect(() => validateInput(CreateSkillSchema, { name: 'test' }))
       .toThrow();
   });
 
-  it('should accept with allowed tools', () => {
+  it('should accept with enabled flag', () => {
     const result = validateInput(CreateSkillSchema, {
       name: 'test-skill',
-      content: 'content',
-      allowedTools: ['Bash', 'Read']
+      sourceDir: '/tmp/src/test-skill',
+      enabled: true
     });
-    expect(result.allowedTools).toEqual(['Bash', 'Read']);
+    expect(result.enabled).toBe(true);
+  });
+});
+
+describe('VerifySkillSchema', () => {
+  it('should accept valid testPrompt', () => {
+    const result = validateInput(VerifySkillSchema, { testPrompt: 'say hello' });
+    expect(result.testPrompt).toBe('say hello');
+  });
+
+  it('should reject empty testPrompt', () => {
+    expect(() => validateInput(VerifySkillSchema, { testPrompt: '' })).toThrow();
+  });
+
+  it('should accept optional model', () => {
+    const result = validateInput(VerifySkillSchema, { testPrompt: 'hi', model: 'claude-3' });
+    expect(result.model).toBe('claude-3');
+  });
+});
+
+describe('SaveSkillFromDraftSchema', () => {
+  it('should accept empty object', () => {
+    expect(validateInput(SaveSkillFromDraftSchema, {})).toEqual({});
+  });
+
+  it('should accept enabled flag', () => {
+    const result = validateInput(SaveSkillFromDraftSchema, { enabled: false });
+    expect(result.enabled).toBe(false);
   });
 });
 

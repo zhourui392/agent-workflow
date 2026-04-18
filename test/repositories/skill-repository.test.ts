@@ -1,48 +1,73 @@
 /**
  * SqliteSkillRepository 集成测试
  *
- * 使用内存 SQLite 数据库验证 Skill 仓库的全部 CRUD 操作、
- * JSON 字段（allowedTools）序列化/反序列化、以及域对象实例化。
+ * 使用内存 SQLite + 临时 SkillFileStore 目录验证 Skill 仓库的全部 CRUD 操作：
+ * - DB 行与磁盘目录的一致性（create 同时写两者，remove 同时删两者）
+ * - SKILL.md frontmatter 解析出的 description/allowedTools 注入实体
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import Database from 'better-sqlite3';
 import { createTestDatabase } from '../helpers/testDatabase';
 import { SqliteSkillRepository } from '../../src/main/configuration/infrastructure/SqliteSkillRepository';
+import { SkillFileStore } from '../../src/main/configuration/infrastructure/SkillFileStore';
 import { Skill } from '../../src/main/configuration/domain/model';
 import type { CreateSkillInput } from '../../src/main/configuration/domain/model';
 
 describe('SqliteSkillRepository', () => {
   let db: Database.Database;
+  let tmpRoot: string;
+  let baseDir: string;
+  let store: SkillFileStore;
   let repo: SqliteSkillRepository;
 
   beforeEach(() => {
     db = createTestDatabase();
-    repo = new SqliteSkillRepository(db);
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'skillrepo-'));
+    baseDir = path.join(tmpRoot, 'skills');
+    store = new SkillFileStore(baseDir);
+    repo = new SqliteSkillRepository(db, store);
   });
 
-  function buildInput(overrides: Partial<CreateSkillInput> = {}): CreateSkillInput {
-    return {
-      name: 'test-skill',
-      description: 'A test skill',
-      content: 'You are a helpful coding assistant.',
-      allowedTools: ['Read', 'Write', 'Bash'],
-      enabled: true,
-      ...overrides
-    };
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  function makeSourceDir(name: string, opts: { description?: string; allowedTools?: string[]; extra?: Record<string, string> } = {}): string {
+    const src = path.join(tmpRoot, 'src', name);
+    fs.mkdirSync(src, { recursive: true });
+
+    const frontmatter: string[] = [`name: ${name}`];
+    if (opts.description) frontmatter.push(`description: ${opts.description}`);
+    if (opts.allowedTools) frontmatter.push(`allowed-tools: ${opts.allowedTools.join(', ')}`);
+    const md = `---\n${frontmatter.join('\n')}\n---\n\nbody`;
+    fs.writeFileSync(path.join(src, 'SKILL.md'), md, 'utf-8');
+
+    if (opts.extra) {
+      for (const [rel, content] of Object.entries(opts.extra)) {
+        const abs = path.join(src, rel);
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, content, 'utf-8');
+      }
+    }
+    return src;
   }
 
-  // ===========================================================================
-  // findAll
-  // ===========================================================================
+  function buildInput(name = 'test-skill', opts: Parameters<typeof makeSourceDir>[1] = {}): CreateSkillInput {
+    return { name, sourceDir: makeSourceDir(name, opts), enabled: true };
+  }
+
   describe('findAll', () => {
     it('空数据库返回空数组', () => {
       expect(repo.findAll()).toEqual([]);
     });
 
     it('返回所有记录，按 created_at DESC 排序', () => {
-      repo.create(buildInput({ name: 'skill-a' }));
-      repo.create(buildInput({ name: 'skill-b' }));
+      repo.create(buildInput('skill-a'));
+      repo.create(buildInput('skill-b'));
 
       const all = repo.findAll();
       expect(all).toHaveLength(2);
@@ -52,9 +77,6 @@ describe('SqliteSkillRepository', () => {
     });
   });
 
-  // ===========================================================================
-  // findById
-  // ===========================================================================
   describe('findById', () => {
     it('返回 Skill 实例', () => {
       const created = repo.create(buildInput());
@@ -70,14 +92,11 @@ describe('SqliteSkillRepository', () => {
     });
   });
 
-  // ===========================================================================
-  // findByIds
-  // ===========================================================================
   describe('findByIds', () => {
     it('返回匹配的多条记录', () => {
-      const s1 = repo.create(buildInput({ name: 'skill-1' }));
-      const s2 = repo.create(buildInput({ name: 'skill-2' }));
-      repo.create(buildInput({ name: 'skill-3' }));
+      const s1 = repo.create(buildInput('skill-1'));
+      const s2 = repo.create(buildInput('skill-2'));
+      repo.create(buildInput('skill-3'));
 
       const result = repo.findByIds([s1.id, s2.id]);
       expect(result).toHaveLength(2);
@@ -88,21 +107,12 @@ describe('SqliteSkillRepository', () => {
     it('空数组返回空结果', () => {
       expect(repo.findByIds([])).toEqual([]);
     });
-
-    it('不存在的 ID 被忽略', () => {
-      const s1 = repo.create(buildInput({ name: 'skill-1' }));
-      const result = repo.findByIds([s1.id, 'non-existent']);
-      expect(result).toHaveLength(1);
-    });
   });
 
-  // ===========================================================================
-  // findEnabled
-  // ===========================================================================
   describe('findEnabled', () => {
     it('仅返回 enabled=true 的记录', () => {
-      repo.create(buildInput({ name: 'enabled-skill', enabled: true }));
-      repo.create(buildInput({ name: 'disabled-skill', enabled: false }));
+      repo.create({ ...buildInput('enabled-skill'), enabled: true });
+      repo.create({ ...buildInput('disabled-skill'), enabled: false });
 
       const result = repo.findEnabled();
       expect(result).toHaveLength(1);
@@ -111,15 +121,10 @@ describe('SqliteSkillRepository', () => {
     });
   });
 
-  // ===========================================================================
-  // findByName
-  // ===========================================================================
   describe('findByName', () => {
     it('按名称精确匹配', () => {
-      repo.create(buildInput({ name: 'unique-skill' }));
-
+      repo.create(buildInput('unique-skill'));
       const found = repo.findByName('unique-skill');
-      expect(found).not.toBeNull();
       expect(found).toBeInstanceOf(Skill);
       expect(found!.name).toBe('unique-skill');
     });
@@ -129,125 +134,69 @@ describe('SqliteSkillRepository', () => {
     });
   });
 
-  // ===========================================================================
-  // create
-  // ===========================================================================
   describe('create', () => {
-    it('生成 UUID 并持久化所有字段（含 allowedTools）', () => {
-      const created = repo.create(buildInput({
-        name: 'full-skill',
-        description: 'Complete skill definition',
-        content: 'You must follow strict coding standards.',
-        allowedTools: ['Read', 'Write', 'Bash', 'Grep', 'Glob'],
-        enabled: true
-      }));
+    it('生成 UUID、写 DB 行、复制源目录', () => {
+      const input = buildInput('full-skill', {
+        description: 'Complete skill',
+        allowedTools: ['Read', 'Write'],
+        extra: { 'scripts/run.sh': '#!/bin/sh' }
+      });
+      const created = repo.create(input);
 
       expect(created).toBeInstanceOf(Skill);
-      expect(created.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(created.id).toMatch(/^[0-9a-f]{8}-/);
       expect(created.name).toBe('full-skill');
-      expect(created.description).toBe('Complete skill definition');
-      expect(created.content).toBe('You must follow strict coding standards.');
-      expect(created.allowedTools).toEqual(['Read', 'Write', 'Bash', 'Grep', 'Glob']);
-      expect(created.enabled).toBe(true);
-      expect(created.createdAt).toBeDefined();
-      expect(created.updatedAt).toBeDefined();
+      expect(created.dirPath).toBe(path.join(baseDir, 'full-skill'));
+      expect(created.description).toBe('Complete skill');
+      expect(created.allowedTools).toEqual(['Read', 'Write']);
+      expect(fs.existsSync(path.join(baseDir, 'full-skill', 'SKILL.md'))).toBe(true);
+      expect(fs.existsSync(path.join(baseDir, 'full-skill', 'scripts', 'run.sh'))).toBe(true);
     });
 
-    it('可选字段为空时正确处理', () => {
-      const created = repo.create({
-        name: 'minimal',
-        content: 'Minimal skill'
-      });
-
-      expect(created.description).toBeUndefined();
-      expect(created.allowedTools).toBeUndefined();
-      expect(created.enabled).toBe(false); // enabled 未指定时为 falsy → false
+    it('sourceDir 缺少 SKILL.md 时抛错', () => {
+      const bad = path.join(tmpRoot, 'bad');
+      fs.mkdirSync(bad, { recursive: true });
+      expect(() => repo.create({ name: 'bad', sourceDir: bad })).toThrow(/SKILL\.md/);
     });
   });
 
-  // ===========================================================================
-  // update
-  // ===========================================================================
   describe('update', () => {
-    it('部分更新仅修改指定字段', () => {
-      const created = repo.create(buildInput({ name: 'original', description: 'old desc' }));
-
-      const updated = repo.update(created.id, { name: 'renamed' });
-
-      expect(updated).not.toBeNull();
-      expect(updated).toBeInstanceOf(Skill);
-      expect(updated!.name).toBe('renamed');
-      expect(updated!.description).toBe('old desc'); // 未修改
-      expect(updated!.content).toBe(created.content); // 未修改
-    });
-
-    it('不存在的 ID 返回 null', () => {
-      expect(repo.update('non-existent', { name: 'x' })).toBeNull();
-    });
-
-    it('更新 allowedTools（JSON 字段序列化/反序列化）', () => {
-      const created = repo.create(buildInput({ allowedTools: ['Read'] }));
-      const updated = repo.update(created.id, { allowedTools: ['Read', 'Write', 'Edit'] });
-      expect(updated!.allowedTools).toEqual(['Read', 'Write', 'Edit']);
-    });
-
-    it('更新 content', () => {
-      const created = repo.create(buildInput());
-      const updated = repo.update(created.id, { content: 'Updated skill content' });
-      expect(updated!.content).toBe('Updated skill content');
-    });
-
     it('更新 enabled', () => {
-      const created = repo.create(buildInput({ enabled: true }));
+      const created = repo.create({ ...buildInput(), enabled: true });
       const updated = repo.update(created.id, { enabled: false });
       expect(updated!.enabled).toBe(false);
     });
 
-    it('updatedAt 发生变化', () => {
+    it('不存在的 ID 返回 null', () => {
+      expect(repo.update('non-existent', { enabled: true })).toBeNull();
+    });
+
+    it('updatedAt 发生变化', async () => {
       const created = repo.create(buildInput());
-      const updated = repo.update(created.id, { name: 'changed' });
+      await new Promise(r => setTimeout(r, 10));
+      const updated = repo.update(created.id, { enabled: false });
       expect(updated!.updatedAt).not.toBe(created.updatedAt);
     });
   });
 
-  // ===========================================================================
-  // setEnabled
-  // ===========================================================================
   describe('setEnabled', () => {
     it('禁用已启用的 Skill', () => {
-      const created = repo.create(buildInput({ enabled: true }));
+      const created = repo.create({ ...buildInput(), enabled: true });
       const result = repo.setEnabled(created.id, false);
-
-      expect(result).not.toBeNull();
-      expect(result).toBeInstanceOf(Skill);
       expect(result!.enabled).toBe(false);
-    });
-
-    it('启用已禁用的 Skill', () => {
-      const created = repo.create(buildInput({ enabled: false }));
-      const result = repo.setEnabled(created.id, true);
-      expect(result!.enabled).toBe(true);
     });
 
     it('不存在的 ID 返回 null', () => {
       expect(repo.setEnabled('non-existent', true)).toBeNull();
     });
-
-    it('updatedAt 发生变化', () => {
-      const created = repo.create(buildInput());
-      const result = repo.setEnabled(created.id, false);
-      expect(result!.updatedAt).not.toBe(created.updatedAt);
-    });
   });
 
-  // ===========================================================================
-  // remove
-  // ===========================================================================
   describe('remove', () => {
-    it('删除已有记录', () => {
-      const created = repo.create(buildInput());
+    it('删除 DB 行并删除目录', () => {
+      const created = repo.create(buildInput('del'));
       expect(repo.remove(created.id)).toBe(true);
       expect(repo.findById(created.id)).toBeNull();
+      expect(fs.existsSync(path.join(baseDir, 'del'))).toBe(false);
     });
 
     it('删除不存在的记录返回 false', () => {

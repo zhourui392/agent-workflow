@@ -78,12 +78,12 @@ export class DiskGlobalConfigRepository {
     const skillsDir = path.join(configPath, 'skills');
     if (fs.existsSync(skillsDir)) {
       config.skills = {};
-      const files = fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'));
-      for (const file of files) {
-        const skillName = path.basename(file, '.md');
-        const skillContent = readFileOrNull(path.join(skillsDir, file));
-        if (skillContent) {
-          config.skills[skillName] = skillContent.trim();
+      const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const skillDir = path.join(skillsDir, entry.name);
+        if (fs.existsSync(path.join(skillDir, 'SKILL.md'))) {
+          config.skills[entry.name] = skillDir;
         }
       }
     }

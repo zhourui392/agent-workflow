@@ -3,14 +3,14 @@
  *
  * 三层合并策略:
  * - 第一层：Claude Code CLI 全局配置（~/.claude.json, ~/.claude/plugins/）
- * - 第二层：应用磁盘全局配置（global_config/）
+ * - 第二层：应用磁盘全局配置（global_config/skills/{name}/）
  * - 第三层：工作流配置（workflow.skills）
  * - 第四层：步骤引用（step.skillIds）
  *
  * 合并规则:
  * - rules (systemPrompt): 拼接
  * - allowedTools: 取交集
- * - skills: 同名后者覆盖
+ * - skills: 同名后者覆盖，值为 skill 源目录绝对路径
  */
 
 import log from '../../../shared/infrastructure/logger';
@@ -21,17 +21,17 @@ import type { ReferenceValidationResult } from '../model/ConfigErrors';
 import type { SkillRepository } from '../repository/SkillRepository';
 
 /**
- * Skill 内容结构（用于文件写入）
+ * Skill 源引用（name → 源目录绝对路径）
  */
-export interface SkillContent {
+export interface SkillSource {
   name: string;
-  description?: string;
-  allowedTools?: string[];
-  content: string;
+  sourceDir: string;
 }
 
 /**
  * 全局配置加载器接口（基础设施注入）
+ *
+ * loadCliSkills / loadDiskConfig 中 skills 的 value 是 skill 源目录绝对路径。
  */
 export interface GlobalConfigProvider {
   loadCliSkills(): Record<string, string>;
@@ -41,13 +41,15 @@ export interface GlobalConfigProvider {
 
 /**
  * Skill 文件写入器接口（基础设施注入）
+ *
+ * 将每个 skill 的源目录递归复制到 plugin-dir 下的同名子目录
  */
 export interface SkillFileWriter {
   writeStepSkills(
     workingDirectory: string,
     executionId: string,
     stepIndex: number,
-    skills: Map<string, SkillContent>
+    skills: Map<string, SkillSource>
   ): string | undefined;
 
   cleanupStepSkills(skillsDir: string): void;
@@ -55,6 +57,8 @@ export interface SkillFileWriter {
 
 /**
  * 工作流配置接口（跨上下文引用，避免循环依赖）
+ *
+ * skills 的 value 是 skill 源目录绝对路径
  */
 export interface WorkflowConfigRef {
   rules?: string;
@@ -284,18 +288,18 @@ export class ConfigMergeService {
     diskSkills: Record<string, string> | undefined,
     workflowSkills: Record<string, string> | undefined,
     stepSkillIds: string[]
-  ): Map<string, SkillContent> {
-    const mergedSkills = new Map<string, SkillContent>();
+  ): Map<string, SkillSource> {
+    const mergedSkills = new Map<string, SkillSource>();
 
     if (diskSkills) {
-      for (const [name, content] of Object.entries(diskSkills)) {
-        mergedSkills.set(name, { name, content });
+      for (const [name, sourceDir] of Object.entries(diskSkills)) {
+        mergedSkills.set(name, { name, sourceDir });
       }
     }
 
     if (workflowSkills) {
-      for (const [name, content] of Object.entries(workflowSkills)) {
-        mergedSkills.set(name, { name, content });
+      for (const [name, sourceDir] of Object.entries(workflowSkills)) {
+        mergedSkills.set(name, { name, sourceDir });
       }
     }
 
@@ -304,9 +308,7 @@ export class ConfigMergeService {
       for (const skill of stepSkills) {
         mergedSkills.set(skill.name, {
           name: skill.name,
-          description: skill.description,
-          allowedTools: skill.allowedTools,
-          content: skill.content
+          sourceDir: skill.dirPath
         });
       }
     }

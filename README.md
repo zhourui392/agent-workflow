@@ -99,11 +99,14 @@ npm run electron:build
 | `config:update` | 更新全局配置 |
 | `skills:list` | Skills 列表（仅数据库） |
 | `skills:list-all` | Skills 列表（数据库 + Claude CLI） |
-| `skills:create` | 创建 Skill |
-| `skills:update` | 更新 Skill |
+| `skills:generate` | 触发 AI 生成 Skill（`POST /api/skills/generate`） |
+| `skills:generate:get` | 查询生成草稿状态（`GET /api/skills/generate/:id`） |
+| `skills:generate:verify` | 对已生成草稿发起测试会话（`POST /api/skills/generate/:id/verify`） |
+| `skills:generate:save` | 保存草稿为正式 Skill（`POST /api/skills/generate/:id/save`） |
+| `skills:generate:cancel` | 放弃草稿并清理临时目录（`POST /api/skills/generate/:id/cancel`） |
 | `skills:delete` | 删除 Skill |
 | `skills:set-enabled` | 设置 Skill 启用状态 |
-| `execution:progress` | 实时进度事件 |
+| `execution:progress` | 实时进度事件（WebSocket `/ws/executions`，详见下方"实时事件通道"） |
 
 ## 运行时输入参数
 
@@ -175,13 +178,47 @@ npm run electron:build
 
 | 来源 | 说明 |
 |------|------|
-| **数据库** | 通过 UI 创建的自定义配置 |
+| **磁盘** | `global_config/skills/{name}/` 目录；每个子目录至少包含一份 `SKILL.md`，可选 `scripts/ references/ assets/` |
 | **Claude CLI** | 自动读取 `~/.claude/skills/`、`~/.claude/plugins/` 中的 Skills |
 
-在工作流步骤配置中，可以从合并后的列表中按需选择所需的 Skills。
+数据库只保留 `id/name/dir_path/enabled/时间戳` 元数据；`description/allowed-tools` 在加载时从 SKILL.md frontmatter 懒解析。在工作流步骤配置中，可以从合并后的列表中按需选择所需的 Skills。
+
+### 通过 AI 生成 Skill
+
+Skills 管理页点击「新建」将打开三步向导：
+
+1. **描述需求** — 用自然语言说明 Skill 应做什么。
+2. **AI 生成** — 后端调用 `skill-creator` skill 生成 `SKILL.md` 与可选资源到临时目录；生成过程通过 WebSocket 实时回流到 UI。
+3. **测试验证** — 用建议 prompt 触发一次实际调用，观察输出；通过后保存到 `global_config/skills/{name}/` 并写入 DB。
+
+所有临时目录（`{SKILL_GENERATION_TMP_DIR}/skill-gen-*` / `skill-verify-*`）在保存、取消或进程启动时被自动清理。
+
+要求：Claude CLI 已安装 `skill-creator`（默认从 `SKILL_CREATOR_DIR` → `~/.claude/skills/skill-creator` → `~/.claude/plugins/.../skills/skill-creator` 依次探测）。
 
 ## 配置合并策略
 
 - **rules (systemPrompt)**: 拼接
 - **allowedTools**: 取交集
-- **skills**: 按需加载（步骤引用的，同名覆盖）
+- **skills**: 按需加载（步骤引用的，同名覆盖；value 为 skill 源目录绝对路径）
+
+## 实时事件通道
+
+所有实时事件共用 WebSocket 端点 `/ws/executions`。客户端按消息的 `kind` 字段区分通道：
+
+| kind | 说明 |
+|------|------|
+| （缺省 / `execution`） | 工作流执行进度事件（step 流式、状态切换、tokens 用量） |
+| `skill-generation` | Skill 生成/验证会话事件；按 `phase`（`generating`/`verifying`）和 `type`（`start`/`step`/`generation_done`/`verification_done`/`error`）细分 |
+
+前端通过 `subscribeExecutionProgress` / `subscribeSkillGeneration` 两个 API 分别订阅；同一底层连接，不会互相干扰。
+
+## 环境变量
+
+| 名称 | 说明 | 默认值 |
+|------|------|--------|
+| `PORT` | 后端 HTTP 端口 | `3000` |
+| `HOST` | 后端监听地址 | `0.0.0.0` |
+| `DB_PATH` | SQLite 数据库路径 | `<cwd>/data/agent_workflow.db` |
+| `GLOBAL_CONFIG_PATH` | 应用磁盘全局配置根目录 | `<cwd>/global_config` |
+| `SKILL_GENERATION_TMP_DIR` | Skill 生成/验证临时目录根 | `{os.tmpdir}/agent-workflow-skill-gen` |
+| `SKILL_CREATOR_DIR` | 指定 `skill-creator` skill 路径，覆盖默认探测 | （未设置则按 `~/.claude/skills/` / `~/.claude/plugins/` 顺序查找） |

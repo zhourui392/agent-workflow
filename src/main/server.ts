@@ -25,7 +25,9 @@ import multipart from '@fastify/multipart';
 import log from './shared/infrastructure/logger';
 import { bootstrap, type AppContext } from './bootstrap';
 import { WebSocketProgressNotifier } from './execution/infrastructure/WebSocketProgressNotifier';
+import { WebSocketSkillGenerationNotifier } from './configuration/infrastructure/WebSocketSkillGenerationNotifier';
 import type { ExecutionProgressEvent } from './execution/domain/model/ExecutionResult';
+import type { SkillGenerationEvent } from './configuration/domain/service/SkillGenerationNotifier';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -33,7 +35,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 // WebSocket 客户端连接池（任意外部类型，避免硬绑 ws 类型）
 const wsClients = new Set<{ send: (data: string) => void; readyState: number }>();
 
-function broadcast(event: ExecutionProgressEvent): void {
+function broadcastRaw(event: unknown): void {
   const payload = JSON.stringify(event);
   for (const client of wsClients) {
     // readyState === 1 => OPEN
@@ -45,6 +47,14 @@ function broadcast(event: ExecutionProgressEvent): void {
       }
     }
   }
+}
+
+function broadcastExecution(event: ExecutionProgressEvent): void {
+  broadcastRaw(event);
+}
+
+function broadcastSkillGeneration(event: SkillGenerationEvent): void {
+  broadcastRaw(event);
 }
 
 async function registerStaticOrDevProxy(fastify: FastifyInstance): Promise<void> {
@@ -98,8 +108,9 @@ async function main(): Promise<void> {
   });
 
   // 业务装配
-  const progressNotifier = new WebSocketProgressNotifier(broadcast);
-  const appContext: AppContext = bootstrap(progressNotifier);
+  const progressNotifier = new WebSocketProgressNotifier(broadcastExecution);
+  const skillGenerationNotifier = new WebSocketSkillGenerationNotifier(broadcastSkillGeneration);
+  const appContext: AppContext = bootstrap(progressNotifier, skillGenerationNotifier);
   appContext.registerRoutes(fastify);
 
   // 健康检查

@@ -1,20 +1,28 @@
 /**
  * Skills API 适配层
  *
- * @author zhourui(V33215020)
- * @since 2026/03/12
+ * v3 架构下 Skill 数据由 global_config/skills/{name}/ 目录承载，
+ * description/allowedTools 来自 SKILL.md frontmatter，数据库只存元数据。
  */
 
 import {
   getSkills as getSkillsApi,
   getAllSkills as getAllSkillsApi,
   getSkill as getSkillApi,
-  createSkill as createSkillApi,
-  updateSkill as updateSkillApi,
   deleteSkill as deleteSkillApi,
   setSkillEnabled as setSkillEnabledApi,
-  type SkillDTO
+  generateSkill as generateSkillApi,
+  getSkillDraft as getSkillDraftApi,
+  verifySkill as verifySkillApi,
+  saveSkillFromDraft as saveSkillFromDraftApi,
+  cancelSkillGeneration as cancelSkillGenerationApi,
+  subscribeSkillGeneration as subscribeSkillGenerationApi,
+  type SkillDTO,
+  type SkillDraftDTO,
+  type SkillGenerationEvent
 } from './index';
+
+export type { SkillDraftDTO, SkillGenerationEvent };
 
 /**
  * Skill 前端数据格式
@@ -22,9 +30,9 @@ import {
 export interface SkillData {
   id: string;
   name: string;
+  dir_path: string;
   description: string | null;
   allowed_tools: string[] | null;
-  content: string;
   enabled: boolean;
   source?: 'db' | 'cli';
   created_at: string;
@@ -32,111 +40,22 @@ export interface SkillData {
 }
 
 /**
- * 创建 Skill 输入（前端格式）
- */
-export interface CreateSkillData {
-  name: string;
-  description?: string;
-  allowed_tools?: string[];
-  content: string;
-  enabled?: boolean;
-}
-
-/**
  * 更新 Skill 输入（前端格式）
+ *
+ * v1 只支持切换 enabled；其他字段（name/content/allowed-tools）应通过
+ * 文件系统直接编辑 SKILL.md 或通过 /api/skills/generate 重新生成。
  */
 export interface UpdateSkillData {
-  name?: string;
-  description?: string;
-  allowed_tools?: string[];
-  content?: string;
   enabled?: boolean;
 }
 
-/**
- * 将后端 Skill 转换为前端 SkillData
- *
- * @param skill 后端数据
- * @returns 前端数据
- */
-function skillToData(skill: SkillDTO): SkillData {
+function skillToData(skill: SkillDTO & { source?: string; dirPath?: string }): SkillData {
   return {
     id: skill.id,
     name: skill.name,
+    dir_path: skill.dirPath ?? '',
     description: skill.description || null,
     allowed_tools: skill.allowedTools || null,
-    content: skill.content,
-    enabled: skill.enabled,
-    created_at: skill.createdAt,
-    updated_at: skill.updatedAt
-  };
-}
-
-/**
- * 将前端创建数据转换为后端输入
- *
- * @param data 前端数据
- * @returns 后端输入
- */
-function createDataToInput(data: CreateSkillData) {
-  return {
-    name: data.name,
-    description: data.description,
-    allowedTools: data.allowed_tools,
-    content: data.content,
-    enabled: data.enabled
-  };
-}
-
-/**
- * 将前端更新数据转换为后端输入
- *
- * @param data 前端数据
- * @returns 后端输入
- */
-function updateDataToInput(data: UpdateSkillData) {
-  return {
-    name: data.name,
-    description: data.description,
-    allowedTools: data.allowed_tools,
-    content: data.content,
-    enabled: data.enabled
-  };
-}
-
-/**
- * 获取 Skill 列表（仅数据库）
- */
-export async function listSkills() {
-  const response = await getSkillsApi();
-  return {
-    data: response.data.map(skillToData)
-  };
-}
-
-/**
- * 获取所有 Skill（数据库 + Claude CLI）
- */
-export async function listAllSkills() {
-  const response = await getAllSkillsApi();
-  return {
-    data: response.data.map(skill => skillToDataWithSource(skill))
-  };
-}
-
-/**
- * 将后端 Skill 转换为前端 SkillData（带来源标记）
- *
- * @param skill 后端数据
- * @returns 前端数据
- */
-function skillToDataWithSource(skill: SkillDTO & { source?: string }): SkillData {
-  return {
-    id: skill.id,
-    name: skill.name,
-    description: skill.description || null,
-    allowed_tools: skill.allowedTools || null,
-    content: skill.content,
     enabled: skill.enabled,
     source: skill.source === 'cli' ? 'cli' : 'db',
     created_at: skill.createdAt,
@@ -144,63 +63,63 @@ function skillToDataWithSource(skill: SkillDTO & { source?: string }): SkillData
   };
 }
 
-/**
- * 获取单个 Skill
- *
- * @param id Skill ID
- */
+export async function listSkills() {
+  const response = await getSkillsApi();
+  return { data: response.data.map(skillToData) };
+}
+
+export async function listAllSkills() {
+  const response = await getAllSkillsApi();
+  return { data: response.data.map(skill => skillToData(skill as SkillDTO & { source?: string })) };
+}
+
 export async function getSkill(id: string) {
   const response = await getSkillApi(id);
-  return {
-    data: response.data ? skillToData(response.data) : null
-  };
+  return { data: response.data ? skillToData(response.data) : null };
 }
 
-/**
- * 创建 Skill
- *
- * @param data 创建数据
- */
-export async function createSkill(data: CreateSkillData) {
-  const input = createDataToInput(data);
-  const response = await createSkillApi(input);
-  return {
-    data: skillToData(response.data)
-  };
-}
-
-/**
- * 更新 Skill
- *
- * @param id Skill ID
- * @param data 更新数据
- */
-export async function updateSkill(id: string, data: UpdateSkillData) {
-  const input = updateDataToInput(data);
-  const response = await updateSkillApi(id, input);
-  return {
-    data: response.data ? skillToData(response.data) : null
-  };
-}
-
-/**
- * 删除 Skill
- *
- * @param id Skill ID
- */
 export async function deleteSkill(id: string) {
   return deleteSkillApi(id);
 }
 
-/**
- * 设置 Skill 启用状态
- *
- * @param id Skill ID
- * @param enabled 是否启用
- */
 export async function setSkillEnabled(id: string, enabled: boolean) {
   const response = await setSkillEnabledApi(id, enabled);
-  return {
-    data: response.data ? skillToData(response.data) : null
-  };
+  return { data: response.data ? skillToData(response.data) : null };
+}
+
+// ============ Skill Generation ============
+
+export async function generateSkill(prompt: string, model?: string) {
+  const response = await generateSkillApi(prompt, model);
+  return { data: response.data };
+}
+
+export async function getSkillDraft(generationId: string) {
+  const response = await getSkillDraftApi(generationId);
+  return { data: response.data };
+}
+
+export async function verifySkill(generationId: string, testPrompt: string, model?: string) {
+  const response = await verifySkillApi(generationId, testPrompt, model);
+  return { data: response.data };
+}
+
+export async function saveSkillFromDraft(generationId: string, enabled?: boolean) {
+  const response = await saveSkillFromDraftApi(generationId, enabled);
+  return { data: skillToData(response.data) };
+}
+
+export async function cancelSkillGeneration(generationId: string) {
+  return cancelSkillGenerationApi(generationId);
+}
+
+export function subscribeSkillGeneration(
+  generationId: string,
+  callback: (event: SkillGenerationEvent) => void
+): () => void {
+  return subscribeSkillGenerationApi(event => {
+    if (event.generationId === generationId) {
+      callback(event);
+    }
+  });
 }

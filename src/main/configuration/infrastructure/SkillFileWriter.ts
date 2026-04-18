@@ -1,14 +1,16 @@
 /**
  * Skill 文件写入器
  *
- * 负责步骤级 Skills 的写入隔离目录和清理
+ * 将 skill 的源目录（包含 SKILL.md 及可选 scripts/references/assets）
+ * 递归复制到步骤隔离目录 .claude/skills-{executionId}-{stepIndex}/{name}/ 下，
+ * 供 Claude SDK 通过 plugin-dir 参数挂载。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import log from '../../shared/infrastructure/logger';
 import { SkillWriteError } from '../domain/model';
-import type { SkillContent, SkillFileWriter as ISkillFileWriter } from '../domain/service/ConfigMergeService';
+import type { SkillSource, SkillFileWriter as ISkillFileWriter } from '../domain/service/ConfigMergeService';
 
 function toSafeDirectoryName(name: string): string {
   return name.replace(/[:\\/*?"<>|]/g, '_');
@@ -20,21 +22,18 @@ function validateSkillName(name: string, safeName: string): void {
   }
 }
 
-function buildSkillFileContent(skill: SkillContent): string {
-  const frontmatterParts: string[] = [];
-
-  if (skill.description) {
-    frontmatterParts.push(`description: ${skill.description}`);
+function copyDirRecursive(src: string, dest: string): void {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(srcPath, destPath);
+    }
   }
-  if (skill.allowedTools && skill.allowedTools.length > 0) {
-    frontmatterParts.push(`allowed-tools: ${skill.allowedTools.join(', ')}`);
-  }
-
-  if (frontmatterParts.length > 0) {
-    return `---\n${frontmatterParts.join('\n')}\n---\n\n${skill.content}`;
-  }
-
-  return skill.content;
 }
 
 export class SkillFileWriterImpl implements ISkillFileWriter {
@@ -42,7 +41,7 @@ export class SkillFileWriterImpl implements ISkillFileWriter {
     workingDirectory: string,
     executionId: string,
     stepIndex: number,
-    skills: Map<string, SkillContent>
+    skills: Map<string, SkillSource>
   ): string | undefined {
     if (skills.size === 0) return undefined;
 
@@ -57,22 +56,25 @@ export class SkillFileWriterImpl implements ISkillFileWriter {
     for (const skill of skills.values()) {
       const safeName = toSafeDirectoryName(skill.name);
       validateSkillName(skill.name, safeName);
-      const skillDir = path.join(skillsDir, safeName);
 
+      if (!fs.existsSync(path.join(skill.sourceDir, 'SKILL.md'))) {
+        log.warn('跳过缺少 SKILL.md 的 skill', { name: skill.name, sourceDir: skill.sourceDir });
+        continue;
+      }
+
+      const destDir = path.join(skillsDir, safeName);
       try {
-        fs.mkdirSync(skillDir, { recursive: true });
-        const content = buildSkillFileContent(skill);
-        fs.writeFileSync(path.join(skillDir, 'SKILL.md'), content, 'utf-8');
+        copyDirRecursive(skill.sourceDir, destDir);
       } catch (error) {
-        log.error('Skill 文件写入失败', {
+        log.error('Skill 目录复制失败', {
           skillName: skill.name,
-          safeName,
-          skillsDir,
+          sourceDir: skill.sourceDir,
+          destDir,
           error: error instanceof Error ? error.message : String(error)
         });
 
         throw new SkillWriteError(
-          `无法写入 Skill "${skill.name}": ${error instanceof Error ? error.message : String(error)}`,
+          `无法复制 Skill "${skill.name}": ${error instanceof Error ? error.message : String(error)}`,
           skill.name
         );
       }

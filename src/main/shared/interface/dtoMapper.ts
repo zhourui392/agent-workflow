@@ -86,9 +86,9 @@ export function skillToDTO(s: Skill): SkillDTO {
   return {
     id: s.id,
     name: s.name,
+    dirPath: s.dirPath,
     description: s.description,
     allowedTools: s.allowedTools,
-    content: s.content,
     enabled: s.enabled,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt

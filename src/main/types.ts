@@ -100,9 +100,9 @@ export interface ExecutionDTO {
 export interface SkillDTO {
   id: string;
   name: string;
+  dirPath: string;
   description?: string;
   allowedTools?: string[];
-  content: string;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;

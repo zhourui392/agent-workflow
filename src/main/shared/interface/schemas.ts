@@ -167,13 +167,27 @@ export const ExecutionListParamsSchema = z.object({
 
 export const CreateSkillSchema = z.object({
   name: z.string().min(1, 'Skill 名称不能为空').max(200),
-  description: z.string().optional(),
-  allowedTools: z.array(z.string()).optional(),
-  content: z.string().min(1, 'Skill 内容不能为空'),
+  sourceDir: z.string().min(1, 'Skill 源目录不能为空'),
   enabled: z.boolean().optional()
 });
 
-export const UpdateSkillSchema = CreateSkillSchema.partial();
+export const UpdateSkillSchema = z.object({
+  enabled: z.boolean().optional()
+});
+
+export const GenerateSkillSchema = z.object({
+  prompt: z.string().min(1, 'prompt 不能为空'),
+  model: z.string().optional()
+});
+
+export const VerifySkillSchema = z.object({
+  testPrompt: z.string().min(1, 'testPrompt 不能为空'),
+  model: z.string().optional()
+});
+
+export const SaveSkillFromDraftSchema = z.object({
+  enabled: z.boolean().optional()
+});
 
 // ========== 全局配置 ==========
 

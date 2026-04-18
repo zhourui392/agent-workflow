@@ -15,14 +15,23 @@ import log from './shared/infrastructure/logger';
 import { getDatabase, closeDatabase } from './shared/infrastructure';
 
 // Configuration context
+import * as path from 'path';
+import * as os from 'os';
 import { SqliteSkillRepository } from './configuration/infrastructure/SqliteSkillRepository';
+import { SkillFileStore } from './configuration/infrastructure/SkillFileStore';
 import { DiskGlobalConfigRepository } from './configuration/infrastructure/DiskGlobalConfigRepository';
 import { CliConfigLoader } from './configuration/infrastructure/CliConfigLoader';
 import { SkillFileWriterImpl } from './configuration/infrastructure/SkillFileWriter';
 import { GlobalConfigCacheImpl } from './configuration/infrastructure/GlobalConfigCache';
+import { InMemorySkillDraftStore } from './configuration/infrastructure/InMemorySkillDraftStore';
+import { DefaultSkillCreatorLocator } from './configuration/infrastructure/DefaultSkillCreatorLocator';
+import { cleanupSkillGenerationTmp } from './configuration/infrastructure/SkillGenerationTmpCleaner';
 import { ConfigMergeService } from './configuration/domain/service/ConfigMergeService';
 import { SkillApplicationService } from './configuration/application/SkillApplicationService';
+import { GenerateSkillUseCase } from './configuration/application/GenerateSkillUseCase';
+import { VerifySkillUseCase } from './configuration/application/VerifySkillUseCase';
 import { GlobalConfigApplicationService } from './configuration/application/GlobalConfigApplicationService';
+import type { SkillGenerationNotifier } from './configuration/domain/service/SkillGenerationNotifier';
 
 // Workflow context
 import { SqliteWorkflowRepository } from './workflow/infrastructure/SqliteWorkflowRepository';
@@ -79,15 +88,21 @@ export interface AppContext {
  * 初始化应用上下文，组装所有依赖
  *
  * @param progressNotifier 进度通知器（由 server.ts 传入 WebSocket 实现）
+ * @param skillGenerationNotifier Skill 生成/验证会话通知器
  */
-export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
+export function bootstrap(
+  progressNotifier: ProgressNotifier,
+  skillGenerationNotifier: SkillGenerationNotifier
+): AppContext {
   log.info('Bootstrapping application context...');
 
   // === Infrastructure ===
   const db = getDatabase();
 
   // === Configuration Context ===
-  const skillRepo = new SqliteSkillRepository(db);
+  const globalConfigRoot = process.env.GLOBAL_CONFIG_PATH || path.join(process.cwd(), 'global_config');
+  const skillFileStore = new SkillFileStore(path.join(globalConfigRoot, 'skills'));
+  const skillRepo = new SqliteSkillRepository(db, skillFileStore);
   const cliConfigLoader = new CliConfigLoader();
   const diskConfigRepo = new DiskGlobalConfigRepository();
   const skillFileWriter = new SkillFileWriterImpl();
@@ -95,7 +110,14 @@ export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
   const configMergeService = new ConfigMergeService(
     skillRepo, globalConfigCache, skillFileWriter
   );
-  const skillAppService = new SkillApplicationService(skillRepo, cliConfigLoader);
+  const skillDraftStore = new InMemorySkillDraftStore();
+  const skillCreatorLocator = new DefaultSkillCreatorLocator();
+  const skillGenerationTmpRoot = process.env.SKILL_GENERATION_TMP_DIR
+    || path.join(os.tmpdir(), 'agent-workflow-skill-gen');
+  cleanupSkillGenerationTmp(skillGenerationTmpRoot);
+  const skillAppService = new SkillApplicationService(
+    skillRepo, cliConfigLoader, skillDraftStore, skillGenerationTmpRoot
+  );
   const globalConfigAppService = new GlobalConfigApplicationService(diskConfigRepo, globalConfigCache);
 
   // === Execution Context ===
@@ -116,6 +138,19 @@ export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
   const queryExecutionUseCase = new QueryExecutionUseCase(executionRepo);
   const cancelExecutionUseCase = new CancelExecutionUseCase(executionRepo, cancellationRegistry);
   const retryExecutionUseCase = new RetryExecutionUseCase(executionRepo, pipelineOrchestrator, workflowLoader);
+  const generateSkillUseCase = new GenerateSkillUseCase(
+    stepExecutor,
+    skillCreatorLocator,
+    skillDraftStore,
+    skillGenerationNotifier,
+    skillGenerationTmpRoot
+  );
+  const verifySkillUseCase = new VerifySkillUseCase(
+    stepExecutor,
+    skillDraftStore,
+    skillGenerationNotifier,
+    skillGenerationTmpRoot
+  );
 
   // === Scheduling Context ===
   const scheduler = new NodeCronScheduler();
@@ -140,7 +175,9 @@ export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
   // === REST Route handlers ===
   const workflowRoutes = new WorkflowRoutes(workflowAppService);
   const executionRoutes = new ExecutionRoutes(queryExecutionUseCase, cancelExecutionUseCase, retryExecutionUseCase);
-  const skillRoutes = new SkillRoutes(skillAppService);
+  const skillRoutes = new SkillRoutes(
+    skillAppService, generateSkillUseCase, verifySkillUseCase, skillDraftStore
+  );
   const configRoutes = new ConfigRoutes(globalConfigAppService);
   const chatRoutes = new ChatRoutes(chatAppService, chatConfig);
   const fsRoutes = new FsRoutes(fsConfig);

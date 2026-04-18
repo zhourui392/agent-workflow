@@ -8,6 +8,9 @@ export {
   ExecutionListParamsSchema,
   CreateSkillSchema,
   UpdateSkillSchema,
+  GenerateSkillSchema,
+  VerifySkillSchema,
+  SaveSkillFromDraftSchema,
   UpdateConfigSchema,
   validateInput
 } from './schemas';

@@ -58,9 +58,7 @@ export function initializeTables(database: Database.Database): void {
     CREATE TABLE IF NOT EXISTS skills (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
-      description TEXT,
-      allowed_tools TEXT,
-      content TEXT NOT NULL,
+      dir_path TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -148,6 +146,24 @@ export function runMigrations(database: Database.Database): void {
   }
   if (!execColumnNames.includes('retry_from_step')) {
     database.exec('ALTER TABLE executions ADD COLUMN retry_from_step INTEGER');
+  }
+
+  // Skills：若检测到旧 schema（存在 content 列），直接重建（无存量数据）
+  const skillsColumns = database.prepare("PRAGMA table_info(skills)").all() as { name: string }[];
+  const skillsColumnNames = skillsColumns.map(col => col.name);
+  if (skillsColumnNames.length > 0 && (skillsColumnNames.includes('content') || !skillsColumnNames.includes('dir_path'))) {
+    database.exec(`
+      DROP TABLE skills;
+      CREATE TABLE skills (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        dir_path TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_skills_enabled ON skills(enabled);
+    `);
   }
 
   // 会话分享支持
