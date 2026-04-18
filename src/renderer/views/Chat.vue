@@ -101,10 +101,15 @@
             </div>
             <div v-if="switchResultCreated.length > 0" class="wt-result">
               <div v-for="r in switchResultCreated" :key="'sw-' + r.name">
-                ✅ {{ r.name }}
+                <span v-if="r.created" style="color:#67c23a">✅</span>
+                <span v-else-if="r.existed" style="color:#909399">◎</span>
+                <span v-else style="color:#f56c6c">✗</span>
+                {{ r.name }}
+                <span v-if="r.existed" style="color:#909399">(已存在)</span>
                 <span v-if="r.actualBranch && r.actualBranch !== currentBranch" style="color:#e6a23c">
-                  (回退到 {{ r.actualBranch }})
+                  (当前在 {{ r.actualBranch || 'detached' }})
                 </span>
+                <span v-if="r.reason && !r.created && !r.existed" style="color:#f56c6c">{{ r.reason }}</span>
               </div>
             </div>
             <div v-if="updateResult.length > 0" class="wt-result">
@@ -369,7 +374,10 @@ async function doSwitchBranch(): Promise<void> {
   updateResult.value = [];
   try {
     const resp = await apiSwitchBranch(workspace, branch);
-    switchResultCreated.value = resp.data.repos.filter(r => r.created);
+    // 展示创建/已存在/失败：所有与目标分支相关或失败的结果都显示
+    switchResultCreated.value = resp.data.repos.filter(
+      r => r.created || r.existed || (!r.created && !r.existed && r.reason)
+    );
     saveSessionState(sid, {
       originalWorkingDir: workspace,
       currentBranch: branch,
@@ -380,8 +388,15 @@ async function doSwitchBranch(): Promise<void> {
       persistSavedBranches();
     }
     await chat.changeWorkingDir(resp.data.worktreePath);
-    const switched = resp.data.repos.filter(r => r.created && r.actualBranch === branch).length;
-    ElMessage.success(`已切换到 ${branch}，${switched} 个服务`);
+    // 切换成功 = 已在目标分支（新建 or 之前已建好）
+    const onBranch = resp.data.repos.filter(r => r.actualBranch === branch).length;
+    const newlyCreated = resp.data.repos.filter(r => r.created && r.actualBranch === branch).length;
+    const failed = resp.data.repos.filter(r => !r.created && !r.existed && r.reason).length;
+    const msg = `已切换到 ${branch}：${onBranch} 个服务在目标分支` +
+      (newlyCreated > 0 ? `（新建 ${newlyCreated}）` : '') +
+      (failed > 0 ? `，${failed} 个失败` : '');
+    if (failed > 0) ElMessage.warning(msg);
+    else ElMessage.success(msg);
   } catch (e) {
     ElMessage.error('切换失败');
   } finally {

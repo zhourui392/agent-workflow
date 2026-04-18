@@ -17,6 +17,7 @@ const GIT_TIMEOUT_MS = 30_000;
 export interface RepoStatus {
   name: string;
   created?: boolean;
+  existed?: boolean;
   actualBranch?: string;
   updated?: boolean;
   skipped?: boolean;
@@ -121,6 +122,13 @@ async function remoteBranchExists(repoDir: string, branch: string): Promise<bool
   return r.code === 0;
 }
 
+async function readHeadBranch(worktreeDir: string): Promise<string> {
+  const r = await runGit(worktreeDir, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (r.code !== 0) return '';
+  const name = r.stdout.trim();
+  return name === 'HEAD' ? '' : name;
+}
+
 export class WorktreeService {
   async switchBranch(workspacePath: string, branch: string): Promise<SwitchResult> {
     const abs = path.resolve(workspacePath);
@@ -134,9 +142,10 @@ export class WorktreeService {
     const repos = collectGitRepos(abs);
     log.info(`[worktree] switch branch=${branch} repos=${repos.length} workspace=${abs}`);
 
-    // 1. 并行 fetch
+    // 1. 并行 fetch + prune 失效的 worktree 登记（目录被删但 .git/worktrees 还留着记录时 add 会失败）
     await parallel(repos, CONCURRENCY, async repo => {
       await runGit(repo, ['fetch', '--all', '--prune']);
+      await runGit(repo, ['worktree', 'prune']);
     });
 
     // 2. 并行创建 worktree
@@ -150,27 +159,31 @@ export class WorktreeService {
   }
 
   private async createWorktreeForRepo(repoDir: string, target: string, branch: string, name: string): Promise<RepoStatus> {
-    // 已存在则按 created=false 返回
+    // 已存在：读取真实分支（可能是目标分支，也可能是之前 fallback 的默认分支）
     if (fs.existsSync(target)) {
-      return { name, created: false, actualBranch: branch, reason: '已存在，跳过' };
+      const actual = await readHeadBranch(target);
+      return { name, created: false, existed: true, actualBranch: actual, reason: '已存在' };
     }
 
     fs.mkdirSync(path.dirname(target), { recursive: true });
 
-    // 1. 远端有该分支：基于 origin/<branch> 创建 worktree（无 -B/-b，避免覆盖本地已有同名分支；
-    //    若本地无同名分支，git 会自动建立跟踪分支，pull --ff-only 可用）
+    // 1. 远端有该分支：用分支名触发 git DWIM，若本地无同名分支会自动创建跟踪分支，
+    //    若本地已有则复用；结果为带分支名的 worktree（非 detached HEAD），pull --ff-only 可用。
     if (await remoteBranchExists(repoDir, branch)) {
-      const r = await runGit(repoDir, ['worktree', 'add', target, `origin/${branch}`]);
-      if (r.code === 0) return { name, created: true, actualBranch: branch };
+      const r = await runGit(repoDir, ['worktree', 'add', target, branch]);
+      if (r.code === 0) {
+        const actual = (await readHeadBranch(target)) || branch;
+        return { name, created: true, actualBranch: actual };
+      }
       return { name, created: false, actualBranch: branch, reason: r.stderr.trim().slice(0, 200) };
     }
 
-    // 2. 远端无该分支：维持在默认分支（通常 master/main），不新建任何分支
+    // 2. 远端无该分支：以 detached HEAD 指向 origin/<default>，避免与主 clone 已检出的默认分支冲突
     const fallback = await getDefaultBranch(repoDir);
     if (!fallback) {
       return { name, created: false, actualBranch: '', reason: '无法确定默认分支' };
     }
-    const r = await runGit(repoDir, ['worktree', 'add', target, `origin/${fallback}`]);
+    const r = await runGit(repoDir, ['worktree', 'add', '--detach', target, `origin/${fallback}`]);
     if (r.code === 0) return { name, created: true, actualBranch: fallback };
     return { name, created: false, actualBranch: fallback, reason: r.stderr.trim().slice(0, 200) };
   }

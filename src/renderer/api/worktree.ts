@@ -3,6 +3,7 @@ import axios from 'axios';
 export interface RepoStatus {
   name: string;
   created?: boolean;
+  existed?: boolean;
   actualBranch?: string;
   updated?: boolean;
   skipped?: boolean;
