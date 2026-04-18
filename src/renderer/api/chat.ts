@@ -35,6 +35,20 @@ export interface ChatSessionSummary {
 
 const http = axios.create({ timeout: 60_000 });
 
+export interface EnvOption {
+  key: string;
+  label?: string;
+  color?: string;
+}
+
+export interface ChatConfigDTO {
+  envs: EnvOption[];
+}
+
+export function getChatConfig(): Promise<{ data: ChatConfigDTO }> {
+  return http.get<ChatConfigDTO>('/api/chat/config');
+}
+
 export function createSession(agentType?: AgentType, workingDir?: string): Promise<{ data: ChatSessionDTO }> {
   const body: Record<string, string> = {};
   if (agentType) body.agentType = agentType;

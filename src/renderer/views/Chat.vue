@@ -32,20 +32,25 @@
 
       <el-main class="chat-main">
         <div class="chat-topbar">
-          <div class="workspace-selector" @click="openWorkspaceDialog">
-            <el-icon><FolderOpened /></el-icon>
-            <span class="path">{{ chat.current?.workingDir || '默认工作目录' }}</span>
-          </div>
-          <div class="env-switcher">
+          <div v-if="envs.length > 0" class="env-switcher">
             <span class="env-switcher-label">环境</span>
             <el-radio-group v-model="envKey" size="small" class="env-radio-group">
               <el-radio-button value="">无</el-radio-button>
-              <el-radio-button value="test" class="env-option env-option-test">test</el-radio-button>
-              <el-radio-button value="prod" class="env-option env-option-prod">prod</el-radio-button>
+              <el-radio-button
+                v-for="e in envs"
+                :key="e.key"
+                :value="e.key"
+                class="env-option"
+                :class="`env-option-${e.key}`"
+              >{{ e.label || e.key }}</el-radio-button>
             </el-radio-group>
             <el-tooltip raw-content content="环境选择使用注入限制提示词<br/>生产环境只能根据日志定位问题" placement="bottom">
               <span class="env-help-mark">?</span>
             </el-tooltip>
+          </div>
+          <div class="workspace-selector" @click="openWorkspaceDialog">
+            <el-icon><FolderOpened /></el-icon>
+            <span class="path">{{ chat.current?.workingDir || '默认工作目录' }}</span>
           </div>
 
           <el-popover
@@ -294,7 +299,7 @@ import {
 } from '@element-plus/icons-vue';
 import ChatAssistantRenderer from '../components/ChatAssistantRenderer.vue';
 import { useChatStore } from '../stores/chat';
-import { shareSession } from '../api/chat';
+import { shareSession, getChatConfig, type EnvOption } from '../api/chat';
 import {
   switchBranch as apiSwitchBranch,
   updateBranch as apiUpdateBranch,
@@ -313,7 +318,8 @@ const hasRenderableLiveEvents = computed(() =>
 );
 
 const draft = ref('');
-const envKey = ref<string>('test');
+const envs = ref<EnvOption[]>([]);
+const envKey = ref<string>('');
 const scrollRef = ref<{ setScrollTop: (v: number) => void; wrapRef?: HTMLElement } | null>(null);
 const creating = ref(false);
 const sharing = ref(false);
@@ -643,7 +649,26 @@ watch(envKey, async (next, prev) => {
   await chat.changeWorkingDir(target);
 });
 
-onMounted(() => { void chat.ensureCurrent(); });
+async function loadEnvConfig(): Promise<void> {
+  try {
+    const resp = await getChatConfig();
+    envs.value = resp.data.envs || [];
+    // 默认选中 test（若存在），否则回退到无
+    if (!envKey.value && envs.value.some(e => e.key === 'test')) {
+      envKey.value = 'test';
+    }
+    if (envKey.value && !envs.value.some(e => e.key === envKey.value)) {
+      envKey.value = '';
+    }
+  } catch {
+    envs.value = [];
+  }
+}
+
+onMounted(() => {
+  void chat.ensureCurrent();
+  void loadEnvConfig();
+});
 </script>
 
 <style scoped>

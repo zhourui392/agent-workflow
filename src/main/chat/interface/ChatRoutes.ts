@@ -53,6 +53,16 @@ export class ChatRoutes {
   ) {}
 
   register(fastify: FastifyInstance): void {
+    fastify.get('/api/chat/config', async () => {
+      return {
+        envs: this.config.envEntries.map(e => ({
+          key: e.key,
+          label: e.label,
+          color: e.color
+        }))
+      };
+    });
+
     fastify.post('/api/chat/sessions', async (req: FastifyRequest) => {
       const data = validateInput(StartSessionSchema, req.body ?? {});
       const agentType: AgentType = (data.agentType as AgentType | undefined) ?? 'claude';

@@ -18,12 +18,13 @@ fs:
 
 # Agent 环境前缀：切换 test/prod 时注入的系统提示词
 # 对应 env AGENT_ENV_PROMPTS_JSON（JSON 字符串）。env 设置时整组覆盖。
-# env_prompts:
-#   - key: test
-#     label: 测试
-#     color: "#67c23a"
-#     prompt: "你现在处于测试环境，可以修改代码、切换 git worktree 进行调试。"
-#   - key: prod
-#     label: 生产
-#     color: "#f56c6c"
-#     prompt: "你现在处于生产环境，只能根据日志定位问题，禁止修改任何代码。"
+# 留空或整组删除会隐藏 Q&A 页的环境切换器。
+env_prompts:
+  - key: test
+    label: test
+    color: "#67c23a"
+    prompt: "你现在处于测试环境，可以修改代码、切换 git worktree 进行调试。"
+  - key: prod
+    label: prod
+    color: "#f56c6c"
+    prompt: "你现在处于生产环境，只能根据日志定位问题，禁止修改任何代码。"
