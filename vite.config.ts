@@ -28,7 +28,15 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        bypass(req) {
+          if (req.url && /\.(ts|js|mjs|vue|css|json|map)(\?.*)?$/.test(req.url)) {
+            return req.url;
+          }
+        }
+      },
       '/ws':  { target: 'ws://localhost:3000', ws: true, changeOrigin: true }
     }
   }

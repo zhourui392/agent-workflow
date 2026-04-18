@@ -24,7 +24,7 @@
     "@fastify/static": "^7.0.4",
     "@fastify/websocket": "^10.0.1",
     "axios": "^1.7.9",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^12.9.0",
     "element-plus": "^2.9.1",
     "fastify": "^4.28.1",
     "node-cron": "^3.0.3",
