@@ -17,10 +17,11 @@ import { validateInput } from '../../shared/interface';
 import { isAgentType, type AgentType } from '../domain/model/AgentType';
 import type { ChatSession } from '../domain/model/ChatSession';
 import type { ChatApplicationService } from '../application/ChatApplicationService';
+import type { ChatConfig } from '../infrastructure/ChatConfig';
 
 const StartSessionSchema = z.object({
-  agentType: z.string().refine(isAgentType, { message: 'agentType must be claude or codex' }),
-  workingDir: z.string().min(1, 'workingDir is required')
+  agentType: z.string().refine(isAgentType, { message: 'agentType must be claude or codex' }).optional(),
+  workingDir: z.string().optional()
 });
 
 function sessionToDTO(session: ChatSession): Record<string, unknown> {
@@ -46,12 +47,17 @@ function writeSseEvent(reply: FastifyReply, event: string, data: string): void {
 }
 
 export class ChatRoutes {
-  constructor(private readonly service: ChatApplicationService) {}
+  constructor(
+    private readonly service: ChatApplicationService,
+    private readonly config: ChatConfig
+  ) {}
 
   register(fastify: FastifyInstance): void {
     fastify.post('/api/chat/sessions', async (req: FastifyRequest) => {
-      const data = validateInput(StartSessionSchema, req.body);
-      const session = this.service.startSession(data.agentType as AgentType, data.workingDir);
+      const data = validateInput(StartSessionSchema, req.body ?? {});
+      const agentType: AgentType = (data.agentType as AgentType | undefined) ?? 'claude';
+      const workingDir = data.workingDir?.trim() || this.config.defaultWorkingDir;
+      const session = this.service.startSession(agentType, workingDir);
       return sessionToDTO(session);
     });
 

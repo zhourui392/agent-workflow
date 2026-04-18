@@ -138,7 +138,7 @@ export function bootstrap(progressNotifier: ProgressNotifier): AppContext {
   const executionRoutes = new ExecutionRoutes(queryExecutionUseCase, cancelExecutionUseCase, retryExecutionUseCase);
   const skillRoutes = new SkillRoutes(skillAppService);
   const configRoutes = new ConfigRoutes(globalConfigAppService);
-  const chatRoutes = new ChatRoutes(chatAppService);
+  const chatRoutes = new ChatRoutes(chatAppService, chatConfig);
   const fsRoutes = new FsRoutes(fsConfig);
 
   log.info('Application context bootstrapped successfully');

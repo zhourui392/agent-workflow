@@ -55,6 +55,7 @@ export class ChatConfig {
   readonly claude: AgentCliSpec;
   readonly codex: AgentCliSpec;
   readonly envEntries: EnvEntry[];
+  readonly defaultWorkingDir: string;
 
   constructor(env: NodeJS.ProcessEnv = process.env) {
     this.claude = {
@@ -70,6 +71,7 @@ export class ChatConfig {
       timeoutSeconds: env.CODEX_CLI_TIMEOUT_SECONDS ? Number(env.CODEX_CLI_TIMEOUT_SECONDS) : 0
     };
     this.envEntries = parseEnvPrompts(env.AGENT_ENV_PROMPTS_JSON);
+    this.defaultWorkingDir = env.CHAT_DEFAULT_WORKING_DIR?.trim() || process.cwd();
   }
 
   getSpec(type: AgentType): AgentCliSpec {

@@ -1,10 +1,13 @@
 <template>
   <div class="chat-page">
     <el-container class="chat-layout">
-      <el-aside width="280px" class="chat-sider">
+      <el-aside width="260px" class="chat-sider">
         <div class="sider-header">
-          <el-button type="primary" size="small" @click="openCreateDialog">新建会话</el-button>
-          <el-button size="small" @click="refresh">刷新</el-button>
+          <el-button type="primary" size="small" @click="doNew" :loading="creating" style="flex: 1">
+            <el-icon><Plus /></el-icon>
+            <span>新对话</span>
+          </el-button>
+          <el-button size="small" @click="refresh" :icon="Refresh" circle />
         </div>
         <el-scrollbar class="session-list">
           <div
@@ -14,15 +17,16 @@
             :class="{ active: chat.current?.id === s.id }"
             @click="select(s.id)"
           >
-            <div class="session-title">{{ s.title || (s.id.slice(0, 8)) }}</div>
+            <div class="session-title">{{ s.title || '新对话' }}</div>
             <div class="session-meta">
-              <el-tag size="small" :type="s.agentType === 'claude' ? 'primary' : 'success'">{{ s.agentType }}</el-tag>
-              <span class="msg-count">{{ s.messageCount }} msgs</span>
+              <span class="msg-count">{{ s.messageCount }} 条</span>
+              <span class="created">{{ formatTime(s.createdAt) }}</span>
             </div>
-            <div class="session-dir">{{ s.workingDir }}</div>
-            <el-button link size="small" type="danger" @click.stop="remove(s.id)">删除</el-button>
+            <el-button link size="small" type="danger" class="del-btn" @click.stop="remove(s.id)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
           </div>
-          <el-empty v-if="chat.sessions.length === 0" description="暂无会话" />
+          <el-empty v-if="chat.sessions.length === 0" description="暂无会话" :image-size="60" />
         </el-scrollbar>
       </el-aside>
 
@@ -30,37 +34,75 @@
         <div class="chat-topbar">
           <div class="workspace-selector" @click="openWorkspaceDialog">
             <el-icon><FolderOpened /></el-icon>
-            <span class="path">{{ chat.current?.workingDir || '选择工作目录' }}</span>
-            <el-icon><ArrowDown /></el-icon>
+            <span class="path">{{ chat.current?.workingDir || '默认工作目录' }}</span>
           </div>
           <el-select v-model="envKey" placeholder="环境（可选）" clearable size="small" style="width: 140px">
             <el-option label="prod" value="prod" />
             <el-option label="test" value="test" />
           </el-select>
           <span style="flex: 1"></span>
-          <el-tag v-if="chat.current?.agentType" :type="chat.current.agentType === 'claude' ? 'primary' : 'success'">
-            {{ chat.current.agentType }}
-          </el-tag>
-          <span v-if="chat.current?.resumeId" class="resume-id">resumeId: {{ chat.current.resumeId }}</span>
+          <span v-if="chat.current?.resumeId" class="resume-id">resumeId: {{ chat.current.resumeId.slice(0, 8) }}…</span>
         </div>
 
         <div v-if="!chat.current" class="empty-state">
-          <el-empty description="请选择或创建一个会话" />
+          <el-empty description="正在初始化会话..." />
         </div>
         <template v-else>
           <el-scrollbar ref="scrollRef" class="messages">
             <div
-              v-for="(m, i) in chat.current.messages"
+              v-for="(m, i) in chat.parsedMessages"
               :key="i"
               class="message"
               :class="m.role"
             >
-              <div class="role-tag">{{ m.role }}</div>
-              <pre class="content">{{ m.content }}</pre>
+              <div v-if="m.role === 'user'" class="bubble user">
+                <pre class="text">{{ m.raw }}</pre>
+              </div>
+              <div v-else-if="m.role === 'assistant'" class="bubble assistant">
+                <template v-for="(seg, si) in m.segments" :key="si">
+                  <div v-if="seg.type === 'text' || seg.type === 'result'" class="text-segment">{{ seg.content }}</div>
+                  <div v-else-if="seg.type === 'tool'" class="tool-block">
+                    <div class="tool-header" @click="toggleTool(i, si)">
+                      <span class="tool-toggle" :class="{ expanded: isExpanded(i, si) }">▶</span>
+                      <span class="tool-label">🔧 {{ seg.name }}</span>
+                    </div>
+                    <pre v-show="isExpanded(i, si)" class="tool-content">{{ seg.content || '(empty)' }}</pre>
+                  </div>
+                  <div v-else-if="seg.type === 'tool_result'" class="tool-block result">
+                    <div class="tool-header" @click="toggleTool(i, si)">
+                      <span class="tool-toggle" :class="{ expanded: isExpanded(i, si) }">▶</span>
+                      <span class="tool-label">✅ Tool Result</span>
+                    </div>
+                    <pre v-show="isExpanded(i, si)" class="tool-content">{{ seg.content }}</pre>
+                  </div>
+                </template>
+              </div>
+              <div v-else class="bubble system">
+                <pre class="text">{{ m.raw }}</pre>
+              </div>
             </div>
-            <div v-if="chat.streaming" class="message assistant streaming">
-              <div class="role-tag">assistant (streaming)</div>
-              <pre class="content">{{ chat.liveChunks.join('\n') }}</pre>
+
+            <div v-if="chat.streaming" class="message assistant">
+              <div class="bubble assistant streaming">
+                <template v-for="(seg, si) in chat.liveSegments" :key="'live-' + si">
+                  <div v-if="seg.type === 'text' || seg.type === 'result'" class="text-segment">{{ seg.content }}</div>
+                  <div v-else-if="seg.type === 'tool'" class="tool-block">
+                    <div class="tool-header" @click="toggleLive(si)">
+                      <span class="tool-toggle" :class="{ expanded: liveExpanded.has(si) }">▶</span>
+                      <span class="tool-label">🔧 {{ seg.name }}</span>
+                    </div>
+                    <pre v-show="liveExpanded.has(si)" class="tool-content">{{ seg.content || '(streaming...)' }}</pre>
+                  </div>
+                  <div v-else-if="seg.type === 'tool_result'" class="tool-block result">
+                    <div class="tool-header" @click="toggleLive(si)">
+                      <span class="tool-toggle" :class="{ expanded: liveExpanded.has(si) }">▶</span>
+                      <span class="tool-label">✅ Tool Result</span>
+                    </div>
+                    <pre v-show="liveExpanded.has(si)" class="tool-content">{{ seg.content }}</pre>
+                  </div>
+                </template>
+                <div v-if="chat.liveSegments.length === 0" class="loading-dots"><span></span><span></span><span></span></div>
+              </div>
             </div>
           </el-scrollbar>
 
@@ -69,37 +111,25 @@
               v-model="draft"
               type="textarea"
               :rows="3"
-              placeholder="输入消息，Ctrl+Enter 发送"
-              @keydown.ctrl.enter.prevent="send"
+              placeholder="输入消息，Enter 发送，Ctrl+Enter 换行"
+              :disabled="chat.streaming"
+              @keydown.enter.exact.prevent="send"
+              @keydown.ctrl.enter.exact.prevent="insertNewline"
             />
-            <el-button type="primary" :disabled="chat.streaming || !draft.trim()" @click="send">发送</el-button>
-            <el-button v-if="chat.streaming" type="danger" @click="chat.stop()">停止</el-button>
+            <div class="input-actions">
+              <el-button v-if="chat.streaming" type="danger" plain @click="chat.stop()">
+                <el-icon><VideoPause /></el-icon>
+                <span>停止</span>
+              </el-button>
+              <el-button type="primary" :loading="chat.streaming" :disabled="!draft.trim()" @click="send">
+                <el-icon><Promotion /></el-icon>
+                <span>发送</span>
+              </el-button>
+            </div>
           </div>
         </template>
       </el-main>
     </el-container>
-
-    <el-dialog v-model="showCreateDialog" title="新建聊天会话" width="520px">
-      <el-form label-width="90px">
-        <el-form-item label="Agent">
-          <el-radio-group v-model="newAgentType">
-            <el-radio-button label="claude">Claude</el-radio-button>
-            <el-radio-button label="codex">Codex</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="工作目录">
-          <el-input v-model="newWorkingDir" placeholder="/home/user/project">
-            <template #append>
-              <el-button @click="openWorkspaceDialog">选择</el-button>
-            </template>
-          </el-input>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" @click="doCreate">创建</el-button>
-      </template>
-    </el-dialog>
 
     <el-dialog v-model="showWorkspaceDialog" title="工作空间" width="640px">
       <el-form label-position="top" size="default">
@@ -150,20 +180,19 @@
             <span>上传文件</span>
           </el-button>
         </el-upload>
-        <el-button @click="useAsWorkingDir" :disabled="!fsPath" type="success">
-          用此目录新建会话
-        </el-button>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, nextTick, watch } from 'vue';
+import { computed, onMounted, reactive, ref, nextTick, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Folder, Document, FolderOpened, ArrowDown, Upload } from '@element-plus/icons-vue';
+import {
+  Folder, Document, FolderOpened, Upload, Plus, Delete,
+  Refresh, VideoPause, Promotion
+} from '@element-plus/icons-vue';
 import { useChatStore } from '../stores/chat';
-import type { AgentType } from '../api/chat';
 import type { FileEntry } from '../api/filesystem';
 import {
   listRoots, listPath, downloadUrl, uploadFile, deleteFile
@@ -171,12 +200,23 @@ import {
 
 const chat = useChatStore();
 
-const showCreateDialog = ref(false);
-const newAgentType = ref<AgentType>('claude');
-const newWorkingDir = ref('');
 const draft = ref('');
 const envKey = ref<string | undefined>(undefined);
 const scrollRef = ref<{ setScrollTop: (v: number) => void; wrapRef?: HTMLElement } | null>(null);
+const creating = ref(false);
+
+// tool 折叠状态：key = messageIndex:segIndex
+const expandedTools = reactive<Record<string, boolean>>({});
+function toolKey(mi: number, si: number): string { return `${mi}:${si}`; }
+function isExpanded(mi: number, si: number): boolean { return !!expandedTools[toolKey(mi, si)]; }
+function toggleTool(mi: number, si: number): void {
+  const k = toolKey(mi, si);
+  expandedTools[k] = !expandedTools[k];
+}
+const liveExpanded = reactive(new Set<number>());
+function toggleLive(si: number): void {
+  if (liveExpanded.has(si)) liveExpanded.delete(si); else liveExpanded.add(si);
+}
 
 const showWorkspaceDialog = ref(false);
 const fsRoots = ref<string[]>([]);
@@ -184,7 +224,6 @@ const fsRoot = ref<string>('');
 const fsPath = ref<string>('');
 const fsEntries = ref<FileEntry[]>([]);
 const fsLoading = ref(false);
-
 const canGoUp = computed(() => fsPath.value && fsPath.value !== fsRoot.value);
 
 async function refresh(): Promise<void> {
@@ -196,22 +235,20 @@ async function select(id: string): Promise<void> {
 }
 
 async function remove(id: string): Promise<void> {
-  try { await chat.removeSession(id); ElMessage.success('已删除'); }
-  catch (e) { ElMessage.error('删除失败'); }
-}
-
-function openCreateDialog(): void {
-  newWorkingDir.value = fsPath.value || '';
-  showCreateDialog.value = true;
-}
-
-async function doCreate(): Promise<void> {
-  if (!newWorkingDir.value.trim()) { ElMessage.warning('请填写工作目录'); return; }
   try {
-    await chat.createSession(newAgentType.value, newWorkingDir.value.trim());
-    showCreateDialog.value = false;
-    newWorkingDir.value = '';
+    await ElMessageBox.confirm('确认删除该会话?', '提示', { type: 'warning' });
+    await chat.removeSession(id);
+    ElMessage.success('已删除');
+    if (!chat.current) await chat.ensureCurrent();
+  } catch (e) { /* canceled */ }
+}
+
+async function doNew(): Promise<void> {
+  creating.value = true;
+  try {
+    await chat.createSession();
   } catch (e) { ElMessage.error('创建失败'); }
+  finally { creating.value = false; }
 }
 
 function send(): void {
@@ -219,6 +256,10 @@ function send(): void {
   const msg = draft.value;
   draft.value = '';
   chat.sendMessage(msg, envKey.value);
+}
+
+function insertNewline(): void {
+  draft.value += '\n';
 }
 
 async function openWorkspaceDialog(): Promise<void> {
@@ -290,45 +331,53 @@ async function handleUpload(file: File): Promise<boolean> {
   return false;
 }
 
-function useAsWorkingDir(): void {
-  newWorkingDir.value = fsPath.value;
-  showWorkspaceDialog.value = false;
-  showCreateDialog.value = true;
-}
-
 function formatSize(n: number): string {
   if (n < 1024) return n + ' B';
   if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
   return (n / 1024 / 1024).toFixed(1) + ' MB';
 }
 
-function formatTime(ms: number): string {
+function formatTime(ms: number | string): string {
   return new Date(ms).toLocaleString();
 }
 
-watch(() => chat.liveChunks.length, () => {
+watch(() => chat.liveSegments.length, () => {
   nextTick(() => {
     const el = scrollRef.value?.wrapRef;
     if (el) el.scrollTop = el.scrollHeight;
   });
 });
 
-onMounted(() => { void refresh(); });
+watch(() => chat.parsedMessages.length, () => {
+  nextTick(() => {
+    const el = scrollRef.value?.wrapRef;
+    if (el) el.scrollTop = el.scrollHeight;
+  });
+});
+
+onMounted(() => { void chat.ensureCurrent(); });
 </script>
 
 <style scoped>
-.chat-page { height: calc(100vh - 140px); }
+.chat-page { height: calc(100vh - 60px); }
 .chat-layout { height: 100%; background: #fff; }
-.chat-sider { border-right: 1px solid #ebeef5; display: flex; flex-direction: column; }
-.sider-header { padding: 12px; border-bottom: 1px solid #ebeef5; }
+
+.chat-sider { border-right: 1px solid #ebeef5; display: flex; flex-direction: column; background: #fafbfc; }
+.sider-header { padding: 12px; border-bottom: 1px solid #ebeef5; display: flex; gap: 8px; }
 .session-list { flex: 1; }
-.session-item { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
-.session-item:hover { background: #f5f7fa; }
+.session-item { position: relative; padding: 10px 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+.session-item:hover { background: #f0f2f5; }
 .session-item.active { background: #ecf5ff; }
-.session-title { font-weight: 500; }
-.session-meta { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; color: #909399; }
-.session-dir { font-size: 11px; color: #c0c4cc; word-break: break-all; }
-.chat-main { display: flex; flex-direction: column; padding: 0; }
+.session-title {
+  font-weight: 500; font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding-right: 24px;
+}
+.session-meta { display: flex; gap: 8px; margin-top: 4px; font-size: 11px; color: #909399; }
+.del-btn { position: absolute; top: 8px; right: 6px; opacity: 0; transition: opacity .15s; }
+.session-item:hover .del-btn { opacity: 1; }
+
+.chat-main { display: flex; flex-direction: column; padding: 0; background: #fff; }
 .chat-topbar {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 16px; border-bottom: 1px solid #ebeef5; background: #fafafa;
@@ -341,16 +390,41 @@ onMounted(() => { void refresh(); });
 .workspace-selector:hover { border-color: #409eff; }
 .workspace-selector .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .resume-id { font-size: 12px; color: #909399; }
+
 .empty-state { flex: 1; display: flex; align-items: center; justify-content: center; }
 .messages { flex: 1; padding: 16px; }
-.message { margin-bottom: 16px; padding: 12px; border-radius: 6px; }
-.message.user { background: #ecf5ff; }
-.message.assistant { background: #f5f7fa; }
-.message.streaming { border: 1px dashed #409eff; }
-.role-tag { font-size: 11px; color: #909399; margin-bottom: 4px; text-transform: uppercase; }
-.content { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; font-size: 13px; }
-.input-area { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #ebeef5; align-items: flex-end; }
-.input-area .el-input { flex: 1; }
+.message { margin-bottom: 14px; display: flex; }
+.message.user { justify-content: flex-end; }
+.message.assistant { justify-content: flex-start; }
+.message.system { justify-content: center; }
+
+.bubble { max-width: 80%; padding: 10px 14px; border-radius: 8px; line-height: 1.6; font-size: 14px; }
+.bubble.user { background: #409eff; color: #fff; }
+.bubble.user .text { color: #fff; }
+.bubble.assistant { background: #f5f7fa; color: #303133; }
+.bubble.system { background: #fdf6ec; color: #b88230; font-size: 12px; }
+.bubble.streaming { border: 1px dashed #409eff; min-width: 120px; }
+
+.text { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 14px; }
+.text-segment { white-space: pre-wrap; word-break: break-word; margin: 4px 0; }
+
+.tool-block { margin: 8px 0; border: 1px solid #e4e7ed; border-radius: 6px; background: #fafbfc; overflow: hidden; }
+.tool-block.result { background: #f0f9eb; border-color: #d9ecc8; }
+.tool-header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; user-select: none; font-size: 12px; color: #606266; }
+.tool-header:hover { background: rgba(64, 158, 255, 0.06); }
+.tool-toggle { font-size: 10px; transition: transform .15s; display: inline-block; }
+.tool-toggle.expanded { transform: rotate(90deg); }
+.tool-label { font-weight: 500; }
+.tool-content { margin: 0; padding: 8px 12px; background: #272822; color: #f8f8f2; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
+
+.loading-dots { display: inline-flex; gap: 4px; padding: 4px 0; }
+.loading-dots span { width: 6px; height: 6px; border-radius: 50%; background: #409eff; animation: dot 1.2s infinite; }
+.loading-dots span:nth-child(2) { animation-delay: .2s; }
+.loading-dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes dot { 0%, 80%, 100% { opacity: .3; } 40% { opacity: 1; } }
+
+.input-area { padding: 12px 16px; border-top: 1px solid #ebeef5; background: #fafafa; }
+.input-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
 .fs-item {
   display: flex; align-items: center; gap: 8px;

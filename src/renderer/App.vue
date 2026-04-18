@@ -1,12 +1,13 @@
 <template>
-  <el-container class="app-container">
-    <el-aside width="220px" class="app-aside">
+  <el-container class="app-container" direction="vertical">
+    <el-header class="app-header">
       <div class="logo">
-        <h2>Agent Workflow</h2>
+        <span>Agent Workflow</span>
       </div>
       <el-menu
         :default-active="activeMenu"
         router
+        mode="horizontal"
         class="app-menu"
         background-color="#304156"
         text-color="#bfcbd9"
@@ -37,18 +38,11 @@
           <span>Skills</span>
         </el-menu-item>
       </el-menu>
-    </el-aside>
+    </el-header>
 
-    <el-container>
-      <el-header class="app-header">
-        <el-breadcrumb separator="/">
-          <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
-        </el-breadcrumb>
-      </el-header>
-      <el-main class="app-main">
-        <router-view />
-      </el-main>
-    </el-container>
+    <el-main class="app-main">
+      <router-view />
+    </el-main>
   </el-container>
 </template>
 
@@ -75,37 +69,41 @@ html, body, #app {
   height: 100vh;
 }
 
-.app-aside {
+.app-header {
   background-color: #304156;
-  overflow-y: auto;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 60px;
+  border-bottom: 1px solid #1f2d3d;
 }
 
 .logo {
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-}
-
-.logo h2 {
-  margin: 0;
   font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+  margin-right: 32px;
   white-space: nowrap;
 }
 
 .app-menu {
-  border-right: none;
+  flex: 1;
+  border-bottom: none !important;
 }
 
-.app-header {
-  background-color: #fff;
-  border-bottom: 1px solid #e6e6e6;
-  display: flex;
-  align-items: center;
+.app-menu.el-menu--horizontal > .el-menu-item {
+  border-bottom: 2px solid transparent !important;
+}
+
+.app-menu.el-menu--horizontal > .el-menu-item.is-active {
+  border-bottom: 2px solid #409eff !important;
+  background-color: transparent !important;
 }
 
 .app-main {
   background-color: #f0f2f5;
+  padding: 0;
+  overflow: auto;
 }
 </style>

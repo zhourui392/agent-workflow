@@ -107,20 +107,33 @@ export class SqliteSessionRepository implements SessionRepository {
   }
 
   listSummaries(limit = 50, offset = 0): SessionSummary[] {
+    // title 缺省时回退到第一条用户消息（截断 50 字），与 agent-web 一致
     const rows = this.db.prepare(`
-      SELECT s.*, (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id) AS message_count
+      SELECT
+        s.*,
+        COALESCE(
+          s.title,
+          (SELECT m.content FROM chat_messages m
+           WHERE m.session_id = s.id AND m.role = 'user'
+           ORDER BY m.id ASC LIMIT 1)
+        ) AS computed_title,
+        (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = s.id) AS message_count
       FROM chat_sessions s
       ORDER BY s.created_at DESC
       LIMIT ? OFFSET ?
-    `).all(limit, offset) as SummaryRow[];
+    `).all(limit, offset) as (SummaryRow & { computed_title: string | null })[];
 
-    return rows.map(r => ({
-      id: r.id,
-      agentType: r.agent_type,
-      workingDir: r.working_dir,
-      createdAt: new Date(r.created_at),
-      title: r.title ?? undefined,
-      messageCount: r.message_count
-    }));
+    return rows.map(r => {
+      const raw = r.computed_title ?? undefined;
+      const title = raw && raw.length > 50 ? raw.slice(0, 50) + '...' : raw;
+      return {
+        id: r.id,
+        agentType: r.agent_type,
+        workingDir: r.working_dir,
+        createdAt: new Date(r.created_at),
+        title,
+        messageCount: r.message_count
+      };
+    });
   }
 }

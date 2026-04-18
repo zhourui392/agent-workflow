@@ -35,8 +35,11 @@ export interface ChatSessionSummary {
 
 const http = axios.create({ timeout: 60_000 });
 
-export function createSession(agentType: AgentType, workingDir: string): Promise<{ data: ChatSessionDTO }> {
-  return http.post<ChatSessionDTO>('/api/chat/sessions', { agentType, workingDir });
+export function createSession(agentType?: AgentType, workingDir?: string): Promise<{ data: ChatSessionDTO }> {
+  const body: Record<string, string> = {};
+  if (agentType) body.agentType = agentType;
+  if (workingDir) body.workingDir = workingDir;
+  return http.post<ChatSessionDTO>('/api/chat/sessions', body);
 }
 
 export function listSessions(): Promise<{ data: ChatSessionSummary[] }> {
