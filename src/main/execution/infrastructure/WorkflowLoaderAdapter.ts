@@ -24,6 +24,7 @@ export class WorkflowLoaderAdapter implements WorkflowLoader {
       output: workflow.output,
       rules: workflow.rules,
       skills: workflow.skills,
+      mcpTools: workflow.mcpTools,
       workingDirectory: workflow.workingDirectory,
       retryConfig: workflow.retryConfig
     };

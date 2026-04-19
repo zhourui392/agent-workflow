@@ -6,6 +6,14 @@
  */
 import type { FailureStrategy } from './FailureStrategy';
 
+/**
+ * 步骤级 MCP 工具选择
+ *
+ * key = MCP server 名；value = '*' 启用该 server 全部工具；数组 = 仅启用指定工具名。
+ * 未出现的 server 在该步骤不启用。
+ */
+export type StepMcpTools = Record<string, string[] | '*'>;
+
 /** Agent 步骤 — 调用 Claude Agent 执行提示词 */
 export interface AgentStep {
   type?: 'agent';
@@ -26,7 +34,7 @@ export interface AgentStep {
       value?: string;
     }>;
   };
-  skillIds?: string[];
+  mcpTools?: StepMcpTools;
 }
 
 /** forEach 循环配置 */
@@ -94,7 +102,7 @@ export interface ForEachStep {
       value?: string;
     }>;
   };
-  skillIds?: string[];
+  mcpTools?: StepMcpTools;
 }
 
 export type WorkflowStep = AgentStep | SubWorkflowStep | DataSplitStep | ForEachStep;

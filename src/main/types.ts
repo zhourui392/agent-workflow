@@ -50,6 +50,7 @@ export interface WorkflowDTO {
   steps: WorkflowStep[];
   rules?: string;
   skills?: Record<string, string>;
+  mcpTools?: Record<string, string[] | '*'>;
   limits?: WorkflowLimits;
   output?: WorkflowOutput;
   workingDirectory?: string;

@@ -4,7 +4,7 @@
  * 封装工作流的生命周期行为和业务不变量。
  */
 import { Entity } from '../../../shared/domain';
-import type { WorkflowStep } from './WorkflowStep';
+import type { WorkflowStep, StepMcpTools } from './WorkflowStep';
 import { isSubWorkflowStep, isAgentStep, isDataSplitStep, isForEachStep } from './WorkflowStep';
 import type { WorkflowInput } from './WorkflowInput';
 import type { WorkflowLimits } from './WorkflowLimits';
@@ -23,6 +23,7 @@ export interface CreateWorkflowRequest {
   steps: WorkflowStep[];
   rules?: string;
   skills?: Record<string, string>;
+  mcpTools?: StepMcpTools;
   limits?: WorkflowLimits;
   output?: WorkflowOutput;
   workingDirectory?: string;
@@ -40,6 +41,7 @@ export class Workflow extends Entity {
   readonly steps: WorkflowStep[];
   readonly rules?: string;
   readonly skills?: Record<string, string>;
+  readonly mcpTools?: StepMcpTools;
   readonly limits?: WorkflowLimits;
   readonly output?: WorkflowOutput;
   readonly workingDirectory?: string;
@@ -55,6 +57,7 @@ export class Workflow extends Entity {
     steps: WorkflowStep[];
     rules?: string;
     skills?: Record<string, string>;
+    mcpTools?: StepMcpTools;
     limits?: WorkflowLimits;
     output?: WorkflowOutput;
     workingDirectory?: string;
@@ -71,6 +74,7 @@ export class Workflow extends Entity {
     this.steps = props.steps;
     this.rules = props.rules;
     this.skills = props.skills;
+    this.mcpTools = props.mcpTools;
     this.limits = props.limits;
     this.output = props.output;
     this.workingDirectory = props.workingDirectory;

@@ -32,7 +32,7 @@ function createFullWorkflowDTO(overrides?: Partial<WorkflowDTO>): WorkflowDTO {
           prompt: 'Check output',
           rules: [{ type: 'contains' as const, value: 'success' }]
         },
-        skillIds: ['skill-001', 'skill-002']
+        mcpTools: { playwright: ['browser_navigate'] }
       }
     ],
     rules: 'Always use TypeScript',
@@ -144,7 +144,7 @@ describe('workflowToData', () => {
     expect(step.retryConfig).toEqual({ maxAttempts: 3, delayMs: 1000 });
     expect(step.validation_prompt).toBe('Check output');
     expect(step.validation_rules).toEqual([{ type: 'contains', value: 'success' }]);
-    expect(step.skill_ids).toEqual(['skill-001', 'skill-002']);
+    expect(step.mcp_tools).toEqual({ playwright: ['browser_navigate'] });
   });
 
   it('agent 步骤：无 validation 时返回空字符串和空数组', () => {
@@ -296,7 +296,7 @@ describe('dataToCreateRequest', () => {
       prompt: 'Check output',
       rules: [{ type: 'contains', value: 'success' }]
     });
-    expect((step as any).skillIds).toEqual(['skill-001', 'skill-002']);
+    expect((step as any).mcpTools).toEqual({ playwright: ['browser_navigate'] });
   });
 
   it('空 validation 不生成空对象', () => {

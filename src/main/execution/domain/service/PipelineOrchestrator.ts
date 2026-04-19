@@ -78,7 +78,7 @@ export interface AgentStepRef {
     prompt?: string;
     rules?: ValidationRule[];
   };
-  skillIds?: string[];
+  mcpTools?: Record<string, string[] | '*'>;
 }
 
 /**
@@ -138,7 +138,7 @@ export interface ForEachStepRef {
     prompt?: string;
     rules?: Array<{ type: 'regex' | 'contains'; pattern?: string; value?: string }>;
   };
-  skillIds?: string[];
+  mcpTools?: Record<string, string[] | '*'>;
 }
 
 export type WorkflowStepRef = AgentStepRef | SubWorkflowStepRef | DataSplitStepRef | ForEachStepRef;
@@ -158,6 +158,7 @@ export interface WorkflowRef {
   output?: any;
   rules?: string;
   skills?: Record<string, string>;
+  mcpTools?: Record<string, string[] | '*'>;
   workingDirectory?: string;
   retryConfig?: { maxAttempts?: number; delayMs?: number };
 }
@@ -355,6 +356,7 @@ export class PipelineOrchestrator {
     return {
       rules: workflow.rules,
       skills: workflow.skills,
+      mcpTools: workflow.mcpTools,
       limits: workflow.limits,
       workingDirectory: options?.workingDirectory ?? workflow.workingDirectory
     };
@@ -464,7 +466,7 @@ export class PipelineOrchestrator {
     const stepConfigRef: StepConfigRef = {
       model: step.model,
       maxTurns: step.maxTurns,
-      skillIds: step.skillIds
+      mcpTools: step.mcpTools
     };
     const stepConfig = this.configMergeService.buildStepMergedConfig(
       mergedConfig, workflowConfigRef, stepConfigRef, executionId, stepIndex
@@ -735,7 +737,7 @@ export class PipelineOrchestrator {
     // 构建步骤级配置（所有迭代共用）
     const workflowConfigRef = this.buildWorkflowConfigRef(workflow, options);
     const stepConfigRef: StepConfigRef = {
-      model: step.model, maxTurns: step.maxTurns, skillIds: step.skillIds
+      model: step.model, maxTurns: step.maxTurns, mcpTools: step.mcpTools
     };
     const stepConfig = this.configMergeService.buildStepMergedConfig(
       mergedConfig, workflowConfigRef, stepConfigRef, executionId, stepIndex

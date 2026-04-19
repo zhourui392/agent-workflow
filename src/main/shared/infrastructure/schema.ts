@@ -19,6 +19,7 @@ export function initializeTables(database: Database.Database): void {
       steps TEXT NOT NULL,
       rules TEXT,
       skills TEXT,
+      mcp_tools TEXT,
       limits TEXT,
       output TEXT,
       working_directory TEXT,
@@ -108,6 +109,10 @@ export function runMigrations(database: Database.Database): void {
 
   if (!columnNames.includes('retry_config')) {
     database.exec('ALTER TABLE workflows ADD COLUMN retry_config TEXT');
+  }
+
+  if (!columnNames.includes('mcp_tools')) {
+    database.exec('ALTER TABLE workflows ADD COLUMN mcp_tools TEXT');
   }
 
   const stepColumns = database.prepare("PRAGMA table_info(step_executions)").all() as { name: string }[];

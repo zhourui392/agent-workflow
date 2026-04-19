@@ -1,16 +1,18 @@
 /**
  * 配置合并领域服务
  *
- * 三层合并策略:
+ * 合并层级:
  * - 第一层：Claude Code CLI 全局配置（~/.claude.json, ~/.claude/plugins/）
  * - 第二层：应用磁盘全局配置（global_config/skills/{name}/）
- * - 第三层：工作流配置（workflow.skills）
- * - 第四层：步骤引用（step.skillIds）
+ * - 第三层：工作流级配置（rules / skills / mcpTools 默认）
+ * - 第四层：步骤级 MCP 工具筛选（step.mcpTools 覆盖工作流级）
  *
  * 合并规则:
  * - rules (systemPrompt): 拼接
- * - allowedTools: 取交集
- * - skills: 同名后者覆盖，值为 skill 源目录绝对路径
+ * - allowedTools: 取交集，并叠加生效 MCP 工具的 mcp__<server>__<tool>
+ * - skills: 同名后者覆盖，值为 skill 源目录绝对路径；自动全量加载，不在步骤级选择
+ * - mcpServers: 生效 mcpTools（step 优先、workflow 次之）决定启用的 server 子集
+ *   两级都未设置时沿用透传（向后兼容，启用所有 server 的通配符）
  */
 
 import log from '../../../shared/infrastructure/logger';
@@ -63,9 +65,24 @@ export interface SkillFileWriter {
 export interface WorkflowConfigRef {
   rules?: string;
   skills?: Record<string, string>;
+  /**
+   * 工作流级 MCP 工具默认白名单。步骤级 mcpTools 未设置时生效。
+   * 语义与步骤级一致：value='*' 表示全部工具，数组表示精确子集。
+   */
+  mcpTools?: StepMcpToolsSelection;
   limits?: { maxTurns?: number; timeoutMs?: number };
   workingDirectory?: string;
 }
+
+/**
+ * 步骤级 MCP 工具选择
+ *
+ * key = MCP server 名称；
+ * value = '*' 表示启用该 server 的全部工具；数组表示仅启用指定工具名。
+ *
+ * 未出现在 map 中的 server 在该步骤不启用（不注入 mcpServers，不生成 mcp__ 白名单）。
+ */
+export type StepMcpToolsSelection = Record<string, string[] | '*'>;
 
 /**
  * 步骤配置接口（跨上下文引用）
@@ -73,7 +90,7 @@ export interface WorkflowConfigRef {
 export interface StepConfigRef {
   model?: string;
   maxTurns?: number;
-  skillIds?: string[];
+  mcpTools?: StepMcpToolsSelection;
 }
 
 export class ConfigMergeService {
@@ -164,7 +181,7 @@ export class ConfigMergeService {
   }
 
   /**
-   * 为步骤构建完整的合并配置（第一到第四层）
+   * 为步骤构建完整的合并配置
    */
   buildStepMergedConfig(
     baseConfig: MergedConfig,
@@ -172,20 +189,13 @@ export class ConfigMergeService {
     step: StepConfigRef,
     executionId: string,
     stepIndex: number,
-    onWarning?: (message: string) => void
+    _onWarning?: (message: string) => void
   ): StepMergedConfig {
     const workingDirectory = baseConfig.workingDirectory || process.cwd();
-    const stepSkillIds = step.skillIds || [];
-
-    if (stepSkillIds.length > 0) {
-      const validationResult = this.validateConfigReferences(stepSkillIds);
-      this.handleDanglingReferences(validationResult, onWarning);
-    }
 
     const mergedSkills = this.collectStepSkills(
       baseConfig.skills,
-      workflow.skills,
-      stepSkillIds
+      workflow.skills
     );
 
     const skillsDir = this.skillFileWriter.writeStepSkills(
@@ -197,20 +207,54 @@ export class ConfigMergeService {
 
     const hasSkills = skillsDir !== undefined;
 
+    const effectiveMcpTools = step.mcpTools !== undefined ? step.mcpTools : workflow.mcpTools;
+
+    const filteredMcpServers = this.filterMcpServers(
+      baseConfig.mcpServers,
+      effectiveMcpTools
+    );
+
     const allowedTools = this.buildAllowedTools(
       baseConfig.allowedTools,
       hasSkills,
-      baseConfig.mcpServers
+      filteredMcpServers,
+      effectiveMcpTools
     );
+
+    const hasMcpServers = filteredMcpServers && Object.keys(filteredMcpServers).length > 0;
 
     return {
       ...baseConfig,
       ...(step.model && { model: step.model }),
       ...(step.maxTurns && { maxTurns: step.maxTurns }),
+      mcpServers: hasMcpServers ? filteredMcpServers : undefined,
       allowedTools,
       skillsDir,
       hasSkills
     };
+  }
+
+  /**
+   * 依据步骤级 mcpTools 过滤可用的 MCP servers
+   *
+   * - mcpTools 未给出 → 保留原 servers（向后兼容）
+   * - mcpTools 给出 → 仅保留 map 中出现的 server
+   */
+  private filterMcpServers(
+    baseMcpServers: Record<string, McpServerConfig> | undefined,
+    mcpTools: StepMcpToolsSelection | undefined
+  ): Record<string, McpServerConfig> | undefined {
+    if (!baseMcpServers) return undefined;
+    if (mcpTools === undefined) return baseMcpServers;
+
+    const filtered: Record<string, McpServerConfig> = {};
+    for (const serverName of Object.keys(mcpTools)) {
+      const serverConfig = baseMcpServers[serverName];
+      if (serverConfig) {
+        filtered[serverName] = serverConfig;
+      }
+    }
+    return filtered;
   }
 
   /**
@@ -243,11 +287,17 @@ export class ConfigMergeService {
 
   /**
    * 生成步骤的 allowedTools 列表
+   *
+   * mcpTools 语义：
+   * - '*' → mcp__<server>__*（通配符，保持向后兼容）
+   * - 具体工具数组 → mcp__<server>__<tool>（精确白名单）
+   * - mcpTools 未给出 → 对所有传入的 mcpServers 生成通配符
    */
   buildAllowedTools(
     baseAllowedTools: string[] | undefined,
     hasSkills: boolean,
-    mcpServers?: Record<string, McpServerConfig>
+    mcpServers?: Record<string, McpServerConfig>,
+    mcpTools?: StepMcpToolsSelection
   ): string[] {
     const result: string[] = [];
 
@@ -259,11 +309,26 @@ export class ConfigMergeService {
       result.push('Skill');
     }
 
-    if (mcpServers) {
+    if (!mcpServers) return result;
+
+    const addPattern = (pattern: string) => {
+      if (!result.includes(pattern)) result.push(pattern);
+    };
+
+    if (mcpTools === undefined) {
       for (const serverName of Object.keys(mcpServers)) {
-        const pattern = `mcp__${serverName}__*`;
-        if (!result.includes(pattern)) {
-          result.push(pattern);
+        addPattern(`mcp__${serverName}__*`);
+      }
+      return result;
+    }
+
+    for (const serverName of Object.keys(mcpServers)) {
+      const selection = mcpTools[serverName];
+      if (selection === '*') {
+        addPattern(`mcp__${serverName}__*`);
+      } else if (Array.isArray(selection)) {
+        for (const toolName of selection) {
+          addPattern(`mcp__${serverName}__${toolName}`);
         }
       }
     }
@@ -286,8 +351,7 @@ export class ConfigMergeService {
 
   private collectStepSkills(
     diskSkills: Record<string, string> | undefined,
-    workflowSkills: Record<string, string> | undefined,
-    stepSkillIds: string[]
+    workflowSkills: Record<string, string> | undefined
   ): Map<string, SkillSource> {
     const mergedSkills = new Map<string, SkillSource>();
 
@@ -300,16 +364,6 @@ export class ConfigMergeService {
     if (workflowSkills) {
       for (const [name, sourceDir] of Object.entries(workflowSkills)) {
         mergedSkills.set(name, { name, sourceDir });
-      }
-    }
-
-    if (stepSkillIds.length > 0) {
-      const stepSkills = this.skillRepo.findByIds(stepSkillIds);
-      for (const skill of stepSkills) {
-        mergedSkills.set(skill.name, {
-          name: skill.name,
-          sourceDir: skill.dirPath
-        });
       }
     }
 

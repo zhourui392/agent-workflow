@@ -87,6 +87,7 @@ export class WorkflowApplicationService {
       steps: source.steps,
       rules: source.rules,
       skills: source.skills,
+      mcpTools: source.mcpTools,
       limits: source.limits,
       output: source.output,
       workingDirectory: source.workingDirectory,

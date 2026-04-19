@@ -30,6 +30,7 @@ export function workflowToDTO(w: Workflow): WorkflowDTO {
     steps: w.steps,
     rules: w.rules,
     skills: w.skills,
+    mcpTools: w.mcpTools,
     limits: w.limits,
     output: w.output,
     workingDirectory: w.workingDirectory,

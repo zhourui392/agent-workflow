@@ -134,6 +134,48 @@ export function updateConfig(data: {
   return http.put<{ success: boolean }>('/api/config', data);
 }
 
+// ============ MCP Tools API ============
+
+export interface McpToolDTO {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+export interface McpServerToolsDTO {
+  server: string;
+  tools: McpToolDTO[];
+  error?: string;
+  fetchedAt: number;
+}
+
+export function listMcpTools(
+  refresh = false
+): Promise<AxiosLikeResponse<Record<string, McpServerToolsDTO>>> {
+  return http.get<Record<string, McpServerToolsDTO>>('/api/config/mcp/tools', {
+    params: refresh ? { refresh: 1 } : undefined
+  });
+}
+
+export function listMcpToolsByServer(
+  server: string,
+  refresh = false
+): Promise<AxiosLikeResponse<McpServerToolsDTO>> {
+  return http.get<McpServerToolsDTO>(
+    `/api/config/mcp/tools/${encodeURIComponent(server)}`,
+    { params: refresh ? { refresh: 1 } : undefined }
+  );
+}
+
+export function refreshMcpTools(): Promise<AxiosLikeResponse<{
+  success: boolean;
+  tools: Record<string, McpServerToolsDTO>;
+}>> {
+  return http.post<{ success: boolean; tools: Record<string, McpServerToolsDTO> }>(
+    '/api/config/mcp/tools/refresh'
+  );
+}
+
 // ============ Skills API ============
 
 export function getSkills(): Promise<AxiosLikeResponse<SkillDTO[]>> {

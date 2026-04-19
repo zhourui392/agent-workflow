@@ -20,6 +20,11 @@ const RetryConfigSchema = z.object({
   delayMs: z.number().int().min(100).max(60000).optional()
 });
 
+const McpToolsSchema = z.record(
+  z.string(),
+  z.union([z.literal('*'), z.array(z.string())])
+);
+
 const AgentStepSchema = z.object({
   type: z.literal('agent').optional(),
   name: z.string().min(1, '步骤名称不能为空'),
@@ -36,7 +41,7 @@ const AgentStepSchema = z.object({
       value: z.string().optional()
     })).optional()
   }).optional(),
-  skillIds: z.array(z.string()).optional()
+  mcpTools: McpToolsSchema.optional()
 });
 
 const SubWorkflowStepSchema = z.object({
@@ -82,7 +87,7 @@ const ForEachStepSchema = z.object({
       value: z.string().optional()
     })).optional()
   }).optional(),
-  skillIds: z.array(z.string()).optional()
+  mcpTools: McpToolsSchema.optional()
 });
 
 /** 步骤 schema：支持 agent / subWorkflow / dataSplit / forEach 四种类型 */
@@ -130,6 +135,7 @@ export const CreateWorkflowSchema = z.object({
   steps: z.array(StepSchema).min(1, '至少需要一个步骤'),
   rules: z.string().optional(),
   skills: z.record(z.string(), z.string()).optional(),
+  mcpTools: McpToolsSchema.optional(),
   limits: LimitsSchema,
   output: OutputSchema,
   workingDirectory: z.string().optional(),

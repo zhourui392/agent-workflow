@@ -87,7 +87,6 @@
           <StepEditor
             :step="step"
             :index="index"
-            :skills="skillList"
             :disableRemove="form.steps.length <= 1"
             :workflow-inputs="form.inputs"
             :prior-steps="form.steps.slice(0, index)"
@@ -117,6 +116,20 @@
         <el-form-item label="System Prompt">
           <el-input v-model="rulesSystemPrompt" type="textarea" :rows="4"
             placeholder="工作流级 System Prompt（会追加到全局 System Prompt 之后）" />
+        </el-form-item>
+      </el-card>
+
+      <!-- Default MCP Tools (workflow-level) -->
+      <el-card class="section-card">
+        <template #header>默认 MCP 工具</template>
+        <el-form-item label="默认白名单">
+          <McpToolsPicker
+            :model-value="form.mcp_tools"
+            @update:model-value="val => form.mcp_tools = val"
+          />
+          <div class="form-tip">
+            作为步骤的默认配置；步骤自行勾选 MCP 工具时会整体覆盖此默认值
+          </div>
         </el-form-item>
       </el-card>
 
@@ -163,9 +176,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useWorkflowStore } from '@/stores/workflow'
 import { ElMessage } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import { listAllSkills, type SkillData } from '@/api/skills'
 import { getWorkflows, type WorkflowDTO } from '@/api/index'
 import StepEditor, { type StepFormData } from '@/components/StepEditor.vue'
+import McpToolsPicker from '@/components/McpToolsPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -174,7 +187,6 @@ const isEdit = computed(() => route.name === 'WorkflowEdit')
 const loading = ref(false)
 const saving = ref(false)
 const configLoading = ref(false)
-const skillList = ref<SkillData[]>([])
 const allWorkflows = ref<WorkflowDTO[]>([])
 const otherWorkflows = computed(() =>
   allWorkflows.value.filter(wf => wf.id !== form.id)
@@ -190,6 +202,7 @@ const form = reactive({
   inputs: [] as Array<{ name: string; type: 'string' | 'number' | 'boolean'; required: boolean; default?: string | number | boolean; description: string }>,
   steps: [createEmptyStep()] as StepFormData[],
   rules: null as Record<string, any> | null,
+  mcp_tools: undefined as Record<string, string[] | '*'> | undefined,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
   retry_config: null as { maxAttempts?: number; delayMs?: number } | null,
@@ -202,8 +215,7 @@ function createEmptyStep(): StepFormData {
     max_turns: 999,
     validation_enabled: false,
     validation_prompt: '',
-    validation_rules: [],
-    skill_ids: []
+    validation_rules: []
   }
 }
 
@@ -289,7 +301,7 @@ async function handleSave() {
                   rules: raw.validation_rules && raw.validation_rules.length > 0 ? raw.validation_rules : undefined
                 }
               : undefined,
-            skillIds: raw.skill_ids && raw.skill_ids.length > 0 ? raw.skill_ids : undefined
+            mcpTools: raw.mcp_tools
           }
         }
         // Agent step: map form fields to API format, strip internal fields
@@ -302,6 +314,7 @@ async function handleSave() {
         return agentFields
       }),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
+      mcp_tools: rawForm.mcp_tools ? toRaw(rawForm.mcp_tools) : undefined,
       limits: rawForm.limits?.max_duration ? { ...toRaw(rawForm.limits) } : undefined,
       on_failure: rawForm.on_failure,
       retry_config: rawForm.on_failure === 'retry' ? toRaw(rawForm.retry_config) : null,
@@ -318,11 +331,7 @@ async function handleSave() {
 async function loadConfigOptions() {
   configLoading.value = true
   try {
-    const [skillRes, wfRes] = await Promise.all([
-      listAllSkills(),
-      getWorkflows()
-    ])
-    skillList.value = skillRes.data
+    const wfRes = await getWorkflows()
     allWorkflows.value = wfRes.data
   } catch (e: unknown) {
     console.error('Failed to load config options:', e)
@@ -353,7 +362,6 @@ onMounted(async () => {
                   validation_enabled: false,
                   validation_prompt: '',
                   validation_rules: [],
-                  skill_ids: [],
                   step_type: 'subWorkflow' as const,
                   workflow_id: String(s.workflowId || ''),
                   input_mapping: (s.inputMapping as Record<string, string>) || {},
@@ -370,7 +378,7 @@ onMounted(async () => {
                   validation_enabled: !!s.validation_prompt || (Array.isArray(s.validation_rules) && s.validation_rules.length > 0),
                   validation_prompt: String((s.validation as Record<string, unknown>)?.prompt || ''),
                   validation_rules: ((s.validation as Record<string, unknown>)?.rules as unknown[]) || [],
-                  skill_ids: (s.skillIds as string[]) || [],
+                  mcp_tools: s.mcpTools as Record<string, string[] | '*'> | undefined,
                   step_type: 'forEach' as const,
                   for_each_iterate_over: String(s.iterateOver || ''),
                   for_each_item_variable: String(s.itemVariable || '')
@@ -384,7 +392,6 @@ onMounted(async () => {
                   validation_enabled: false,
                   validation_prompt: '',
                   validation_rules: [],
-                  skill_ids: [],
                   step_type: 'dataSplit' as const,
                   data_split_mode: (s.mode as 'static' | 'template' | 'ai') || 'static',
                   data_split_static: String(s.staticData || ''),
@@ -398,8 +405,7 @@ onMounted(async () => {
                 step_type: 'agent' as const,
                 validation_enabled: !!s.validation_prompt || (Array.isArray(s.validation_rules) && s.validation_rules.length > 0),
                 validation_prompt: s.validation_prompt || '',
-                validation_rules: (s.validation_rules as any[]) || [],
-                skill_ids: s.skill_ids || []
+                validation_rules: (s.validation_rules as any[]) || []
               }
             })
           : [createEmptyStep()]
@@ -413,6 +419,7 @@ onMounted(async () => {
             }))
           : []
         form.rules = data.rules || null; form.limits = data.limits || null
+        form.mcp_tools = data.mcp_tools
         form.on_failure = data.on_failure || 'stop'
         form.retry_config = data.retry_config || null
       }

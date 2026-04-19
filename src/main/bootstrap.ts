@@ -23,6 +23,8 @@ import { DiskGlobalConfigRepository } from './configuration/infrastructure/DiskG
 import { CliConfigLoader } from './configuration/infrastructure/CliConfigLoader';
 import { SkillFileWriterImpl } from './configuration/infrastructure/SkillFileWriter';
 import { GlobalConfigCacheImpl } from './configuration/infrastructure/GlobalConfigCache';
+import { InMemoryMcpToolCatalog } from './configuration/infrastructure/InMemoryMcpToolCatalog';
+import { StdioMcpToolLister } from './configuration/infrastructure/StdioMcpToolLister';
 import { InMemorySkillDraftStore } from './configuration/infrastructure/InMemorySkillDraftStore';
 import { DefaultSkillCreatorLocator } from './configuration/infrastructure/DefaultSkillCreatorLocator';
 import { cleanupSkillGenerationTmp } from './configuration/infrastructure/SkillGenerationTmpCleaner';
@@ -119,6 +121,11 @@ export function bootstrap(
     skillRepo, cliConfigLoader, skillDraftStore, skillGenerationTmpRoot
   );
   const globalConfigAppService = new GlobalConfigApplicationService(diskConfigRepo, globalConfigCache);
+  const mcpToolLister = new StdioMcpToolLister();
+  const mcpToolCatalog = new InMemoryMcpToolCatalog({
+    getMcpServers: () => configMergeService.loadGlobalConfig().mcpServers ?? {},
+    lister: mcpToolLister
+  });
 
   // === Execution Context ===
   const executionRepo = new SqliteExecutionRepository(db);
@@ -178,7 +185,7 @@ export function bootstrap(
   const skillRoutes = new SkillRoutes(
     skillAppService, generateSkillUseCase, verifySkillUseCase, skillDraftStore
   );
-  const configRoutes = new ConfigRoutes(globalConfigAppService);
+  const configRoutes = new ConfigRoutes(globalConfigAppService, mcpToolCatalog);
   const chatRoutes = new ChatRoutes(chatAppService, chatConfig);
   const fsRoutes = new FsRoutes(fsConfig);
   const worktreeRoutes = new WorktreeRoutes(new WorktreeService());

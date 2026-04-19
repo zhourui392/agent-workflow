@@ -71,27 +71,11 @@
           <div class="form-tip">快速规则验证（无 LLM 调用成本），优先于验证提示词执行</div>
         </div>
       </el-form-item>
-      <el-form-item label="Skills">
-        <el-select
-          :model-value="step.skill_ids"
-          @update:model-value="updateField('skill_ids', $event)"
-          multiple
-          filterable
-          placeholder="选择此步骤使用的 Skills"
-          style="width: 100%"
-        >
-          <el-option
-            v-for="skill in skills"
-            :key="skill.id"
-            :label="skill.name"
-            :value="skill.id"
-          >
-            <span>{{ skill.name }}</span>
-            <span v-if="skill.source === 'cli'" class="cli-tag">CLI</span>
-            <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
-          </el-option>
-        </el-select>
-        <div class="form-tip">选择此步骤需要使用的 Skills（如代码审查、测试生成等）</div>
+      <el-form-item label="MCP 工具">
+        <McpToolsPicker
+          :model-value="step.mcp_tools"
+          @update:model-value="updateField('mcp_tools', $event)"
+        />
       </el-form-item>
     </template>
 
@@ -177,26 +161,11 @@
       <el-form-item label="最大轮次">
         <el-input-number :model-value="step.max_turns" @update:model-value="updateField('max_turns', $event)" :min="1" :max="9999" />
       </el-form-item>
-      <el-form-item label="Skills">
-        <el-select
-          :model-value="step.skill_ids"
-          @update:model-value="updateField('skill_ids', $event)"
-          multiple
-          filterable
-          placeholder="选择此步骤使用的 Skills"
-          style="width: 100%"
-        >
-          <el-option
-            v-for="skill in skills"
-            :key="skill.id"
-            :label="skill.name"
-            :value="skill.id"
-          >
-            <span>{{ skill.name }}</span>
-            <span v-if="skill.source === 'cli'" class="cli-tag">CLI</span>
-            <span v-if="skill.description" class="option-desc">{{ skill.description }}</span>
-          </el-option>
-        </el-select>
+      <el-form-item label="MCP 工具">
+        <McpToolsPicker
+          :model-value="step.mcp_tools"
+          @update:model-value="updateField('mcp_tools', $event)"
+        />
       </el-form-item>
     </template>
 
@@ -249,9 +218,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Delete, Plus } from '@element-plus/icons-vue'
-import type { SkillData } from '@/api/skills'
 import type { WorkflowDTO } from '@/api/index'
 import PromptEditor from './PromptEditor.vue'
+import McpToolsPicker from './McpToolsPicker.vue'
 
 export type StepType = 'agent' | 'subWorkflow' | 'dataSplit' | 'forEach'
 
@@ -271,7 +240,7 @@ export interface StepFormData {
   validation_enabled: boolean
   validation_prompt: string
   validation_rules: ValidationRuleData[]
-  skill_ids: string[]
+  mcp_tools?: Record<string, string[] | '*'>
   // 步骤类型
   step_type?: StepType
   workflow_id?: string
@@ -290,7 +259,6 @@ export interface StepFormData {
 const props = defineProps<{
   step: StepFormData
   index: number
-  skills: SkillData[]
   disableRemove: boolean
   workflowInputs?: { name: string }[]
   priorSteps?: { name: string }[]

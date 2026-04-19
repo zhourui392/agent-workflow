@@ -38,7 +38,7 @@ export interface StepConfig {
   };
   validation_prompt?: string;
   validation_rules?: Array<{ type: 'regex' | 'contains'; pattern?: string; value?: string }>;
-  skill_ids?: string[];
+  mcp_tools?: Record<string, string[] | '*'>;
 }
 
 export interface WorkflowData {
@@ -51,6 +51,7 @@ export interface WorkflowData {
   steps: StepConfig[];
   rules?: string | null;
   skills?: Record<string, string>;
+  mcp_tools?: Record<string, string[] | '*'>;
   limits?: Record<string, unknown> | null;
   output?: Record<string, unknown>;
   working_directory?: string | null;
@@ -81,11 +82,12 @@ export function workflowToData(workflow: WorkflowDTO): WorkflowData {
         retryConfig: step.retryConfig,
         validation_prompt: step.validation?.prompt || '',
         validation_rules: step.validation?.rules || [],
-        skill_ids: step.skillIds
+        mcp_tools: step.mcpTools
       };
     }),
     rules: workflow.rules || null,
     skills: workflow.skills,
+    mcp_tools: workflow.mcpTools,
     limits: workflow.limits as Record<string, unknown> | null,
     output: workflow.output as Record<string, unknown> | undefined,
     working_directory: workflow.workingDirectory || null,
@@ -116,7 +118,7 @@ export function dataToCreateRequest(data: Partial<WorkflowData>) {
             rules: step.validation_rules && step.validation_rules.length > 0 ? step.validation_rules : undefined
           }
         : undefined,
-      skillIds: step.skill_ids
+      mcpTools: step.mcp_tools
     };
   });
 
@@ -128,6 +130,7 @@ export function dataToCreateRequest(data: Partial<WorkflowData>) {
     steps,
     rules: data.rules || undefined,
     skills: data.skills,
+    mcpTools: data.mcp_tools,
     limits: data.limits ? { ...data.limits } as WorkflowLimits : undefined,
     output: data.output ? { ...data.output } as WorkflowOutput : undefined,
     workingDirectory: data.working_directory || undefined,
