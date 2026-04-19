@@ -198,8 +198,9 @@ Skills 管理页点击「新建」将打开三步向导：
 ## 配置合并策略
 
 - **rules (systemPrompt)**: 拼接
-- **allowedTools**: 取交集
+- **allowedTools**: 取交集，并叠加生效 MCP 工具的 `mcp__<server>__<tool>`
 - **skills**: 按需加载（步骤引用的，同名覆盖；value 为 skill 源目录绝对路径）
+- **mcpServers**: 由 `step.mcpTools` 决定本步骤启用的 server 子集（value=`'*'` 表示全部工具，数组表示精确子集）；未设置时透传所有 server（向后兼容）
 
 ## 实时事件通道
 

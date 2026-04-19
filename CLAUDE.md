@@ -108,7 +108,7 @@ CronSyncUseCase             → WorkflowRepository, PipelinePort
 
 ## 关键设计决策
 
-- **配置合并策略**: rules=拼接, allowedTools=取交集, skills=同名覆盖
+- **配置合并策略**: rules=拼接, allowedTools=取交集, skills=同名覆盖, mcpServers=按 `step.mcpTools` 过滤（仅步骤级，未设置则透传所有 server）
 - **执行模型**: 后端异步执行，通过 WebSocket 实时推送进度到前端
 - **实时事件流处理（重要）**: 步骤执行过程中产生的流式事件（text、tool_call、turn_end 等）需要同时满足实时展示和持久化两个需求，修改相关代码时务必遵循以下规则：
   - **后端 — 所有 `onEvent` 回调**必须同时做三件事：①收集到 `collectedEvents` 数组；②通过 `broadcastStepEvent`（WS 广播）发出；③在 `turn_end` 事件时增量保存 `eventsJson` 到数据库（防止页面重进后丢失执行中的事件）。涉及 `runStep`、`runForEachStep`、`runDataSplitStep` 三个路径
