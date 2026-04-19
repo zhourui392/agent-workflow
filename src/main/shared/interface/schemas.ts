@@ -135,7 +135,6 @@ export const CreateWorkflowSchema = z.object({
   steps: z.array(StepSchema).min(1, '至少需要一个步骤'),
   rules: z.string().optional(),
   skills: z.record(z.string(), z.string()).optional(),
-  mcpTools: McpToolsSchema.optional(),
   limits: LimitsSchema,
   output: OutputSchema,
   workingDirectory: z.string().optional(),

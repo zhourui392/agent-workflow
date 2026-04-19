@@ -119,20 +119,6 @@
         </el-form-item>
       </el-card>
 
-      <!-- Default MCP Tools (workflow-level) -->
-      <el-card class="section-card">
-        <template #header>默认 MCP 工具</template>
-        <el-form-item label="默认白名单">
-          <McpToolsPicker
-            :model-value="form.mcp_tools"
-            @update:model-value="val => form.mcp_tools = val"
-          />
-          <div class="form-tip">
-            作为步骤的默认配置；步骤自行勾选 MCP 工具时会整体覆盖此默认值
-          </div>
-        </el-form-item>
-      </el-card>
-
       <!-- Limits -->
       <el-card class="section-card">
         <template #header>执行控制</template>
@@ -178,7 +164,6 @@ import { ElMessage } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { getWorkflows, type WorkflowDTO } from '@/api/index'
 import StepEditor, { type StepFormData } from '@/components/StepEditor.vue'
-import McpToolsPicker from '@/components/McpToolsPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -202,7 +187,6 @@ const form = reactive({
   inputs: [] as Array<{ name: string; type: 'string' | 'number' | 'boolean'; required: boolean; default?: string | number | boolean; description: string }>,
   steps: [createEmptyStep()] as StepFormData[],
   rules: null as Record<string, any> | null,
-  mcp_tools: undefined as Record<string, string[] | '*'> | undefined,
   limits: null as Record<string, any> | null,
   on_failure: 'stop',
   retry_config: null as { maxAttempts?: number; delayMs?: number } | null,
@@ -314,7 +298,6 @@ async function handleSave() {
         return agentFields
       }),
       rules: rawForm.rules?.system_prompt ? { ...toRaw(rawForm.rules) } : null,
-      mcp_tools: rawForm.mcp_tools ? toRaw(rawForm.mcp_tools) : undefined,
       limits: rawForm.limits?.max_duration ? { ...toRaw(rawForm.limits) } : undefined,
       on_failure: rawForm.on_failure,
       retry_config: rawForm.on_failure === 'retry' ? toRaw(rawForm.retry_config) : null,
@@ -419,7 +402,6 @@ onMounted(async () => {
             }))
           : []
         form.rules = data.rules || null; form.limits = data.limits || null
-        form.mcp_tools = data.mcp_tools
         form.on_failure = data.on_failure || 'stop'
         form.retry_config = data.retry_config || null
       }

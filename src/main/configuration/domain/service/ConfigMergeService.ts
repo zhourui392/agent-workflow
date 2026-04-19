@@ -4,15 +4,15 @@
  * 合并层级:
  * - 第一层：Claude Code CLI 全局配置（~/.claude.json, ~/.claude/plugins/）
  * - 第二层：应用磁盘全局配置（global_config/skills/{name}/）
- * - 第三层：工作流级配置（rules / skills / mcpTools 默认）
- * - 第四层：步骤级 MCP 工具筛选（step.mcpTools 覆盖工作流级）
+ * - 第三层：工作流级配置（rules / skills）
+ * - 第四层：步骤级 MCP 工具筛选（step.mcpTools 决定本步骤启用的 server/工具）
  *
  * 合并规则:
  * - rules (systemPrompt): 拼接
  * - allowedTools: 取交集，并叠加生效 MCP 工具的 mcp__<server>__<tool>
  * - skills: 同名后者覆盖，值为 skill 源目录绝对路径；自动全量加载，不在步骤级选择
- * - mcpServers: 生效 mcpTools（step 优先、workflow 次之）决定启用的 server 子集
- *   两级都未设置时沿用透传（向后兼容，启用所有 server 的通配符）
+ * - mcpServers: 由 step.mcpTools 决定启用的 server 子集
+ *   step.mcpTools 未设置时沿用透传（向后兼容，启用所有 server 的通配符）
  */
 
 import log from '../../../shared/infrastructure/logger';
@@ -65,11 +65,6 @@ export interface SkillFileWriter {
 export interface WorkflowConfigRef {
   rules?: string;
   skills?: Record<string, string>;
-  /**
-   * 工作流级 MCP 工具默认白名单。步骤级 mcpTools 未设置时生效。
-   * 语义与步骤级一致：value='*' 表示全部工具，数组表示精确子集。
-   */
-  mcpTools?: StepMcpToolsSelection;
   limits?: { maxTurns?: number; timeoutMs?: number };
   workingDirectory?: string;
 }
@@ -207,18 +202,16 @@ export class ConfigMergeService {
 
     const hasSkills = skillsDir !== undefined;
 
-    const effectiveMcpTools = step.mcpTools !== undefined ? step.mcpTools : workflow.mcpTools;
-
     const filteredMcpServers = this.filterMcpServers(
       baseConfig.mcpServers,
-      effectiveMcpTools
+      step.mcpTools
     );
 
     const allowedTools = this.buildAllowedTools(
       baseConfig.allowedTools,
       hasSkills,
       filteredMcpServers,
-      effectiveMcpTools
+      step.mcpTools
     );
 
     const hasMcpServers = filteredMcpServers && Object.keys(filteredMcpServers).length > 0;

@@ -51,7 +51,6 @@ export interface WorkflowData {
   steps: StepConfig[];
   rules?: string | null;
   skills?: Record<string, string>;
-  mcp_tools?: Record<string, string[] | '*'>;
   limits?: Record<string, unknown> | null;
   output?: Record<string, unknown>;
   working_directory?: string | null;
@@ -87,7 +86,6 @@ export function workflowToData(workflow: WorkflowDTO): WorkflowData {
     }),
     rules: workflow.rules || null,
     skills: workflow.skills,
-    mcp_tools: workflow.mcpTools,
     limits: workflow.limits as Record<string, unknown> | null,
     output: workflow.output as Record<string, unknown> | undefined,
     working_directory: workflow.workingDirectory || null,
@@ -130,7 +128,6 @@ export function dataToCreateRequest(data: Partial<WorkflowData>) {
     steps,
     rules: data.rules || undefined,
     skills: data.skills,
-    mcpTools: data.mcp_tools,
     limits: data.limits ? { ...data.limits } as WorkflowLimits : undefined,
     output: data.output ? { ...data.output } as WorkflowOutput : undefined,
     workingDirectory: data.working_directory || undefined,

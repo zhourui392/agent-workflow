@@ -293,44 +293,6 @@ describe('buildStepMergedConfig with mcpTools', () => {
     expect(stepConfig.mcpServers).toBeUndefined()
     expect(stepConfig.allowedTools?.some(t => t.startsWith('mcp__'))).toBe(false)
   })
-
-  it("workflow.mcpTools 作为默认值，step.mcpTools 未设置时生效", () => {
-    const stepConfig = service.buildStepMergedConfig(
-      base,
-      { skills: {}, mcpTools: { playwright: ['browser_navigate'] } },
-      {},
-      'exec-1',
-      0
-    )
-    expect(stepConfig.mcpServers).toEqual({ playwright: base.mcpServers.playwright })
-    expect(stepConfig.allowedTools).toContain('mcp__playwright__browser_navigate')
-    expect(stepConfig.allowedTools?.some(t => t.startsWith('mcp__github__'))).toBe(false)
-  })
-
-  it("step.mcpTools 定义时整体覆盖 workflow.mcpTools", () => {
-    const stepConfig = service.buildStepMergedConfig(
-      base,
-      { skills: {}, mcpTools: { playwright: '*' } },
-      { mcpTools: { github: '*' } },
-      'exec-1',
-      0
-    )
-    expect(stepConfig.mcpServers).toEqual({ github: base.mcpServers.github })
-    expect(stepConfig.allowedTools).toContain('mcp__github__*')
-    expect(stepConfig.allowedTools?.some(t => t.startsWith('mcp__playwright__'))).toBe(false)
-  })
-
-  it("step.mcpTools 空对象也视为显式覆盖 workflow.mcpTools（禁用全部）", () => {
-    const stepConfig = service.buildStepMergedConfig(
-      base,
-      { skills: {}, mcpTools: { playwright: '*' } },
-      { mcpTools: {} },
-      'exec-1',
-      0
-    )
-    expect(stepConfig.mcpServers).toBeUndefined()
-    expect(stepConfig.allowedTools?.some(t => t.startsWith('mcp__'))).toBe(false)
-  })
 })
 
 // ========== handleDanglingReferences ==========

@@ -158,7 +158,6 @@ export interface WorkflowRef {
   output?: any;
   rules?: string;
   skills?: Record<string, string>;
-  mcpTools?: Record<string, string[] | '*'>;
   workingDirectory?: string;
   retryConfig?: { maxAttempts?: number; delayMs?: number };
 }
@@ -356,7 +355,6 @@ export class PipelineOrchestrator {
     return {
       rules: workflow.rules,
       skills: workflow.skills,
-      mcpTools: workflow.mcpTools,
       limits: workflow.limits,
       workingDirectory: options?.workingDirectory ?? workflow.workingDirectory
     };
