@@ -16,6 +16,7 @@ import log from '../../shared/infrastructure/logger';
 import type { McpServerConfig } from '../domain/model/McpServerConfig';
 import type { McpTool } from '../domain/model/McpTool';
 import type { McpToolLister } from '../domain/service/McpToolCatalogService';
+import { prepareStdioSpawn } from './commandResolver';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const CLIENT_NAME = 'agent-workflow-mcp-catalog';
@@ -32,9 +33,11 @@ export class StdioMcpToolLister implements McpToolLister {
     config: McpServerConfig,
     timeoutMs = 10_000
   ): Promise<McpTool[]> {
-    const child = spawn(config.command, config.args ?? [], {
+    const prepared = prepareStdioSpawn(config.command, config.args ?? []);
+    const child = spawn(prepared.command, prepared.args, {
       env: { ...process.env, ...(config.env ?? {}) },
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: prepared.shell
     }) as ChildProcessWithoutNullStreams;
 
     const session = new StdioSession(server, child);
